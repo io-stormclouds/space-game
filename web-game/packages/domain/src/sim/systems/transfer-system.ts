@@ -7,24 +7,25 @@ import { OrbitSolver } from '../math/orbit-solver';
 import { Vec3, clone, copy, distance, vec3 } from '../math/vec3';
 import { DomainEvent } from '../models/domain-event.model';
 import { Spacecraft } from '../models/spacecraft.model';
-import { TransferPlan } from '../models/transfer.model';
+import { TransferPlan, arrivalTime } from '../models/transfer.model';
 
 interface ActiveTransfer {
   plan: TransferPlan;
   path: BezierPath;
-  progress: number;
   pos: Vec3;
   forward: Vec3;
 }
 
 /**
- * Plans transfers (fuel cost, lead intercept, Bézier arc) and advances ships in flight.
- * Continuous per-frame state lives here, not in the immutable game state.
+ * Plans transfers (fuel cost, lead intercept, Bézier arc) and moves ships in flight.
+ *
+ * Unified rule (TECH-1, W09): arrival time and the intercept point are fixed at the order. The PoC
+ * re-aimed the curve every frame and advanced by speed × dt / length, so the flight time depended on
+ * the frame rate; here the position is a pure function of (plan, t) and the ship arrives exactly at
+ * `startTime + estimatedDuration`, whatever the step size.
  */
 export class TransferSystem {
   private readonly active = new Map<ShipId, ActiveTransfer>();
-  private readonly tmpTarget = vec3();
-  private readonly tmpCentre = vec3();
 
   constructor(
     private readonly solver: OrbitSolver,
@@ -60,9 +61,14 @@ export class TransferSystem {
       estimatedDuration: lead.flightTime,
       fuelCost: this.fuelCost(from, to, t),
     };
-    const path = BezierPath.arc(startPos, lead.leadPos, this.cfg.arcLiftFactor);
-    this.active.set(ship.id, { plan, path, progress: 0, pos: clone(startPos), forward: vec3(0, 0, 1) });
+    this.register(plan);
     return plan;
+  }
+
+  /** Re-creates the in-flight state of a plan (after loading a saved game). */
+  register(plan: TransferPlan): void {
+    const path = BezierPath.arc(plan.startPos, plan.leadPos, this.cfg.arcLiftFactor);
+    this.active.set(plan.shipId, { plan, path, pos: clone(plan.startPos), forward: vec3(0, 0, 1) });
   }
 
   isActive(shipId: ShipId): boolean {
@@ -73,37 +79,26 @@ export class TransferSystem {
     return this.active.get(shipId)?.path ?? null;
   }
 
-  /** Advances all registered flights by dt and writes positions into the snapshot. */
-  update(ships: ReadonlyArray<Spacecraft>, t: number, dt: number, snap: FrameSnapshot): DomainEvent[] {
+  /** Moves all flights to time t and writes positions into the snapshot. */
+  update(ships: ReadonlyArray<Spacecraft>, t: number, _dt: number, snap: FrameSnapshot): DomainEvent[] {
     const events: DomainEvent[] = [];
     snap.shipWorldPos.clear();
     snap.shipForward.clear();
     snap.transitProgress.clear();
 
     for (const ship of ships) {
-      const a = this.active.get(ship.id);
-      if (!a || ship.state !== 'IN_TRANSIT') continue;
-
-      // Re-aim at where the target will be when we get there.
-      const remaining = Math.max(0, a.plan.estimatedDuration * (1 - a.progress));
-      this.solver.dockingPosition(a.plan.toBodyId, t + remaining, this.tmpTarget);
-      a.path.setEnd(this.tmpTarget);
-      a.path.relift(this.cfg.arcLiftFactor);
-
-      const len = Math.max(a.path.approxLength(16), 1e-6);
-      a.progress = Math.min(1, a.progress + (a.plan.cruiseSpeed * dt) / len);
-      a.path.pointAt(a.progress, a.pos);
-      a.path.tangentAt(a.progress, a.forward);
-
+      if (ship.state !== 'IN_TRANSIT' || !ship.transfer) continue;
+      if (!this.active.has(ship.id)) this.register(ship.transfer);
+      const a = this.active.get(ship.id)!;
+      const duration = Math.max(a.plan.estimatedDuration, 1e-9);
+      const u = Math.max(0, Math.min(1, (t - a.plan.startTime) / duration));
+      a.path.pointAt(u, a.pos);
+      a.path.tangentAt(u, a.forward);
       snap.shipWorldPos.set(ship.id, a.pos);
       snap.shipForward.set(ship.id, a.forward);
-      snap.transitProgress.set(ship.id, a.progress);
+      snap.transitProgress.set(ship.id, u);
 
-      const target = this.solver.body(a.plan.toBodyId);
-      this.solver.worldPosition(target.id, t, this.tmpCentre);
-      const captured = distance(a.pos, this.tmpCentre) <= target.radius * this.cfg.captureRadiusFactor;
-
-      if (a.progress >= 1 || captured) {
+      if (t >= arrivalTime(a.plan) - 1e-9) {
         this.active.delete(ship.id);
         events.push({ type: 'TRANSFER_ARRIVED', shipId: ship.id, bodyId: a.plan.toBodyId });
       }

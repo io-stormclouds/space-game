@@ -20,6 +20,13 @@ interface ActiveDrive {
 /** Height of the rover's pivot above the tile surface, as a fraction of the body radius. */
 const ROVER_LIFT = 0.005;
 
+/** Rovers drive over landing pads and the port (centrum dowodzenia i lądowisko). */
+const PASSABLE_KINDS = new Set(['LAND', 'HQ']);
+
+export function tileIndexOf(tileId: string): number {
+  return Number(tileId.slice(tileId.lastIndexOf(':') + 1));
+}
+
 /**
  * Moves rovers tile to tile over the Goldberg grid. Paths are BFS over `neighbors`; each segment is
  * a great-circle arc between tile centres. Continuous positions go to the snapshot, never to state.
@@ -34,15 +41,26 @@ export class RoverSystem {
     private readonly cfg: GameConstants,
   ) {}
 
-  /** Shortest tile path (excluding `from`, including `to`), or null. Tiles with structures block, except landing pads and the destination. */
-  findPath(bodyId: BodyId, from: number, to: number, structures: ReadonlyArray<Structure>): number[] | null {
+  /**
+   * Shortest tile path (excluding `from`, including `to`), or null. Tiles with structures block,
+   * except landing pads (LAND, the port) and the tiles in `allow` (the construction site it drives to).
+   */
+  findPath(
+    bodyId: BodyId,
+    from: number,
+    to: number,
+    structures: ReadonlyArray<Structure>,
+    allow: ReadonlySet<number> = new Set(),
+  ): number[] | null {
     const grid = this.grids.get(bodyId);
     if (!grid || from === to) return grid && from === to ? [] : null;
     const blocked = new Set<number>();
     for (const s of structures) {
-      if (s.bodyId !== bodyId || s.kind === 'LANDING_PAD') continue;
-      const idx = Number(s.tileId.slice(s.tileId.lastIndexOf(':') + 1));
-      blocked.add(idx);
+      if (s.bodyId !== bodyId || PASSABLE_KINDS.has(s.kind)) continue;
+      for (const t of s.tiles) {
+        const idx = tileIndexOf(t);
+        if (!allow.has(idx)) blocked.add(idx);
+      }
     }
     if (blocked.has(to)) return null;
     const prev = new Int32Array(grid.tiles.length).fill(-1);
@@ -89,6 +107,8 @@ export class RoverSystem {
       if (!pos) snap.roverLocalPos.set(rover.id, (pos = vec3()));
       if (!fwd) snap.roverForward.set(rover.id, (fwd = vec3(0, 0, 1)));
 
+      // A loaded game has MOVING rovers without a drive: restart from the tile they left.
+      if (rover.state === 'MOVING' && !this.active.has(rover.id) && rover.path.length) this.start(rover, rover.path);
       const drive = this.active.get(rover.id);
       if (!drive || rover.state !== 'MOVING') {
         const tile = grid.tiles[rover.tileIndex];

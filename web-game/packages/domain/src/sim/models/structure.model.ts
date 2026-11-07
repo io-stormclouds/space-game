@@ -1,56 +1,53 @@
 import { BodyId } from '../../shared/ids';
 import { TileId } from './planet-grid.model';
-import { Cost, ResourceKind } from './resource.model';
+import { Cost } from './resource.model';
 
-export type StructureKind =
-  | 'MINE'
-  | 'ICE_EXTRACTOR'
-  | 'SILICITE_EXTRACTOR'
-  | 'SOLAR'
-  | 'WIND'
-  | 'HABITAT'
-  | 'DEPOT'
-  | 'LANDING_PAD';
+/** Building id from the economy catalog: MIN, ICE, SIT, SOL, WND, HAB, DEP, SKL, LAND, HQ, SMT… */
+export type StructureKind = string;
 
-export interface StructureInfo {
-  name: string;
-  description: string;
-  cost: Cost;
-  /** Negative = consumes power, positive = produces it. */
-  power: number;
-  /** Extractors need a deposit of this resource on their tile and pull it at `rate` per second. */
-  extracts?: ResourceKind;
-  rate?: number;
+/**
+ * PLANNED: ordered, materials paid, waiting for a rover. CONSTRUCTING: a rover is building it.
+ * ACTIVE: working at `level`. UPGRADING: working at `level` with reduced output while `targetLevel` is built.
+ */
+export type StructureState = 'PLANNED' | 'CONSTRUCTING' | 'ACTIVE' | 'UPGRADING';
+
+export interface ProductionBatch {
+  recipe: string;
+  /** 0..1 */
+  progress: number;
 }
-
-export const STRUCTURE_INFO: Record<StructureKind, StructureInfo> = {
-  MINE: { name: 'Kopalnia Ferrytu', description: 'Wydobywa Ferryt ze złoża na kafelku.', cost: { FERRITE: 15 }, power: -3, extracts: 'FERRITE', rate: 2 },
-  ICE_EXTRACTOR: { name: 'Ekstraktor Kriolu', description: 'Topi lód ze złoża Kriolu.', cost: { FERRITE: 15 }, power: -3, extracts: 'CRYOL', rate: 2 },
-  SILICITE_EXTRACTOR: { name: 'Wieża Silicytu', description: 'Wydobywa kryształy Silicytu.', cost: { FERRITE: 15, CRYOL: 5 }, power: -3, extracts: 'SILICITE', rate: 2 },
-  SOLAR: { name: 'Panel słoneczny', description: 'Produkuje 5 mocy.', cost: { SILICITE: 10 }, power: 5 },
-  WIND: { name: 'Turbina wiatrowa', description: 'Produkuje 10 mocy.', cost: { FERRITE: 15, SILICITE: 10 }, power: 10 },
-  HABITAT: { name: 'Habitat', description: 'Moduł mieszkalny załogi.', cost: { FERRITE: 20, SILICITE: 10 }, power: -2 },
-  DEPOT: { name: 'Magazyn', description: 'Skład surowców.', cost: { FERRITE: 15, CRYOL: 5 }, power: -1 },
-  LANDING_PAD: { name: 'Lądowisko', description: 'Statek ląduje tutaj zamiast wisieć na orbicie.', cost: { FERRITE: 30, CRYOL: 10 }, power: -2 },
-};
-
-/** Order of the build menu. */
-export const BUILDABLE_KINDS: ReadonlyArray<StructureKind> = [
-  'MINE',
-  'ICE_EXTRACTOR',
-  'SILICITE_EXTRACTOR',
-  'SOLAR',
-  'WIND',
-  'HABITAT',
-  'DEPOT',
-  'LANDING_PAD',
-];
 
 export interface Structure {
   id: string;
   kind: StructureKind;
   bodyId: BodyId;
+  /** Anchor tile (the one the player clicked). */
   tileId: TileId;
-  /** Game time of construction. */
+  /** Every tile of the footprint, anchor first. */
+  tiles: ReadonlyArray<TileId>;
+  /** Working level; 0 until the first construction ends. */
+  level: number;
+  /** Level being built: 1 for a new building, level + 1 while upgrading. */
+  targetLevel: number;
+  state: StructureState;
+  /** 0..1 of the current construction or upgrade. */
+  progress: number;
+  /** What the current construction cost (for refunds). */
+  paid: Cost;
+  /** Game time when it was ordered. */
   builtAt: number;
+  /** Selected production recipe (buildings with several). */
+  recipe?: string;
+  /** Production in progress. */
+  batch?: ProductionBatch | null;
+}
+
+/** Whether the structure works (produces, consumes, stores). */
+export function isWorking(s: Structure): boolean {
+  return s.state === 'ACTIVE' || s.state === 'UPGRADING';
+}
+
+/** Whether the structure is a construction site that needs a rover. */
+export function isSite(s: Structure): boolean {
+  return s.state !== 'ACTIVE';
 }

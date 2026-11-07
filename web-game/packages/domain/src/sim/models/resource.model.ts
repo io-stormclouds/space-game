@@ -1,69 +1,68 @@
-/** The three resources of the PoC. Names are invented; colours match the KayKit cargo palette. */
-export type ResourceKind = 'FERRITE' | 'CRYOL' | 'SILICITE';
+/**
+ * Amounts of materials by catalog code (FER, KRI, SIL, STA…). A missing code means 0.
+ * PoC had three fixed kinds (FERRITE, CRYOL, SILICITE); they are now FER, KRI and SIL.
+ */
+export type MaterialCode = string;
 
-export const RESOURCE_KINDS: ReadonlyArray<ResourceKind> = ['FERRITE', 'CRYOL', 'SILICITE'];
+export type Stockpile = Readonly<Record<MaterialCode, number>>;
+/** A cost or a partial amount; missing codes mean 0. */
+export type Cost = Stockpile;
 
-export interface ResourceInfo {
-  name: string;
-  /** Genitive form for cost strings ("20 Ferrytu"). */
-  genitive: string;
-  color: number;
-  cssClass: string;
+export const emptyStockpile = (): Stockpile => ({});
+
+export function amountOf(s: Stockpile, code: MaterialCode): number {
+  return s[code] ?? 0;
 }
 
-export const RESOURCE_INFO: Record<ResourceKind, ResourceInfo> = {
-  FERRITE: { name: 'Ferryt', genitive: 'Ferrytu', color: 0xf97316, cssClass: 'text-orange-300' },
-  CRYOL: { name: 'Kriol', genitive: 'Kriolu', color: 0x38bdf8, cssClass: 'text-sky-300' },
-  SILICITE: { name: 'Silicyt', genitive: 'Silicytu', color: 0x4ade80, cssClass: 'text-green-300' },
-};
-
-export type Stockpile = Record<ResourceKind, number>;
-/** A cost or a partial amount; missing kinds mean 0. */
-export type Cost = Partial<Stockpile>;
-
-export const emptyStockpile = (): Stockpile => ({ FERRITE: 0, CRYOL: 0, SILICITE: 0 });
-
-export function stockpileOf(partial: Cost): Stockpile {
-  return { ...emptyStockpile(), ...partial };
-}
-
-export function addStock(a: Stockpile, b: Cost): Stockpile {
-  const out = { ...a };
-  for (const k of RESOURCE_KINDS) out[k] += b[k] ?? 0;
+export function addStock(a: Stockpile, b: Cost, k = 1): Stockpile {
+  const out: Record<string, number> = { ...a };
+  for (const [code, q] of Object.entries(b)) out[code] = (out[code] ?? 0) + q * k;
   return out;
 }
 
 /** Subtracts, clamping at zero. */
 export function subtractStock(a: Stockpile, b: Cost): Stockpile {
-  const out = { ...a };
-  for (const k of RESOURCE_KINDS) out[k] = Math.max(0, out[k] - (b[k] ?? 0));
+  const out: Record<string, number> = { ...a };
+  for (const [code, q] of Object.entries(b)) out[code] = Math.max(0, (out[code] ?? 0) - q);
   return out;
 }
 
 export function canAfford(a: Stockpile, cost: Cost): boolean {
-  return RESOURCE_KINDS.every((k) => a[k] >= (cost[k] ?? 0));
+  return Object.entries(cost).every(([code, q]) => (a[code] ?? 0) >= q);
 }
 
-/** What is short, per kind; empty when affordable. */
+/** What is short, per code; empty when affordable. */
 export function missingFor(a: Stockpile, cost: Cost): Cost {
-  const out: Cost = {};
-  for (const k of RESOURCE_KINDS) {
-    const need = (cost[k] ?? 0) - a[k];
-    if (need > 0) out[k] = need;
+  const out: Record<string, number> = {};
+  for (const [code, q] of Object.entries(cost)) {
+    const need = q - (a[code] ?? 0);
+    if (need > 0) out[code] = need;
   }
   return out;
 }
 
 export function stockTotal(a: Cost): number {
-  return RESOURCE_KINDS.reduce((s, k) => s + (a[k] ?? 0), 0);
+  return Object.values(a).reduce((s, q) => s + q, 0);
 }
 
 export function isEmptyStock(a: Cost): boolean {
   return stockTotal(a) <= 0;
 }
 
-/** "20 Ferrytu + 10 Silicytu" */
+/** Multiplies every amount, rounding to whole units (refunds). */
+export function scaleStock(a: Cost, k: number): Stockpile {
+  const out: Record<string, number> = {};
+  for (const [code, q] of Object.entries(a)) {
+    const v = Math.floor(q * k);
+    if (v > 0) out[code] = v;
+  }
+  return out;
+}
+
+/** "FER 20 · SIL 10", the canvas style of costs and shortfalls. */
 export function formatCost(cost: Cost): string {
-  const parts = RESOURCE_KINDS.filter((k) => (cost[k] ?? 0) > 0).map((k) => `${cost[k]} ${RESOURCE_INFO[k].genitive}`);
-  return parts.length ? parts.join(' + ') : 'za darmo';
+  const parts = Object.entries(cost)
+    .filter(([, q]) => q > 0)
+    .map(([code, q]) => `${code} ${Math.ceil(q)}`);
+  return parts.length ? parts.join(' · ') : '—';
 }

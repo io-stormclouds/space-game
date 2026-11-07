@@ -13,7 +13,7 @@
 
 ### Założenia przyjęte ze zlecenia
 
-Zlecenie de facto rozstrzyga kilka otwartych pytań. Traktuję te rozstrzygnięcia jako robocze założenia; trzeba je jeszcze potwierdzić w polach „Decyzja”.
+Zlecenie de facto rozstrzyga kilka otwartych pytań. Wszystkie sześć założeń potwierdzono 2026-11-07 (plan prac web-game, pytanie W05); rozstrzygnięcia są wpisane w polach „Decyzja” w `docs/game-design-questions.md`.
 
 | # | Założenie | Skąd | Pytanie |
 |---|---|---|---|

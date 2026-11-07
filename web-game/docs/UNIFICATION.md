@@ -78,21 +78,111 @@ Kolumny od „3D PoC” do „Kanwa i DS” to **FAKT** (stan z planu, 2026-11-0
   - Powłoka aplikacji pokazuje statyczne dane z planszy „Kolonia”.
 - **Przeniesione do repo:** archiwum kanwy (`docs/canvas/`) i model ekonomii (`tools/economy-model/`). `npm run econ:check` potwierdza, że dokument ekonomii zgadza się z modelem.
 
-## 4. Zmiany wyników względem PoC
+## 3a. Wykonane w F1 (FAKT)
 
-Wpisy od F1: każdy zmieniony wynik oczekiwany w przeniesionych testach i każda poprawka błędu (W09).
+Wspólna domena w `packages/domain` jest w czystym TypeScripcie, bez Angulara, Three.js i DOM. Testy: 151 w zwykłym vitest.
+
+- **Logika 3D PoC** (`sim/`):
+  - `game/` przeniesione najpierw 1:1 (commit `6b41a74`, 64 testy bez zmian), potem ujednolicone.
+  - Pozostałe 17 z 81 testów PoC dotyczy silnika 3D (przejdą do `render` w F4) i serwisu stanu (zastąpionego przez mock w F2).
+- **Atanor** (`atanor/`): silnik z PoC, 16 przeniesionych testów bez zmian i 38 nowych. Szczegóły: `packages/domain/src/atanor/README.md`.
+- **Gwiazdy** (`galaxy/`): 41 gwiazd z PoC galaktyki z pozycjami zgodnymi z dystansem (W10).
+- **Katalog ekonomii** (`economy/`):
+  - Dane i obliczenia modelu przeniesione z `tools/economy-model`. Generator dokumentu tylko formatuje.
+  - Dokument wychodzi bajt w bajt taki sam (`econ:check`), więc gra, dokument i panel projektanta z F6 mają jedno źródło.
+  - `computeEconomy(params)` liczy wszystko od nowa z parametrów (Załącznik A).
+- **Symulacja** (`sim/simulation.ts`):
+  - Odpowiednik `SimulationService` + `CommandService` z PoC: jeden scenariusz, reguły, systemy, migawka klatki, `step(dt)` i `dispatch(command)`.
+  - Cały stan gry jest w `WorldState` (zwykłe dane), także postęp budów i partii produkcji, więc zapis do JSON i powtórka działają (test).
+- **Scenariusze:**
+  - `tau-ceti` (domyślny, W06 A): przepływ z kanwy.
+  - `planeta-matka`: preset PoC, na nim działają przeniesione testy.
+- **Testy przepływu z kanwy** bez UI:
+  - przylot → skan (15 min) → wybór Tau Ceti e → przelot Arki → port z ładowni (12 min, 2 łaziki) → prom → wiatrak, habitat, kopalnia, ekstraktor Kriolu, wieża Silicytu → wydobycie FER, SIL, KRI;
+  - ten sam skrypt daje identyczny JSON stanu i dziennik zdarzeń;
+  - wczytanie zapisu w trakcie budowy daje ten sam wynik co gra bez przerwy.
+
+### Zasady wspólnej domeny (DECYZJA według planu i rekomendacji)
+
+| Obszar | Zasada | Źródło |
+|---|---|---|
+| Czas | Jednostka symulacji to minuta modelu. Liczby PoC zostają, zmienia się tylko jednostka. Zegar: `dt = min(klatka, 0,1 s) × tempo / 60`; tempo ×60 = szybkość PoC. | Z6 |
+| Surowce | Kody z katalogu (37 materiałów). Grywalne budynki E0–E1, pozostałe jako dane (`PLAYABLE_ERA = 1`). | W07 B |
+| Magazyn | Pula na każdym ciele. Pojemność per klasa składowania z budynków magazynowych i portu. Pełna klasa zatrzymuje wydobycie i produkcję. Statek rozładowuje do puli bazy, ile się zmieści. | Z3, dok. 4.4 |
+| Energia | Sieć per ciało. Panel × nasłonecznienie, turbina tylko z gęstą atmosferą. Przy deficycie P1 (habitaty, kriogenika, pułapki) chronione, P2 i P3 dzielą resztę proporcjonalnie. Budowa sprawdza moc z rezerwacją. | Z4, dok. 4.3 |
+| Załoga | Druga moc: pojemność z portu i habitatów (×1,7 na poziom), zapotrzebowanie budynków (×1,3). Budowa sprawdza ją z rezerwacją. | dok. 4.5 |
+| Budowa | Rozkaz tworzy plac opłacony z puli ciała. Wolny łazik dojeżdża (BFS) i buduje przez czas budowy; kilka łazików sumuje tempo. Rozbudowa w miejscu z 50% wydajności. Anulowanie zwraca 75%, rozbiórka 50%. Żaden poziom nie przekracza portu. Budynki na 1, 3 i 7 kafelkach. | dok. 5.1 |
+| Produkcja | Partie receptur: wejścia z puli przy starcie, wyjścia na końcu. Tempo = poziom × wydajność energii. Partia rusza tylko, jeśli wyjście się zmieści. | dok. 4.4, 5.1 |
+| Loty | Czas przylotu i punkt przechwycenia ustalane przy rozkazie; pozycja w locie jest funkcją planu i czasu. | TECH-1, W09 |
+| Odmowy | Jeden słownik: 13 kodów PoC + 17 nowych (`REJECT_CODES`). Usterki symulacji osobno (`FAULT_CODES`: JAM). Teksty są w słowniku UI (W16). | rejestr: Odmowy |
+| Kolonizacja | Skan systemu, wybór ciała z siatką, port z ładowni Arki przy Arce na orbicie, prom z ładowni do puli kolonii, łazik z portu (FER 20 · SIL 5 · 3 min). | kanwa |
+
+## 4. Zmiany wyników względem PoC
 
 | Test lub obszar | W PoC | W web-game | Powód | Decyzja |
 |---|---|---|---|---|
-| — | — | — | — | — |
+| Kody surowców | FERRITE, CRYOL, SILICITE | FER, KRI, SIL | jeden katalog | W07 |
+| Rodzaje budowli | MINE, ICE_EXTRACTOR, SILICITE_EXTRACTOR, SOLAR, WIND, HABITAT, DEPOT, LANDING_PAD | MIN, ICE, SIT, SOL, WND, HAB, DEP, LAND (+ cały katalog) | katalog dokumentu | W07 |
+| Jednostka czasu | sekunda | minuta modelu; wartości liczbowe bez zmian | Z6 | Z6 |
+| Magazyn | globalny `stockpile` | `storage` per ciało z pojemnością; budowa na Księżycu wymaga materiałów na Księżycu | Z3 | Z3 |
+| Świat startowy presetu | lądowisko + panel; 5 MW wytwarzane, 2 pobierane | + port L1 (3 pola): 10 MW / 2 MW, miejsca dla 5 osób, magazyn 2000 j. | dokument: E0 startuje z HQ L1 | Z1–Z6, dok. 3.1 |
+| `build-system.spec`: budowa kopalni | natychmiast `STRUCTURE_BUILT` | `CONSTRUCTION_ORDERED`, plac; łazik buduje 2 min | dok. 5.1 | F1 |
+| `build-system.spec`: brak mocy | druga kopalnia `NO_POWER` | moc 8 MW: habitat + 2 kopalnie, trzecia `NO_POWER`; planowane źródła się liczą | rezerwacja przy rozkazie | F1 |
+| Tekst braku surowców | „brakuje 10 Ferrytu + 10 Silicytu” | „brakuje FER 10 · SIL 10” | styl kanwy („BRAK: FER 2088 · …”) | W16 |
+| Tekst braku mocy | „brakuje 3 mocy” | „brakuje 3 MW” | jednostka z DS | W16 |
+| `full-loop.spec`: ekonomia | druga kopalnia `NO_POWER`, wiatrak odblokowuje | `NO_CREW` → habitat → `NO_POWER` → wiatrak; jeden łazik buduje 5 placów po kolei | dok. 4.5, 5.1 | F1 |
+| `full-loop.spec`: ograniczenie klatki | `advance(5, 1)` = 0,1 s | `advance(5, 60)` = 0,1 min (tempo PoC) | Z6 | Z6 |
+| Wydobycie i górnictwo statku | najwyżej 1 tick na wywołanie: przy kroku > 1 jednostki ticki ginęły | każda pełna minuta kroku | **błąd znaleziony przy przenoszeniu** | W09 |
+| Loty | krzywa korygowana co klatkę, postęp speed·dt/długość: czas zależny od klatek | czas ustalony przy rozkazie; ten sam przy kroku 1/60 i 0,5 min | błąd z planu | W09, TECH-1 |
+| Wydobycie przy deficycie | nie występował (budowa blokowana) | wydajność = moc dostępna / zapotrzebowanie | Z4 | Z4 |
+| Dokowanie | `LANDING_PAD` | `LAND`; port nie jest punktem dokowania, bo Arka zostaje na orbicie, a towar zjeżdża promem | propozycja | F1 |
+| Atanor: rozwiązanie poziomu 2 | JAM po 9 tickach, 0/6 | 6/6 po 39 tickach (błędny program, nie silnik) | błąd z planu | W09 |
+| Atanor: `getStats().cycles` | pozycja głowicy (L1: 5) | liczba ticków (L1: 50) | błąd „CYKLE” z planu | W09 |
+| Atanor: obszar L1 | 11 | 12 (pole dostarczenia było pomijane) | błąd znaleziony przy przenoszeniu | W09 |
+| Atanor: dwa ramiona na jednej cząsteczce | podwójny ruch bez błędu | jeden ruch albo JAM `MOLECULE_CONFLICT` | błąd z planu (potwierdzony) | W09 |
+| Gwiazdy | 31 z 41 gwiazd z dystansem ze współrzędnych różnym od pola `distance` o ponad 5% (np. Tau Ceti 14,35 wobec 11,91 ly, Vega 41,27 wobec 25,04 ly, Deneb 1650 wobec 2615 ly) | kierunek ze współrzędnych, długość = `distance` | W10 A | W10 |
+| Dokument ekonomii | dwie linie poprawione ręcznie po wygenerowaniu | poprawki w generatorze; dokument bez zmian | jedno źródło | F0 |
 
-## 5. Pytania otwarte
+## 5. Rozstrzygnięcia według rekomendacji (2026-11-07)
+
+Na prośbę „decyzje wg rekomendacji” rozstrzygam pytania P1–P6 i kwestie z F1 według moich rekomendacji. Każde można zmienić, a wtedy zmiana trafi do tej tabeli.
+
+| ID | Kwestia | Rozstrzygnięcie |
+|---|---|---|
+| P1 | Klawisze widoków (F1 i F3 są zajęte przez przeglądarkę) | 1 Planeta, 2 Układ, 3 Galaktyka, 4 Atanor. Tempo: Spacja pauza, `+` / `−` zmiana tempa (PoC: 1/2/3), Esc anuluje. |
+| P2 | Plansza Atanora | Projektuję ją od razu w web-game (F4), z komponentów DS. Zrzut trafi do `docs/`. Kanwa zostaje archiwum. |
+| P3 | Ikony z kanwy spoza DS | Dodać do `design-system/src/icons/icon-paths.ts` (F3). |
+| P4 | Zdalne repozytorium | Na razie tylko lokalnie. Adres podaje użytkownik. |
+| P5 | Decyzje w dokumentach | Tak: pola „Decyzja” w `docs/game-design-questions.md` dla pytań rozstrzygniętych planem i status Z1–Z6 w dokumencie ekonomii (przez `template.md`). |
+| P6 | Sprzęt referencyjny | Ten komputer. Raport F5 zapisze CPU, GPU i przeglądarkę. |
+| D1 | Port L1 w Tau Ceti | Koszt i czas z kanwy: STA 120 · BET 80 · UKL 10, 12 min. Magazyn portu 2000 j. dla klas sypkie i sztukowe (kanwa: 3600 na L2 = 2000 × 1,8). |
+| D2 | Limit łazików | Poziom portu + 1 (kanwa: 2 / 3 przy L2). |
+| D3 | Prom | 250 j. na kurs, 6 min w jedną stronę (kanwa liczb nie podaje). |
+| D4 | Taśmy i rury (rozdz. 7) | Jeszcze nie: produkcja bierze z puli ciała. Logistyka fizyczna między ciałami (statki, prom) działa. |
+| D5 | Potrzeby załogi, przyrost (4.5) | Jeszcze nie; załoga działa jako pojemność. |
+| D6 | Bufory budynków (2 / 5 partii) | Jeszcze nie; partia rusza tylko, jeśli wyjście się zmieści. |
+| D7 | Sonda („Wyślij sondę”) | Jeszcze nie: jest na pokładzie, rozkazu brak. |
+| D8 | Przylot | Arka startuje na orbicie postojowej przy gwieździe (przylot = stan początkowy). |
+| D9 | Ładownia Arki | 9 pozycji = 2000 j.: 7 z paska kanwy oraz Pręty paliwowe 20 i Silniki 40 z listy „na pokładzie”. Zgadza się z „2000 / 2000 j.” z kanwy. |
+| D10 | Orbity Tau Ceti | Promienie z nasłonecznienia z kanwy (r = 900·√(0,52 / ins)), okresy ∝ r^1,5 jak u planety PoC. |
+| D11 | Rezerwacja | Planowane źródła i odbiorcy liczą się przy sprawdzaniu mocy i załogi rozkazu; wydajność liczą tylko działające budynki. |
+| A1 | Atanor: bufory wejścia | Jeden na materiał (jak zbudowano). |
+| A2 | Atanor: atomy na portach | Akceptuję jako produkcję w toku; zużycie na produkt liczone w stanie ustalonym. |
+| A3 | Atanor: liczby w modelu ekonomii | Zostają z dokumentu. Zmierzone (A_NAD: 12 / 12 / 2, A_KAT: 6 / 8 / 2) pokaże panel projektanta w F6 do porównania. |
+| A4 | Kształt NAD | „Y” na razie zostaje; dokument nie ustala kątów. |
+| A5 | Nazwy atomów | Kody materiałów, w tym `PLA*` i `KWA*`; UI pokazuje kody jak DS. |
+| A6 | Porty i start poziomu | Porty ustala receptura. Poziom startuje z rozwiązaniem wzorcowym, które gracz może edytować. |
+| A7 | `targetRequired` | Dotyczy trybu układanki; w budynku produkcja idzie bez końca. |
+| A8 | Wyjście poza planszę | Później jako JAM; plansza 19 heksów = promień 2. |
+| A9 | Zasięg tłoka | Ograniczony maks. długością ramienia poziomu budynku: walidacja w edytorze (F4). |
+| A10 | Ramię trzyma, a inne rusza | JAM, jak teraz. |
+| A11 | Obszar po łuku obrotu | Później (POC-5). |
+| A12 | Tory w punktach kosztu PoC | Nie; tylko w materiałach maszyny. |
+| A13 | Ułamkowe cykle na produkt | Tak, jako średnia z okresu powtarzania. |
+| A14 | Kierunek zależności receptur | Źródłem jest katalog ekonomii. Poziomy trzymają układ portów, a test `catalog-link.spec.ts` pilnuje zgodności wejść i wyjść. |
+
+## 6. Pytania otwarte
 
 | ID | Pytanie | Blokuje |
 |---|---|---|
-| P1 | Kanwa przełącza widoki klawiszami F1–F3, ale w przeglądarce F1 otwiera pomoc, a F3 wyszukiwanie. Jakie klawisze zamiast nich? | F3 |
-| P2 | W08 A wymaga planszy Atanora w stylu DS, a w kanwie jej nie ma. Projektuję ją w kanwie przed F4? | F4 |
-| P3 | Kanwa używa ikon, których DS nie ma (prom, raport, ładownia, taśma, energia, łazik i inne). Dodać je do `design-system/src/icons/icon-paths.ts`? | F3 |
-| P4 | Adres zdalnego repozytorium (np. GitLab). Bez niego nie działają zadania z `/gl-plan`. | — |
-| P5 | Czy przenieść decyzje do dokumentów: pola „Decyzja” w `docs/game-design-questions.md` (np. TECH-4, TECH-5) i status Z1–Z6 w `docs/economy-expansion-design.md` (przez `template.md`)? | — |
-| P6 | Sprzęt referencyjny dla celów W18 (W17: laptop ze zintegrowanym GPU). Jaki konkretnie model? | F5 |
+| P4 | Adres zdalnego repozytorium | — |

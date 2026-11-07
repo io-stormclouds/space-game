@@ -1,6 +1,6 @@
 import { BodyId } from '../../shared/ids';
 import { PlanetGrid, Tile, tileId } from '../models/planet-grid.model';
-import { generateDeposits } from './deposit-generator';
+import { DEFAULT_DEPOSIT_OPTIONS, generateDeposits } from './deposit-generator';
 import { geodesicSphere } from './geodesic';
 import { Vec3, normalize, scale, vec3 } from './vec3';
 
@@ -9,7 +9,13 @@ import { Vec3, normalize, scale, vec3 } from './vec3';
  * Tiles correspond to geodesic vertices; tile corners are the (projected) centroids of the
  * geodesic faces around that vertex. Pure TypeScript, deterministic.
  */
-export function buildGoldbergGrid(bodyId: BodyId, radius: number, frequency: number, depositSeed?: number): PlanetGrid {
+export function buildGoldbergGrid(
+  bodyId: BodyId,
+  radius: number,
+  frequency: number,
+  depositSeed?: number,
+  depositWeights?: Readonly<Record<string, number>>,
+): PlanetGrid {
   const geo = geodesicSphere(frequency);
   const vertexCount = geo.vertices.length;
 
@@ -35,7 +41,7 @@ export function buildGoldbergGrid(bodyId: BodyId, radius: number, frequency: num
   });
 
   const neighborLists = neighborsAt.map((s) => [...s]);
-  const deposits = depositSeed === undefined ? new Map() : generateDeposits(neighborLists, depositSeed);
+  const deposits = depositSeed === undefined ? new Map() : generateDeposits(neighborLists, depositSeed, DEFAULT_DEPOSIT_OPTIONS, depositWeights);
 
   const tiles: Tile[] = [];
   for (let i = 0; i < vertexCount; i++) {

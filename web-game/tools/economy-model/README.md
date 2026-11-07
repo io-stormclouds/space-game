@@ -1,12 +1,14 @@
 # Model ekonomii
 
-Parametryczny model, z którego pochodzą wszystkie tabele w `docs/economy-expansion-design.md`.
-Wcześniej leżał tylko w katalogu tymczasowym sesji; od F0 jest w repozytorium.
+Generator dokumentu `docs/economy-expansion-design.md`. Od F1 dane i obliczenia mieszkają w domenie gry (`packages/domain/src/economy`), a tutaj zostało tylko formatowanie tabel. Gra, dokument i panel projektanta (F6) mają więc jedno źródło.
 
 | Plik | Rola |
 |---|---|
-| `econ-model.ts` | materiały, receptury, budynki, pojazdy, gwiazdolot; liczy sekcje `GEN: …` |
-| `template.md` | treść dokumentu z miejscami `{{GEN: …}}` na tabele |
+| `packages/domain/src/economy/catalog-data.ts` | materiały, receptury, magazyny, budynki, pojazdy, moduły gwiazdolotu |
+| `packages/domain/src/economy/economy-model.ts` | `computeEconomy(params)`: wartości materiałów, mnożniki ery, koszty, czasy, moc i załoga poziomów |
+| `packages/domain/src/galaxy/stars.ts` | 41 gwiazd (tabela zasięgu gwiazdolotu) |
+| `econ-model.ts` | formatuje sekcje `GEN: …` |
+| `template.md` | treść dokumentu z miejscami `{{GEN: …}}` |
 | `build-doc.mjs` | uruchamia model i składa dokument |
 
 ```bash
@@ -16,10 +18,10 @@ npm run econ:docs    # z web-game/: zapisuje dokument od nowa
 
 ## Zasady
 
-- Liczb w tabelach dokumentu nie poprawia się ręcznie. Zmienia się parametry w `econ-model.ts`, a tekst w `template.md`, i generuje dokument.
-- Dane gwiazd model czyta z `poc/space-galaxy-poc/star-map/src/app/data/stars.data.ts` (bez zmian w PoC). Po F1 źródłem będzie katalog gwiazd w `packages/domain`.
+- Liczb w tabelach dokumentu nie poprawia się ręcznie. Dane zmienia się w `catalog-data.ts`, parametry w `DEFAULT_ECONOMY_PARAMS`, tekst w `template.md`, a potem generuje dokument.
 - Jednostka czasu modelu to 1 minuta (założenie Z6, potwierdzone 2026-11-07).
 
-## Zmiana przy przeniesieniu (F0)
+## Historia
 
-W dokumencie dwie linie przy gwiazdolocie poprawiono ręcznie już po wygenerowaniu: pogrubione etykiety, lista i dopisek o Platynicie i Kwantycie. Generator pisze je teraz w tej samej postaci, więc `econ:check` przechodzi bez zmiany dokumentu. Liczby były zgodne.
+- **F0:** skrypt przeniesiony z katalogu tymczasowego sesji. Dwie linie przy gwiazdolocie, poprawione kiedyś ręcznie w dokumencie, generator pisze teraz w tej samej postaci.
+- **F1:** dane i obliczenia przeniesione do domeny; gwiazdy z domeny (pole `distance` bez zmian). Dokument wyszedł bajt w bajt taki sam.

@@ -76,6 +76,27 @@ describe('TransferSystem', () => {
     expect(sys.isActive(inTransit.id)).toBe(false);
   });
 
+  // W09 + TECH-1: the PoC advanced by speed × dt / length of a curve re-aimed every frame, so the
+  // arrival time depended on the frame rate. Now it is fixed at the order.
+  it('arrives at the planned time whatever the step size', () => {
+    const arrival = (dt: number) => {
+      const sys = makeSystem();
+      const snap = createSnapshot(INITIAL_BODIES.map((b) => b.id));
+      const plan = sys.plan(ship(), ASTEROID_ID, 0);
+      const inTransit: Spacecraft = { ...ship(), state: 'IN_TRANSIT', currentBodyId: null, transfer: plan };
+      for (let t = dt; t < 1000; t += dt) {
+        if (sys.update([inTransit], t, dt, snap).some((e) => e.type === 'TRANSFER_ARRIVED')) return { t, plan };
+      }
+      throw new Error('no arrival');
+    };
+    const fine = arrival(1 / 60);
+    const coarse = arrival(0.5);
+    expect(fine.t).toBeGreaterThanOrEqual(fine.plan.estimatedDuration - 1e-9);
+    expect(fine.t - fine.plan.estimatedDuration).toBeLessThan(1 / 60 + 1e-9);
+    expect(coarse.t - coarse.plan.estimatedDuration).toBeLessThan(0.5 + 1e-9);
+    expect(coarse.plan.estimatedDuration).toBeCloseTo(fine.plan.estimatedDuration, 9);
+  });
+
   it('writes a trajectory for an active ship and clears it otherwise', () => {
     const sys = makeSystem();
     const snap = createSnapshot(INITIAL_BODIES.map((b) => b.id));

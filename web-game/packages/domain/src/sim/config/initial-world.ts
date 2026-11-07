@@ -4,6 +4,9 @@ import { Stockpile, emptyStockpile } from '../models/resource.model';
 import { Rover } from '../models/rover.model';
 import { Spacecraft } from '../models/spacecraft.model';
 
+// The 3D PoC world: test preset "Planeta Matka" (W06 A). Time unit = model minute (Z6), so the
+// PoC's numbers are unchanged: an orbit period of 240 is 240 min, the ship flies 150 units/min.
+
 const TWO_PI = Math.PI * 2;
 
 export const SUN_ID = bodyId('sun');
@@ -14,7 +17,7 @@ export const SHIP_ID = shipId('ship-1');
 export const ROVER_ID = roverId('rover-1');
 
 /** What the colony starts with: enough for one extractor and one habitat without a dependency loop. */
-export const INITIAL_STOCKPILE: Stockpile = { FERRITE: 40, CRYOL: 10, SILICITE: 20 };
+export const INITIAL_STOCKPILE: Stockpile = { FER: 40, KRI: 10, SIL: 20 };
 
 export const INITIAL_BODIES: ReadonlyArray<CelestialBody> = [
   {
@@ -29,6 +32,7 @@ export const INITIAL_BODIES: ReadonlyArray<CelestialBody> = [
     orbitalAltitudeFactor: 1.25,
     isHomeBase: false,
     color: 0xffd36a,
+    luminosity: 1,
   },
   {
     id: PLANET_ID,
@@ -43,6 +47,7 @@ export const INITIAL_BODIES: ReadonlyArray<CelestialBody> = [
     isHomeBase: true,
     color: 0x3b82f6,
     surfaceGrid: { frequency: 8, depositSeed: 11 },
+    atmosphere: 'dense',
   },
   {
     id: MOON_ID,
@@ -69,7 +74,7 @@ export const INITIAL_BODIES: ReadonlyArray<CelestialBody> = [
     initialAngle: Math.PI / 3,
     orbitalAltitudeFactor: 1.25,
     isHomeBase: false,
-    resources: { FERRITE: 500 },
+    resources: { FER: 500 },
     color: 0xb45309,
     shape: { seed: 7, roughness: 0.3 },
   },
@@ -79,6 +84,7 @@ export const INITIAL_SHIPS: ReadonlyArray<Spacecraft> = [
   {
     id: SHIP_ID,
     name: 'Astraeus-1',
+    role: 'SHIP',
     fuel: 100,
     maxFuel: 100,
     cargo: emptyStockpile(),
@@ -90,11 +96,12 @@ export const INITIAL_SHIPS: ReadonlyArray<Spacecraft> = [
   },
 ];
 
-/** The rover starts on the home planet's landing pad; its tile is resolved in `world.ts`. */
+/** The rover starts on the home planet's landing pad; its tile is resolved by the scenario. */
 export const INITIAL_ROVER: Omit<Rover, 'tileIndex'> = {
   id: ROVER_ID,
   name: 'Łazik R-1',
   bodyId: PLANET_ID,
   state: 'IDLE',
   path: [],
+  job: null,
 };

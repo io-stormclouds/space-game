@@ -41,7 +41,7 @@ Pięć decyzji, od których zależy reszta:
 
 **Rekomendacja:** **C jako MVP, z architekturą gotową na A.** Najniższe ryzyko, brak problemu zimnego startu, najbliżej obecnych PoC (wszystkie są jednoosobowe). Te same kontrakty domenowe pozwolą później otworzyć wspólne układy. Szczegóły: analiza §12.
 
-**Decyzja:** —
+**Decyzja:** **C** — kolonia gracza instancjonowana, wspólne rynek i galaktyka (Z5 potwierdzone; plan web-game, 2026-11-07, W05).
 
 ### WIZ-2. Jaką rolę ma Atanor w grze? · P0
 
@@ -55,7 +55,7 @@ Pięć decyzji, od których zależy reszta:
 
 **Rekomendacja:** **B.** Zachowuje unikalność gry i daje treść dla warstwy social (rankingi, udostępnianie projektów), a nie zmusza do programowania graczy nastawionych na ekonomię.
 
-**Decyzja:** —
+**Decyzja:** **hybryda A/B** — materiały T3 i T4 wyłącznie z Fabryki atanorowej, T1 i T2 w zwykłych fabrykach (Z2 potwierdzone; plan web-game, 2026-11-07, W05).
 
 ### WIZ-3. Co gracz robi na mapie galaktyki? · P0
 
@@ -68,7 +68,7 @@ Pięć decyzji, od których zależy reszta:
 
 **Rekomendacja:** **A.** Dane gwiazdy kształtują ekonomię układu: jasność wpływa na energię słoneczną, a klasa widmowa na profil złóż.
 
-**Decyzja:** —
+**Decyzja:** **A** — wspólna mapa ekspansji i handlu; celem w układzie jest gwiazdolot i wybór kolejnej gwiazdy (Z1 potwierdzone; plan web-game, 2026-11-07, W05).
 
 ### WIZ-4. Gwiazdy rzeczywiste czy galaktyka proceduralna? · P1
 
@@ -150,7 +150,7 @@ Pięć decyzji, od których zależy reszta:
 
 **Rekomendacja:** **C.** Sesja ma dawać satysfakcję w 10 minut, a powrót po kilku godzinach ma być nagradzający. Wszystkie czasy trzymać jako parametry danych, żeby łatwo je balansować.
 
-**Decyzja:** —
+**Decyzja:** jednostka modelu to **1 minuta** czasu rzeczywistego; PoC działa według tych samych reguł ×60 szybciej (Z6 potwierdzone; plan web-game, 2026-11-07, W05).
 
 ### EKO-2. Czy energia reguluje produkcję w czasie? · P1
 
@@ -163,7 +163,7 @@ Pięć decyzji, od których zależy reszta:
 
 **Rekomendacja:** **B w MVP**, C jako rozwinięcie razem z infrastrukturą orbitalną.
 
-**Decyzja:** —
+**Decyzja:** **B** — pobór ciągły, deficyt obniża wydajność (Z4 potwierdzone; plan web-game, 2026-11-07, W05).
 
 ### EKO-3. Magazyn globalny czy lokalny? · P1
 
@@ -176,7 +176,7 @@ Pięć decyzji, od których zależy reszta:
 
 **Rekomendacja:** **B, razem z automatycznymi trasami (`EKO-8`).** Logistyka orbitalna z 3D PoC (okna transferowe) staje się wtedy realną decyzją, a nie klikaniem. Przy C loty wewnątrz układu znów straciłyby sens.
 
-**Decyzja:** —
+**Decyzja:** **B** — magazyn osobny na każdym ciele, materiały przemieszczają się fizycznie (Z3 potwierdzone; plan web-game, 2026-11-07, W05).
 
 ### EKO-4. Ile surowców i poziomów przetwórstwa? · P1
 
@@ -613,7 +613,7 @@ Pięć decyzji, od których zależy reszta:
 
 **Rekomendacja:** **A.**
 
-**Decyzja:** —
+**Decyzja:** **A** — Angular 22, jak w PoC (plan web-game, 2026-11-07, W01 A).
 
 ### TECH-5. Jeden renderer czy dwa? · P2
 
@@ -626,7 +626,7 @@ Pięć decyzji, od których zależy reszta:
 
 **Rekomendacja:** **A na start**, bo zachowuje gotowy renderer Atanora; zmierzyć bundle. B, jeśli pomiar przekroczy budżet.
 
-**Decyzja:** —
+**Decyzja:** **A** — Three.js + PixiJS, PixiJS tylko w Atanorze, ładowany leniwie, jeden kontekst WebGL naraz (plan web-game, 2026-11-07, W13 A).
 
 ### TECH-6. Tryby widoku: ciągła scena czy osobne widoki? · P2
 
@@ -638,7 +638,7 @@ Pięć decyzji, od których zależy reszta:
 
 **Rekomendacja:** **A.** PoC potwierdza, że to wykonalne. Osobny tryb tylko dla pasa asteroid (instancing), jeśli taki się pojawi.
 
-**Decyzja:** —
+**Decyzja:** **A** — Planeta i Układ jako ujęcia jednej ciągłej sceny, osobno Galaktyka i Atanor (plan web-game, 2026-11-07, W12 A).
 
 ### TECH-7. Pipeline assetów? · P2
 
@@ -664,7 +664,7 @@ Pięć decyzji, od których zależy reszta:
 
 **Rekomendacja:** **A.** Działa i daje decyzje przestrzenne (złoża, sąsiedztwo). Na małych ciałach rozważyć mniejsze n.
 
-**Decyzja:** —
+**Decyzja:** **A** — siatka Goldberga z PoC (przyjęte z planem web-game, faza F4).
 
 ### TECH-9. Persystencja? · P2
 
@@ -695,7 +695,7 @@ Pięć decyzji, od których zależy reszta:
 
 **Rekomendacja:** traktować PoC jako bazę dla **B + C** (zgodnie z `WIZ-3`). Prosimy autorów o potwierdzenie intencji.
 
-**Decyzja:** —
+**Decyzja:** **B + C** — ekspansja i kolonizacja oraz trasy handlowe (Z1 potwierdzone; plan web-game, 2026-11-07, W05).
 
 ### POC-2. Co przedstawia `space-galaxy-poc/prtscr.png`? · P2
 
@@ -771,7 +771,7 @@ Pięć decyzji, od których zależy reszta:
 
 **Rekomendacja:** **C.**
 
-**Decyzja:** —
+**Decyzja:** w praktyce **C** — nazwa „Fabryka atanorowa” zostaje, atomy to materiały ekonomii (plan web-game, 2026-11-07, W08 A).
 
 ### POC-8. Jaka ma być funkcja Habitatu i Magazynu? · P1
 

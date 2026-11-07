@@ -1,6 +1,6 @@
 import { BodyId } from '../../shared/ids';
 import { Vec3 } from '../math/vec3';
-import { ResourceKind } from './resource.model';
+import { MaterialCode } from './resource.model';
 
 export type TileId = string & { readonly __brand: 'TileId' };
 export const tileId = (bodyId: BodyId, index: number): TileId => `${bodyId}:${index}` as TileId;
@@ -9,7 +9,7 @@ export type TileKind = 'PENT' | 'HEX';
 
 /** Static description of a deposit; the remaining amount lives in `WorldState.deposits`. */
 export interface Deposit {
-  resource: ResourceKind;
+  resource: MaterialCode;
   /** Initial amount. */
   amount: number;
 }
