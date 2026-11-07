@@ -58,6 +58,7 @@ test('the machine opens from the factory card on the planet and Esc goes back', 
   await expect(card(page)).toContainText('Próba');
   await expect.poll(async () => Number(await ticks.textContent()), { timeout: 15_000 }).toBeGreaterThan(2);
   await page.keyboard.press('p');
+  await page.waitForTimeout(500); // the readout refreshes at ~4 Hz
   const paused = Number(await ticks.textContent());
   await page.waitForTimeout(1200);
   expect(Number(await ticks.textContent())).toBe(paused);
@@ -70,6 +71,37 @@ test('the machine opens from the factory card on the planet and Esc goes back', 
   await page.keyboard.press('Escape');
   await expect.poll(async () => (await perf(page))['view'], { timeout: 15_000 }).toBe('planet');
   await expect(card(page)).toContainText('Fabryka atanorowa · poz. 1');
+});
+
+test('design file (AT6): the sandbox reference exported, loaded into the building, measured again; a foreign file refused', async ({ page }) => {
+  test.setTimeout(120_000);
+  await ready(page);
+  // the sandbox shows the A_NAD reference: export it
+  await page.keyboard.press('F2');
+  await page.locator('wg-designer-panel [data-tab="atanor"]').click();
+  await page.locator('wg-designer-panel [data-action="open-atanor"]').click();
+  await page.keyboard.press('F2');
+  const machine = page.locator('wg-atanor-machine');
+  await expect(panel(page).locator('[data-atanor="cycles"]')).toHaveText('12');
+  const [download] = await Promise.all([page.waitForEvent('download'), machine.locator('[data-action="export-design"]').click()]);
+  expect(download.suggestedFilename()).toBe('atanor-A_NAD.json');
+  const chunks: Buffer[] = [];
+  for await (const c of (await download.createReadStream())!) chunks.push(c as Buffer);
+  const text = Buffer.concat(chunks).toString('utf8');
+  expect(JSON.parse(text)).toMatchObject({ format: 'web-game-atanor-design', recipe: 'A_NAD', claimed: { cycles: 12, area: 13, arms: 2 } });
+
+  // into the factory's machine (it starts from the hint): the file's numbers are measured again
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('1');
+  await selectFactory(page);
+  await page.keyboard.press('a');
+  await expect(panel(page).locator('[data-atanor="cycles"]')).toHaveText('—');
+  const input = machine.locator('[data-input="design-file"]');
+  await input.setInputFiles({ name: 'atanor-A_NAD.json', mimeType: 'application/json', buffer: Buffer.from(text) });
+  await expect(machine.locator('[data-machine="file"]')).toContainText('zgodne');
+  await expect(panel(page).locator('[data-atanor="cycles"]')).toHaveText('12');
+  await input.setInputFiles({ name: 'other.json', mimeType: 'application/json', buffer: Buffer.from('{"format":"web-game-save"}') });
+  await expect(machine.locator('[data-machine="file"]')).toContainText('To nie jest plik projektu');
 });
 
 test('editor: the A_NAD machine built from the hint on the board and the timeline produces in the trial', async ({ page }) => {
@@ -142,4 +174,22 @@ test('editor: the A_NAD machine built from the hint on the board and the timelin
   await expect.poll(async () => (await perf(page))['view'], { timeout: 15_000 }).toBe('planet');
   await page.keyboard.press('a');
   await expect(panel(page).locator('[data-atanor="cycles"]')).toHaveText('12');
+
+  // AT4: deploy from the trial (W); the machine is built in game time, then produces in the world
+  await page.keyboard.press('t');
+  await expect(card(page).getByRole('button', { name: /^Wdróż/ })).not.toHaveAttribute('aria-disabled', 'true', { timeout: 15_000 });
+  await page.keyboard.press('w');
+  await expect(machine.locator('[data-machine="deploying"]')).toBeVisible();
+  await expect(card(page)).toContainText('Projekt'); // the trial ends with the deployment
+  await page.getByRole('group', { name: 'Tempo czasu' }).getByRole('button', { name: '×600' }).click();
+  await expect(machine.locator('[data-machine="production"]')).toHaveAttribute('data-state', 'RUNNING', { timeout: 40_000 });
+  await expect(machine.locator('[data-machine="deploying"]')).toHaveCount(0);
+  await expect.poll(async () => Number((await machine.locator('[data-machine="delivered"]').textContent())?.match(/(\d+) szt\./)?.[1] ?? 0), { timeout: 40_000 }).toBeGreaterThan(0);
+
+  // V: the working machine (the view follows the world's ticks), V again: the draft
+  await page.keyboard.press('v');
+  await expect(card(page)).toContainText('Produkcja');
+  await expect.poll(async () => Number(await panel(page).locator('[data-atanor="ticks"]').textContent()), { timeout: 15_000 }).toBeGreaterThan(5);
+  await page.keyboard.press('v');
+  await expect(card(page)).toContainText('Projekt');
 });

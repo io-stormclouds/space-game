@@ -32,4 +32,8 @@ export type {
   Tile,
   TileId,
   WorldState,
+  AtanorMachine,
+  AtanorMachineState,
+  AtanorDeployment,
+  AtanorProgramMetrics,
 } from '@space-game/domain';

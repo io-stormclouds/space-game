@@ -33,6 +33,20 @@ interface InputRow {
   template: `
     <section hudFrame class="panel panel--right machine" [label]="tm.tab" [serial]="r()?.recipeId ?? 'ATN'">
       <div class="scroll">
+        @if (session.machine(); as m) {
+          <div class="prod" data-machine="production" [attr.data-state]="m.state">
+            <span class="tag" [class.tag--sg]="m.state === 'RUNNING'" [class.tag--al]="m.state === 'WAITING' || m.state === 'FULL' || m.state === 'JAM'">{{ t.atanor.machineState[m.state] }}</span>
+            @if (m.program) {
+              <span class="note" data-machine="delivered">{{ tm.working(m.delivered, m.ticks, num(m.metrics?.cyclesPerOutput, 2)) }}</span>
+            }
+            @if (m.deploy; as d) {
+              <span class="note sg" data-machine="deploying">{{ tm.deploying(num(d.remaining), num(d.total)) }}</span>
+            }
+            @if (m.program) {
+              <button type="button" class="act" data-action="watch" (click)="session.toggleWatch()">{{ session.watch() ? t.atanor.watch.back.label : t.atanor.watch.open }} · V</button>
+            }
+          </div>
+        }
         @if (r(); as r) {
           <dl class="kv1" data-machine="unit">
             <div><dt>{{ tm.timePer }}</dt><dd data-machine="time">{{ num(timePer()) }} min</dd></div>
@@ -89,6 +103,18 @@ interface InputRow {
           } @else {
             <p class="note">{{ tm.noVariants }}</p>
           }
+
+          <div class="vhead">
+            <h3 class="hud-label">{{ tm.file.title }}</h3>
+            <span>
+              <button type="button" class="act" data-action="export-design" (click)="exportDesign()">{{ tm.file.export }}</button>
+              <button type="button" class="act" data-action="import-design" (click)="picker.click()">{{ tm.file.import }}</button>
+              <input #picker type="file" accept="application/json,.json" hidden data-input="design-file" (change)="importDesign($event)" />
+            </span>
+          </div>
+          @if (fileNote(); as n) {
+            <p class="note" data-machine="file" [class.al]="n.alert" [class.sg]="!n.alert">{{ n.text }}</p>
+          }
         }
       </div>
     </section>
@@ -103,6 +129,7 @@ interface InputRow {
     .al, .short td { color: var(--hud-color-alert); }
     .note { margin: 0; font-size: var(--hud-font-size-label); color: var(--hud-color-text-dim); }
     .vhead { display: flex; justify-content: space-between; align-items: baseline; }
+    .prod { display: flex; flex-wrap: wrap; gap: var(--hud-space-3) var(--hud-space-5); align-items: center; padding-bottom: var(--hud-space-3); border-bottom: var(--hud-stroke-hair) solid var(--hud-color-line); }
     .act { height: 22px; padding: 0 var(--hud-space-3); background: var(--hud-color-graphite); border: var(--hud-stroke-hair) solid var(--hud-color-line); color: var(--hud-color-text-dim); font: inherit; font-size: var(--hud-font-size-micro); letter-spacing: var(--hud-tracking-label); text-transform: uppercase; cursor: pointer; }
     .act:disabled { opacity: 0.4; cursor: default; }
   `,
@@ -224,6 +251,42 @@ export class AtanorMachine {
       if (!body) return;
       untracked(() => void this.game.nominalFlows(body).then((f) => this.flows.set(f)));
     });
+  }
+
+  private readonly fileError = signal<string | null>(null);
+
+  /** Result of the last design file: refused, or the claimed numbers against the measured ones. */
+  protected readonly fileNote = computed<{ text: string; alert: boolean } | null>(() => {
+    const err = this.fileError();
+    if (err) return { text: err, alert: true };
+    const claimed = this.session.imported();
+    const r = this.r();
+    if (!claimed || !r) return null;
+    if (r.cyclesPerOutput === null) return { text: this.tm.file.notProducing, alert: true };
+    const same = claimed.cycles === r.cyclesPerOutput && claimed.area === r.area && claimed.arms === r.arms;
+    const text = this.tm.file.verified(`${num(claimed.cycles, 2)} / ${claimed.area} / ${claimed.arms}`, `${num(r.cyclesPerOutput, 2)} / ${r.area} / ${r.arms}`, same);
+    return { text, alert: !same };
+  });
+
+  protected exportDesign(): void {
+    const r = this.r();
+    const file = this.session.exportDesign({ cycles: r?.cyclesPerOutput ?? null, area: r?.area ?? 0, arms: r?.arms ?? 0 });
+    if (!file) return;
+    const url = URL.createObjectURL(new Blob([file.text], { type: 'application/json' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = file.name;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  protected async importDesign(e: Event): Promise<void> {
+    const input = e.target as HTMLInputElement;
+    const f = input.files?.[0];
+    input.value = '';
+    if (!f) return;
+    const result = this.session.importDesign(await f.text());
+    this.fileError.set(result === 'OK' ? null : result === 'OTHER_RECIPE' ? this.tm.file.otherRecipe : this.tm.file.foreign);
   }
 
   protected save(): void {

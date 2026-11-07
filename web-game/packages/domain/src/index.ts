@@ -11,6 +11,7 @@ export * from './sim/models/resource.model';
 export * from './sim/models/rover.model';
 export * from './sim/models/spacecraft.model';
 export * from './sim/models/structure.model';
+export * from './sim/models/atanor-machine.model';
 export * from './sim/models/transfer.model';
 export * from './sim/reducer';
 export * from './sim/frame-snapshot';

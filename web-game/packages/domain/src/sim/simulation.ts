@@ -11,6 +11,8 @@ import { StructureKind, isWorking } from './models/structure.model';
 import { WorldState, reduceAll, storageOf } from './reducer';
 import { Rules } from './rules';
 import { Scenario, buildWorldGrids, createWorld, landingPadTileOf, padDockingOffset, scenarioConstants } from './scenario';
+import type { AtanorSolution } from '../atanor/engine/types';
+import { AtanorSystem } from './systems/atanor-system';
 import { BuildSystem } from './systems/build-system';
 import { ColonySystem } from './systems/colony-system';
 import { ConstructionSystem } from './systems/construction-system';
@@ -36,7 +38,10 @@ export type Command =
   | { type: 'SCAN_SYSTEM'; shipId: ShipId }
   | { type: 'CHOOSE_COLONY_SITE'; bodyId: BodyId }
   | { type: 'PLACE_SPACEPORT'; bodyId: BodyId; tileId: TileId; rotation?: number }
-  | { type: 'CALL_SHUTTLE'; bodyId: BodyId; cargo: Cost };
+  | { type: 'CALL_SHUTTLE'; bodyId: BodyId; cargo: Cost }
+  /** Fabryka atanorowa (AT4): keep the draft with the world; deploy a program as the machine. */
+  | { type: 'SAVE_ATANOR_DRAFT'; structureId: string; solution: AtanorSolution }
+  | { type: 'DEPLOY_ATANOR'; structureId: string; solution: AtanorSolution };
 
 export type CommandType = Command['type'];
 
@@ -77,6 +82,7 @@ export class Simulation {
   private readonly construction: ConstructionSystem;
   private readonly extraction: ExtractionSystem;
   private readonly production: ProductionSystem;
+  readonly atanor: AtanorSystem;
   world: WorldState;
 
   constructor(
@@ -97,6 +103,7 @@ export class Simulation {
     this.construction = new ConstructionSystem(this.rules, this.rovers);
     this.extraction = new ExtractionSystem(this.rules, this.grids);
     this.production = new ProductionSystem(this.rules);
+    this.atanor = new AtanorSystem(this.rules);
     this.world = opts.world ?? createWorld(scenario, this.grids, this.rules);
     for (const b of scenario.bodies) this.refreshDockingOffset(b.id);
     for (const [id, out] of this.snapshot.bodyLocalPos) this.solver.localPosition(id, this.world.time, out);
@@ -141,6 +148,9 @@ export class Simulation {
     const made = this.production.update(this.world, dt);
     this.world = made.world;
     this.apply(made.events, all);
+    const machines = this.atanor.update(this.world, dt);
+    this.world = machines.world;
+    this.apply(machines.events, all);
 
     const focus = this.world.ships.find((s) => s.state === 'IN_TRANSIT')?.id ?? null;
     this.transfers.writeTrajectory(focus, snap);
@@ -202,6 +212,12 @@ export class Simulation {
         break;
       case 'CALL_SHUTTLE':
         this.apply([this.colony.callShuttle(w, cmd.bodyId, cmd.cargo)], all);
+        break;
+      case 'SAVE_ATANOR_DRAFT':
+        this.apply([this.atanor.saveDraft(w, cmd.structureId, cmd.solution)], all);
+        break;
+      case 'DEPLOY_ATANOR':
+        this.apply([this.atanor.deploy(w, cmd.structureId, cmd.solution)], all);
         break;
     }
     return all;

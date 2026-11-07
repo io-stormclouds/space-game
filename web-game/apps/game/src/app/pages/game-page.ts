@@ -173,6 +173,12 @@ export class GamePage {
       this.atanor.rotate();
       return true;
     }
+    // V: the working machine ↔ the draft (AT4)
+    if (!e.ctrlKey && !e.altKey && !e.metaKey && k === 'v') {
+      e.preventDefault();
+      this.atanor.toggleWatch();
+      return true;
+    }
     return false;
   }
 

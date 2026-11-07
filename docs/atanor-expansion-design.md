@@ -237,7 +237,7 @@ Kanwa nie ma planszy Atanora (P2). Po akceptacji rozdziałów 3–5 ekran powsta
 
 Pytania 8–14 z `packages/domain/src/atanor/README.md:75-81` (plansza, tłok na L1, automatyczne puszczanie, definicja obszaru, koszt szyn, ułamkowe cykle, źródło danych receptur) są rozstrzygnięte w `web-game/docs/UNIFICATION.md` jako A8–A14. Obszar z przebytej drogi (A11 „później”) wchodzi w AT5.
 
-**Status (2026-11-07):** użytkownik przyjął rekomendacje pytań 1–11. W rejestrze web-game są zapisane jako A15–A25 oraz D37 (naprawa K4).
+**Status (2026-11-07):** użytkownik przyjął rekomendacje pytań 1–11. W rejestrze web-game są zapisane jako A15–A25 oraz D37 (naprawa K4). Zrobione: AT1–AT4, AT5 bez drugiej planszy L5, AT6 w wersji minimalnej (plik projektu z weryfikacją pomiarem; ranking i histogramy po SOC-4). Szczegóły i testy: `web-game/docs/UNIFICATION.md` §3e.
 
 ## 9. Pytania do decyzji
 

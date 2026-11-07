@@ -97,7 +97,7 @@ test('preset address enters the game in the middle: #/scenariusz-kolonia', async
   expect(errors).toEqual([]);
 });
 
-test('keys: views 1–4, Space pause, ` overlay; every command has a hotkey; focus is visible', async ({ page }) => {
+test('keys: views 1–3, Space pause, ` overlay; every command has a hotkey; focus is visible', async ({ page }) => {
   await page.goto('/#/scenariusz-przybycie');
   await expect(card(page)).toContainText('Arka-1');
   const views = page.getByRole('navigation', { name: 'Przełącznik widoku' });

@@ -6,6 +6,7 @@ import { Stockpile, addStock, emptyStockpile, stockTotal, subtractStock } from '
 import { Rover } from './models/rover.model';
 import { Spacecraft } from './models/spacecraft.model';
 import { Structure } from './models/structure.model';
+import type { AtanorMachine } from './models/atanor-machine.model';
 
 export type ScanState = { state: 'NONE' } | { state: 'RUNNING'; shipId: string; endsAt: number } | { state: 'DONE'; at: number };
 
@@ -37,6 +38,32 @@ export interface WorldState {
   vehicleOrders: ReadonlyArray<VehicleOrder>;
   /** Counter for deterministic ids. */
   nextId: number;
+  /** Machines of the Fabryka atanorowa buildings by structure id (AT4); absent in older saves. */
+  machines?: Readonly<Record<string, AtanorMachine>>;
+}
+
+/** A building's machine, or a fresh one (no program yet). */
+export function machineOf(w: WorldState, structureId: string, recipe: string): AtanorMachine {
+  return (
+    w.machines?.[structureId] ?? {
+      structureId,
+      recipe,
+      program: null,
+      metrics: null,
+      draft: null,
+      deploy: null,
+      ticks: 0,
+      progress: 0,
+      state: 'IDLE',
+      consumed: {},
+      delivered: 0,
+    }
+  );
+}
+
+export function patchMachine(w: WorldState, structureId: string, recipe: string, fn: (m: AtanorMachine) => AtanorMachine): WorldState {
+  const m = fn(machineOf(w, structureId, recipe));
+  return { ...w, machines: { ...(w.machines ?? {}), [structureId]: m } };
 }
 
 export function storageOf(w: WorldState, bodyId: BodyId): Stockpile {
@@ -140,7 +167,10 @@ export function reduce(w: WorldState, e: DomainEvent): WorldState {
       const s = w.structures.find((x) => x.id === e.structureId);
       if (!s) return w;
       const refunded = addToStorage(releaseRovers(w, s.id), s.bodyId, e.refund);
-      return { ...refunded, structures: refunded.structures.filter((x) => x.id !== s.id) };
+      const out = { ...refunded, structures: refunded.structures.filter((x) => x.id !== s.id) };
+      if (!out.machines?.[s.id]) return out;
+      const { [s.id]: _gone, ...machines } = out.machines;
+      return { ...out, machines };
     }
 
     case 'EXTRACTION_TICK': {
@@ -243,6 +273,47 @@ export function reduce(w: WorldState, e: DomainEvent): WorldState {
 
     case 'SHUTTLE_RETURNED':
       return { ...w, shuttles: w.shuttles.filter((t) => t.id !== e.tripId) };
+
+    case 'ATANOR_DRAFT_SAVED':
+      return patchMachine(w, e.structureId, e.recipe, (m) => ({ ...m, recipe: e.recipe, draft: e.solution }));
+
+    case 'ATANOR_DEPLOY_STARTED': {
+      const s = w.structures.find((x) => x.id === e.structureId);
+      if (!s) return w;
+      return patchMachine(takeFromStorage(w, s.bodyId, e.cost), e.structureId, e.recipe, (m) => ({ ...m, recipe: e.recipe, draft: e.deployment.solution, deploy: e.deployment }));
+    }
+
+    case 'ATANOR_DEPLOYED': {
+      const s = w.structures.find((x) => x.id === e.structureId);
+      const m = w.machines?.[e.structureId];
+      if (!s || !m?.deploy) return w;
+      const d = m.deploy;
+      return patchMachine(addToStorage(w, s.bodyId, e.returned), e.structureId, m.recipe, (x) => ({
+        ...x,
+        program: d.solution,
+        metrics: d.metrics,
+        deploy: null,
+        ticks: 0,
+        progress: 0,
+        state: 'RUNNING',
+        consumed: {},
+        delivered: 0,
+      }));
+    }
+
+    case 'ATANOR_CONSUMED': {
+      const s = w.structures.find((x) => x.id === e.structureId);
+      const m = w.machines?.[e.structureId];
+      if (!s || !m) return w;
+      return patchMachine(takeFromStorage(w, s.bodyId, e.consumed), e.structureId, m.recipe, (x) => ({ ...x, consumed: addStock(x.consumed, e.consumed) }));
+    }
+
+    case 'ATANOR_DELIVERED': {
+      const s = w.structures.find((x) => x.id === e.structureId);
+      const m = w.machines?.[e.structureId];
+      if (!s || !m) return w;
+      return patchMachine(addToStorage(w, s.bodyId, e.produced), e.structureId, m.recipe, (x) => ({ ...x, delivered: x.delivered + e.count }));
+    }
 
     case 'DEPOSIT_DEPLETED':
     case 'COMMAND_REJECTED':

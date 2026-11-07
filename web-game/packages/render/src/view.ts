@@ -57,6 +57,11 @@ export interface AtanorViewInput {
   buildingLevel: number | null;
   /** The machine being designed (AT2): solution, ghost of the tool, selection. Null = reference. */
   editor?: AtanorEditorView | null;
+  /**
+   * The working machine of the building (AT4): the view follows the world's engine ticks of the
+   * shown program (deterministic replica) and interpolates with the progress to the next tick.
+   */
+  production?: { ticks: number; progress: number } | null;
 }
 
 export interface RenderStats {

@@ -44,7 +44,7 @@ const BY_KEY = new Map(PALETTE.map((p) => [p.key.toLowerCase(), p.id]));
         <div><dt>{{ tt.delivered }}</dt><dd data-atanor="delivered">{{ r()?.delivered ?? 0 }} / {{ r()?.target ?? 0 }}</dd></div>
         <div><dt>{{ tt.cycles }}</dt><dd data-atanor="cycles">{{ cycles() }}</dd></div>
         <div><dt>{{ tt.area }}</dt><dd data-atanor="area">{{ r()?.cyclesPerOutput !== null ? r()?.area : tt.unmeasured }}</dd></div>
-        <div><dt>{{ tt.arms }}</dt><dd data-atanor="arms">{{ ed.solution.arms.length }}{{ maxArms() ? ' / ' + maxArms() : '' }}</dd></div>
+        <div><dt>{{ tt.arms }}</dt><dd data-atanor="arms">{{ shown()?.arms?.length ?? 0 }}{{ maxArms() ? ' / ' + maxArms() : '' }}</dd></div>
       </dl>
       @if (r()?.jam; as jam) {
         <span class="al" data-atanor="jam">{{ tt.jam }} · {{ jam.reason }}: {{ jam.message }}</span>
@@ -61,7 +61,7 @@ const BY_KEY = new Map(PALETTE.map((p) => [p.key.toLowerCase(), p.id]));
         <button type="button" class="act" data-action="undo" [disabled]="!ed.canUndo" [title]="tl.undo + ' [Ctrl+Z]'" (click)="session.undo()">{{ tl.undo }}</button>
         <button type="button" class="act" data-action="redo" [disabled]="!ed.canRedo" [title]="tl.redo + ' [Ctrl+Y]'" (click)="session.redo()">{{ tl.redo }}</button>
       </div>
-      @if (ed.solution.arms.length === 0) {
+      @if ((shown()?.arms ?? []).length === 0) {
         <p class="dim">{{ tl.empty }}</p>
       } @else {
         <div class="grid" tabindex="0" data-atanor="timeline" [attr.aria-label]="tl.tab" (keydown)="onKey($event)">
@@ -71,7 +71,7 @@ const BY_KEY = new Map(PALETTE.map((p) => [p.key.toLowerCase(), p.id]));
               <div class="col" [class.play]="playhead() === c" [class.focus]="focus().col === c">{{ c }}</div>
             }
           </div>
-          @for (arm of ed.solution.arms; track arm.id; let i = $index) {
+          @for (arm of shown()?.arms ?? []; track arm.id; let i = $index) {
             <div class="row" [class.selected]="ed.selectedId === arm.id" [attr.data-arm]="arm.id">
               <button type="button" class="lbl" (click)="session.selectArm(arm.id)">{{ tl.arm(i + 1, arm.isPiston, arm.length, arm.grippers ?? 1) }}</button>
               @for (c of columns(); track c) {
@@ -148,13 +148,16 @@ export class AtanorTimeline {
   private readonly range = signal<{ arm: string; from: number; to: number } | null>(null);
   private clipboard: Array<AtanorCommand | null> = [];
 
+  /** The program on the timeline: the draft, or the working machine's program while watching (read-only). */
+  protected readonly shown = computed(() => (this.session.watch() ? (this.session.machine()?.program ?? null) : (this.session.state()?.solution ?? null)));
+
   protected readonly columns = computed(() => {
-    const s = this.session.state()?.solution;
+    const s = this.shown();
     const len = s ? Math.max(0, ...Object.values(s.program).map((t) => t.length)) : 0;
     return Array.from({ length: Math.max(12, len + 4) }, (_, i) => i);
   });
 
-  protected readonly playhead = computed(() => (this.session.trial() ? (this.r()?.timelinePosition ?? null) : null));
+  protected readonly playhead = computed(() => (this.session.trial() || this.session.watch() ? (this.r()?.timelinePosition ?? null) : null));
 
   protected readonly maxArms = computed(() => this.session.state()?.maxArms ?? null);
 
@@ -166,6 +169,7 @@ export class AtanorTimeline {
   protected readonly status = computed(() => {
     const r = this.r();
     if (r?.jam) return this.tt.jam;
+    if (this.session.watch()) return this.tt.mode.production;
     return this.session.trial() ? this.tt.mode.trial : this.tt.mode.design;
   });
 
@@ -179,7 +183,7 @@ export class AtanorTimeline {
 
   /** Command in a cell; an explicit EMPTY (reference programs) reads as an empty cell. */
   protected cmdAt(armId: string, col: number): AtanorCommand | null {
-    const cmd = this.session.state()?.solution.program[armId]?.[col] ?? null;
+    const cmd = this.shown()?.program[armId]?.[col] ?? null;
     return cmd === 'EMPTY' ? null : cmd;
   }
 
@@ -211,7 +215,7 @@ export class AtanorTimeline {
   }
 
   protected down(e: MouseEvent, armId: string, col: number): void {
-    if (e.button !== 0) return;
+    if (e.button !== 0 || this.session.watch()) return; // the working program is read-only
     if (e.shiftKey && this.focus().arm === armId) {
       this.range.set({ arm: armId, from: this.focus().col, to: col });
       return;
@@ -223,6 +227,7 @@ export class AtanorTimeline {
 
   protected clear(e: MouseEvent, armId: string, col: number): void {
     e.preventDefault();
+    if (this.session.watch()) return;
     this.focus.set({ arm: armId, col });
     this.session.writeCell(armId, col, 'CLEAR');
   }
@@ -238,7 +243,7 @@ export class AtanorTimeline {
   /** Keys while the timeline has focus: PoC palette keys write and move on, arrows move. */
   protected onKey(e: KeyboardEvent): void {
     const ed = this.session.state();
-    if (!ed || e.altKey) return;
+    if (!ed || e.altKey || this.session.watch()) return;
     const arms = ed.solution.arms.map((a) => a.id);
     const f = this.focus();
     const arm = f.arm && arms.includes(f.arm) ? f.arm : (arms[0] ?? null);

@@ -31,6 +31,8 @@ export class ProductionSystem {
     for (const s of world.structures) {
       if (!isWorking(s) || !s.recipe) continue;
       const recipe = this.rules.recipe(s.recipe);
+      // Atanor recipes are made by the player's machine (AtanorSystem, AT4, A17), not in batches
+      if (recipe.atanor) continue;
       if (!efficiency.has(s.bodyId)) efficiency.set(s.bodyId, powerBalance(world, this.rules, s.bodyId).efficiency);
       const spec = this.rules.spec(s.kind, s.level);
       const speed = spec.outputFactor * efficiency.get(s.bodyId)![spec.priority] * (s.state === 'UPGRADING' ? 0.5 : 1);

@@ -1,4 +1,6 @@
 import { BodyId, RoverId, ShipId } from '../../shared/ids';
+import type { AtanorSolution } from '../../atanor/engine/types';
+import type { AtanorDeployment } from './atanor-machine.model';
 import { TileId } from './planet-grid.model';
 import { Cost, MaterialCode, Stockpile } from './resource.model';
 import { Rover } from './rover.model';
@@ -45,6 +47,10 @@ export const REJECT_CODES = [
   'NO_COLONY',
   // flight targets
   'NOT_LANDABLE',
+  // Atanor machine (AT4): outside the building limits or the program cannot run; it does not
+  // produce (no repeating cycle with deliveries)
+  'MACHINE_INVALID',
+  'MACHINE_NOT_PRODUCING',
 ] as const;
 
 export type RejectReason = (typeof REJECT_CODES)[number];
@@ -106,6 +112,12 @@ export type DomainEvent =
   | { type: 'SHUTTLE_LAUNCHED'; trip: ShuttleTrip }
   | { type: 'SHUTTLE_UNLOADED'; tripId: string; bodyId: BodyId; cargo: Stockpile }
   | { type: 'SHUTTLE_RETURNED'; tripId: string }
+  // Fabryka atanorowa (AT4): drafts, deployment, atoms in and products out
+  | { type: 'ATANOR_DRAFT_SAVED'; structureId: string; recipe: string; solution: AtanorSolution }
+  | { type: 'ATANOR_DEPLOY_STARTED'; structureId: string; recipe: string; deployment: AtanorDeployment; cost: Cost }
+  | { type: 'ATANOR_DEPLOYED'; structureId: string; returned: Stockpile }
+  | { type: 'ATANOR_CONSUMED'; structureId: string; consumed: Stockpile }
+  | { type: 'ATANOR_DELIVERED'; structureId: string; produced: Stockpile; count: number }
   | { type: 'COMMAND_REJECTED'; shipId?: ShipId; reason: RejectReason; detail?: string };
 
 export type DomainEventType = DomainEvent['type'];

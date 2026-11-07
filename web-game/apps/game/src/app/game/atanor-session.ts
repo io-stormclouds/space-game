@@ -1,5 +1,7 @@
 import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
+import type { AtanorMachine } from '@space-game/api';
 import type { AtanorCommand, AtanorEditor, AtanorEditIssue, AtanorSolution, AtanorTool, AtanorViewInput } from '@space-game/render';
+import { GameService } from './game.service';
 import { UiState } from './ui-state';
 
 /** A palette entry of the timeline: a command, or clearing the cell (PoC command palette). */
@@ -28,6 +30,18 @@ export interface AtanorEditorState {
 
 const LOCKABLE: AtanorTool[] = ['ARM', 'PISTON', 'MULTI', 'BONDER', 'UNBONDER', 'TRANSMUTE', 'TRACK'];
 
+const DESIGN_FORMAT = 'web-game-atanor-design';
+
+/** A design file (AT6): shared outside the game and verified by measuring it again. */
+export interface AtanorDesignFile {
+  format: typeof DESIGN_FORMAT;
+  version: 1;
+  recipe: string;
+  buildingLevel: number | null;
+  solution: AtanorSolution;
+  claimed: { cycles: number | null; area: number; arms: number };
+}
+
 /** A saved variant of the design with its numbers at the time it was saved (A24, §5.3). */
 export interface AtanorVariant {
   id: number;
@@ -52,7 +66,18 @@ export interface AtanorVariant {
 @Injectable({ providedIn: 'root' })
 export class AtanorSession {
   private readonly ui = inject(UiState);
+  private readonly game = inject(GameService);
   private readonly drafts = new Map<string, AtanorSolution>();
+  /** Editor version last saved to the world as the building's draft. */
+  private savedVersion = -1;
+
+  /** The open building's machine in the world (AT4): program, deployment, ticks, state. */
+  readonly machine = computed<AtanorMachine | null>(() => {
+    const id = this.ui.atanorSite();
+    return id ? (this.game.world()?.machines?.[id] ?? null) : null;
+  });
+  /** The view shows the working machine (its program at the world's ticks) instead of the draft. */
+  readonly watch = signal(false);
   private editorRef: AtanorEditor | null = null;
   private key = '';
   private draftKey: string | null = null;
@@ -110,7 +135,70 @@ export class AtanorSession {
   viewInput(): AtanorViewInput | null {
     const base = this.ui.atanorInput();
     if (!base) return null;
+    const m = this.machine();
+    if (this.watch() && m?.program) {
+      return { ...base, editor: { solution: m.program, version: -1, ghost: null, selectedId: null }, production: { ticks: m.ticks, progress: m.progress } };
+    }
     return { ...base, editor: this.editorRef?.viewState() ?? null };
+  }
+
+  /** V: the working machine ↔ the draft. */
+  toggleWatch(): void {
+    if (!this.machine()?.program && !this.watch()) return;
+    if (this.trial()) this.stopTrial();
+    const was = this.watch();
+    this.watch.set(!was);
+    if (was) this.ui.atanor()?.reset(); // the draft at rest again
+  }
+
+  /** Numbers a loaded design file claims (AT6); the view measures the design again to verify them. */
+  readonly imported = signal<{ cycles: number | null; area: number; arms: number } | null>(null);
+
+  /** The draft as a design file (AT6): recipe, building level, machine and the numbers it claims. */
+  exportDesign(numbers: { cycles: number | null; area: number; arms: number }): { name: string; text: string } | null {
+    const e = this.editorRef;
+    if (!e) return null;
+    const recipe = e.level.recipe?.recipeId ?? e.level.id;
+    const file: AtanorDesignFile = { format: DESIGN_FORMAT, version: 1, recipe, buildingLevel: e.buildingLevel, solution: e.solution, claimed: numbers };
+    return { name: `atanor-${recipe}.json`, text: JSON.stringify(file, null, 2) };
+  }
+
+  /** Loads a design file into the editor (one undoable step); refuses foreign files and other recipes. */
+  importDesign(text: string): 'OK' | 'NOT_A_DESIGN' | 'OTHER_RECIPE' {
+    const e = this.editorRef;
+    if (!e) return 'NOT_A_DESIGN';
+    let file: Partial<AtanorDesignFile>;
+    try {
+      file = JSON.parse(text) as Partial<AtanorDesignFile>;
+    } catch {
+      return 'NOT_A_DESIGN';
+    }
+    const s = file.solution as Partial<AtanorSolution> | undefined;
+    if (file.format !== DESIGN_FORMAT || !s || !Array.isArray(s.arms) || !Array.isArray(s.glyphs) || !Array.isArray(s.tracks) || typeof s.program !== 'object' || s.program === null) return 'NOT_A_DESIGN';
+    if (file.recipe !== (e.level.recipe?.recipeId ?? e.level.id)) return 'OTHER_RECIPE';
+    this.edit((x) => x.load(s as AtanorSolution));
+    this.imported.set(file.claimed ?? null);
+    return 'OK';
+  }
+
+  /** Keeps the draft with the building in the world (save files), when it changed (AT4). */
+  saveDraft(): void {
+    const e = this.editorRef;
+    const site = this.ui.atanorSite();
+    if (!e || !site || e.version === this.savedVersion) return;
+    this.savedVersion = e.version;
+    void this.game.command({ type: 'SAVE_ATANOR_DRAFT', structureId: site, solution: e.solution });
+  }
+
+  /** Deploys the draft as the building's machine (§3.2); the server checks it again. */
+  async deploy(): Promise<boolean> {
+    const e = this.editorRef;
+    const site = this.ui.atanorSite();
+    if (!e || !site) return false;
+    this.saveDraft();
+    const r = await this.game.command({ type: 'DEPLOY_ATANOR', structureId: site, solution: e.solution });
+    if (r.ok) this.stopTrial();
+    return r.ok;
   }
 
   setTool(tool: AtanorTool): void {
@@ -199,12 +287,16 @@ export class AtanorSession {
     this.trial.set(false);
   }
 
-  /** Esc in the Atanor view: drop the tool, then end the trial, then leave the view. */
+  /** Esc in the Atanor view: drop the tool, then end the trial or the watching, then leave the view. */
   escape(): void {
     const e = this.editorRef;
     if (e && e.tool !== 'SELECT') this.setTool('SELECT');
     else if (this.trial()) this.stopTrial();
-    else this.ui.closeAtanor();
+    else if (this.watch()) this.watch.set(false);
+    else {
+      this.saveDraft();
+      this.ui.closeAtanor();
+    }
   }
 
   // -------------------------------------------------------------------------------------------
@@ -227,13 +319,20 @@ export class AtanorSession {
     }
     const key = `${site ?? 'sandbox'}|${input.level}|${input.buildingLevel}`;
     if (key === this.key && this.editorRef) return;
+    this.saveDraft(); // the previous building's draft, before switching
     this.key = key;
     const { createAtanorEditor } = await import('@space-game/render');
     if (this.key !== key) return; // a newer open overtook this one
     this.draftKey = site ? `${site}|${input.level}` : null;
-    this.editorRef = createAtanorEditor(input.level, input.buildingLevel, this.draftKey ? this.drafts.get(this.draftKey) : null);
+    // the draft of this session, else the one saved with the world (a loaded game), else A21
+    const stored = site ? this.game.world()?.machines?.[site] : undefined;
+    const fromWorld = stored && stored.recipe === input.level ? stored.draft : null;
+    this.editorRef = createAtanorEditor(input.level, input.buildingLevel, (this.draftKey ? this.drafts.get(this.draftKey) : null) ?? fromWorld);
+    this.savedVersion = this.editorRef?.version ?? -1;
     this.variants.set(this.variantStore.get(this.variantKey()) ?? []);
     this.trial.set(false);
+    this.watch.set(false);
+    this.imported.set(null);
     this.changes.update((n) => n + 1);
   }
 }

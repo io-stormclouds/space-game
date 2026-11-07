@@ -88,6 +88,10 @@ export function describeEvent(t: Dictionary, e: DomainEvent, world: WorldState |
       return { text: ev.CARGO_UNLOADED(ship(e.shipId), costText(e.cargo)), alert: false };
     case 'COMMAND_REJECTED':
       return { text: ev.COMMAND_REJECTED(t.reject[e.reason], e.detail ?? ''), alert: true };
+    case 'ATANOR_DEPLOY_STARTED':
+      return { text: ev.ATANOR_DEPLOY_STARTED(e.recipe, Math.round(e.deployment.total * 10) / 10, costText(e.cost)), alert: false };
+    case 'ATANOR_DEPLOYED':
+      return { text: ev.ATANOR_DEPLOYED(structureName(world, catalog, e.structureId)), alert: false };
     default:
       return null;
   }

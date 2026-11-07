@@ -155,6 +155,21 @@ export class CommandsService {
       });
     };
 
+    const machine = this.atanorSession.machine();
+    if (this.atanorSession.watch()) {
+      const slots: Array<CommandSlot | null> = [
+        this.slot('design', ta.watch.back.label, 'V', 'build', { selected: true, description: ta.watch.back.note, run: () => this.atanorSession.toggleWatch() }),
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        back,
+      ];
+      return { title: t.cmd.title, context: `${place} · ${ta.mode.production}`, status: 'ATN', slots };
+    }
+
     if (trial) {
       const speeds = [0.5, 1, 2, 4];
       const base = 1000 / 600; // PoC 1× = 600 ms per tick
@@ -168,7 +183,7 @@ export class CommandsService {
         this.slot('reset', c.atanorReset.label, 'R', 'repeat', { description: c.atanorReset.note, run: () => a.reset() }),
         this.slot('speed', `${ta.speed.label} ×${speed}`, 'F', 'upgrade', { description: ta.speed.note(next), run: () => a.setTicksPerSecond(next * base) }),
         this.slot('endTrial', ta.endTrial.label, 'T', 'cancel', { selected: true, description: ta.endTrial.note, run: () => this.atanorSession.stopTrial() }),
-        null,
+        this.deploySlot(r, site !== null, machine),
         levelSlot(),
         back,
       ];
@@ -193,6 +208,19 @@ export class CommandsService {
       levelSlot() ?? back,
     ];
     return { title: t.cmd.title, context, status: ed.issue ? ta.issues[ed.issue] ?? ed.issue : 'ATN', slots };
+  }
+
+  /**
+   * "Wdróż" (W, §3.2): after a trial that found a repeating cycle with deliveries and no jam; the
+   * server checks the limits, the cycle and the materials again.
+   */
+  private deploySlot(r: { cyclesPerOutput: number | null; jam: unknown } | null, inBuilding: boolean, machine: { deploy: unknown } | null): CommandSlot {
+    const ta = this.t.atanor;
+    const label = ta.deploy.label;
+    if (!inBuilding) return this.locked('deploy', label, 'W', ta.deploy.sandbox, 'produce');
+    if (machine?.deploy) return this.locked('deploy', label, 'W', ta.deploy.busy, 'produce');
+    if (!r || r.jam || r.cyclesPerOutput === null) return this.locked('deploy', label, 'W', ta.deploy.notReady, 'produce');
+    return this.slot('deploy', label, 'W', 'produce', { variant: 'primary', description: ta.deploy.note, run: () => void this.atanorSession.deploy() });
   }
 
   /** The recipe's transmutation for the tool note (e.g. PLA → PLA*). */

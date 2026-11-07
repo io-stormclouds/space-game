@@ -52,6 +52,9 @@ export function powerBalance(world: WorldState, rules: Rules, bodyId: BodyId, co
     const spec = rules.spec(s.kind, L);
     if (spec.power >= 0) produced += spec.isSolar ? spec.power * insolation : spec.power;
     else demand[spec.priority] -= spec.power;
+    // a deployed Atanor machine adds its area and arms on top of the building (§8.1, AT4)
+    const machine = world.machines?.[s.id];
+    if (machine?.metrics && machine.program) demand[spec.priority] += machine.metrics.extraPower;
   }
   const consumed = demand[1] + demand[2] + demand[3];
   const share = (need: number, supply: number) => (need <= 0 ? 1 : Math.max(0, Math.min(1, supply / need)));

@@ -15,7 +15,7 @@ npm run check        # typy, testy, build produkcyjny i e2e, w tej kolejności
 - Scenariusze obciążenia (F5): `#/scenariusz-obciazenie-s`, `-m`, `-l`.
 - Klawisze:
   - `1`–`3`: widoki Planeta, Układ, Galaktyka. Atanor jest widokiem budynku: zaznacz Fabrykę atanorową i wybierz „Maszyna” (`A`); `Esc` odkłada narzędzie, kończy próbę, a potem wraca. Lekcje PoC i receptury bez budynku są w Piaskownicy (`F2` → Atanor);
-  - w Atanorze: narzędzia `A` ramię (ponownie: dłuższe), `S` tłok, `D` łącznik/rozłącznik, `G` transmutacja, `H` szyna, `X` usuń, `R` obrót, PPM odkłada narzędzie, `T` próba, `Ctrl+Z` / `Ctrl+Y` cofnij/ponów; na osi czasu klawisze palety PoC (`Q W E R T Y U I O P X Del`), strzałki, `Insert`, `Shift+Delete`, `Ctrl+C` / `Ctrl+V`;
+  - w Atanorze: narzędzia `A` ramię (ponownie: dłuższe), `S` tłok, `D` łącznik/rozłącznik, `G` transmutacja, `H` szyna, `X` usuń, `R` obrót, PPM odkłada narzędzie, `T` próba, `W` wdróż (w próbie), `V` pracująca maszyna / szkic, `Ctrl+Z` / `Ctrl+Y` cofnij/ponów; na osi czasu klawisze palety PoC (`Q W E R T Y U I O P X Del`), strzałki, `Insert`, `Shift+Delete`, `Ctrl+C` / `Ctrl+V`. Panel „Maszyna” ma warianty i plik projektu (eksport, wczytanie z ponownym pomiarem);
   - Spacja: pauza; `+` / `−`: tempo ×1, ×60, ×600;
   - `Esc`: anuluj;
   - `` ` ``: nakładka wydajności;

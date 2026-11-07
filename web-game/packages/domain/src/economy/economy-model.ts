@@ -35,6 +35,8 @@ export interface EconomyParams {
   atanorPowerGrowth: number;
   atanorPowerPerHex: number;
   atanorPowerPerArm: number;
+  /** Deployment of a machine [min per kr of new elements' materials] (AT4, A19). */
+  atanorDeployMinPerKr: number;
   /**
    * Measured Atanor solutions per recipe (F6 designer panel, A3): replace the catalog's provisional
    * cycles / area / arms of the doc §8.3. Absent = the document's numbers.
@@ -66,6 +68,7 @@ export const DEFAULT_ECONOMY_PARAMS: EconomyParams = {
   atanorPowerGrowth: 1.45,
   atanorPowerPerHex: 0.5,
   atanorPowerPerArm: 1,
+  atanorDeployMinPerKr: 0.1,
 };
 
 /** A recipe with its time and power resolved. */

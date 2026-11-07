@@ -14,7 +14,7 @@ type ScalarKey = Exclude<
 const GROUPS: Array<{ id: 'value' | 'growth' | 'atanor'; keys: ScalarKey[]; step: number }> = [
   { id: 'value', keys: ['energyPrice', 'machineMinute', 'shipMinute'], step: 0.01 },
   { id: 'growth', keys: ['costGrowth', 'timeGrowth', 'producerPowerGrowth', 'consumerPowerGrowth', 'crewGrowth', 'livingSpaceGrowth', 'storageGrowth'], step: 0.05 },
-  { id: 'atanor', keys: ['atanorBasePower', 'atanorPowerGrowth', 'atanorPowerPerHex', 'atanorPowerPerArm'], step: 0.05 },
+  { id: 'atanor', keys: ['atanorBasePower', 'atanorPowerGrowth', 'atanorPowerPerHex', 'atanorPowerPerArm', 'atanorDeployMinPerKr'], step: 0.05 },
 ];
 
 /** Załącznik A as a form: the draft, the document's value beside every changed field, apply buttons. */

@@ -134,6 +134,7 @@ export class AtanorView implements View, AtanorControls {
   private level: Atanor.LevelConfig;
   /** The machine shown (AT2 editor draft); null = the level's reference solution. */
   private solution: Atanor.AtanorSolution | null = null;
+  private solutionKey: string | null = null;
   /** Level ports + the shown machine (what the board draws). */
   private composed: Atanor.LevelConfig;
   private ghost: AtanorGhost | null = null;
@@ -244,14 +245,22 @@ export class AtanorView implements View, AtanorControls {
       this.relayout();
     }
     const ed = input.atanor?.editor ?? null;
-    if ((ed?.solution ?? null) !== this.solution) this.showSolution(ed?.solution ?? null);
+    const sol = ed?.solution ?? null;
+    if (sol !== this.solution) {
+      // snapshots come from the worker as copies: compare the design, not the object
+      const key = sol ? Atanor.solutionKey(sol) : null;
+      if (key !== this.solutionKey) this.showSolution(sol, key);
+      else this.solution = sol;
+    }
     const ghost = ed?.ghost ?? null;
     if (!sameGhost(ghost, this.ghost) || (ed?.selectedId ?? null) !== this.selectedId) {
       this.ghost = ghost;
       this.selectedId = ed?.selectedId ?? null;
       this.dirty = true;
     }
-    this.advance(dtSeconds);
+    const prod = input.atanor?.production ?? null;
+    if (prod) this.follow(prod.ticks, prod.progress);
+    else this.advance(dtSeconds);
     if (!this.app || !this.dirty) return;
     this.draw();
     this.counter.calls = 0;
@@ -342,6 +351,7 @@ export class AtanorView implements View, AtanorControls {
     const wasPlaying = this.playing;
     this.level = level;
     this.solution = null;
+    this.solutionKey = null;
     this.composed = level;
     this.engine = Atanor.createAtanorSimulation(level);
     this.metrics = this.measure(level, null);
@@ -352,9 +362,31 @@ export class AtanorView implements View, AtanorControls {
     return true;
   }
 
+  /**
+   * Production view (AT4): the engine replica catches up with the world's ticks of the program
+   * (the machine is deterministic, so the replica equals the server's) and the pose interpolates
+   * the last tick with the progress towards the next one.
+   */
+  private follow(ticks: number, progress: number): void {
+    this.playing = false;
+    if (this.engine.ticksExecuted > ticks) this.resetEngine();
+    let moved = false;
+    for (let guard = 0; this.engine.ticksExecuted < ticks && guard < 100_000; guard++) {
+      this.prev = this.curr;
+      this.curr = this.engine.step();
+      moved = true;
+    }
+    const phase = Math.max(0, Math.min(1, progress));
+    if (moved || phase !== this.clock.phase) {
+      this.clock.phase = phase;
+      this.dirty = true;
+    }
+  }
+
   /** Shows another machine on the same level: a change of the design resets the run (PoC). */
-  private showSolution(solution: Atanor.AtanorSolution | null): void {
+  private showSolution(solution: Atanor.AtanorSolution | null, key: string | null): void {
     this.solution = solution;
+    this.solutionKey = key;
     this.composed = solution ? Atanor.composeLevel(this.level, solution) : this.level;
     this.engine = Atanor.createAtanorSimulation(this.level, solution ? { solution } : {});
     this.metrics = this.measure(this.level, solution);

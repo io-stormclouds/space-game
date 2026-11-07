@@ -218,4 +218,6 @@ const LOGGED = new Set<DomainEvent['type']>([
   'ROVER_PRODUCED',
   'CARGO_UNLOADED',
   'COMMAND_REJECTED',
+  'ATANOR_DEPLOY_STARTED',
+  'ATANOR_DEPLOYED',
 ]);

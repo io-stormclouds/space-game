@@ -202,7 +202,19 @@ export const PL = {
     running: 'pracuje',
     stopped: 'stoi',
     unmeasured: '—',
-    mode: { design: 'Projekt', trial: 'Próba' },
+    mode: { design: 'Projekt', trial: 'Próba', production: 'Produkcja' },
+    deploy: {
+      label: 'Wdróż',
+      note: 'Projekt staje się maszyną budynku: materiały nowych elementów teraz, czas wdrożenia według ich wartości',
+      sandbox: 'Tylko w budynku: Piaskownica nie produkuje',
+      busy: 'Trwa wdrażanie poprzedniego projektu',
+      notReady: 'Próba musi dać powtarzalny cykl z dostawami, bez JAM',
+    },
+    watch: {
+      open: 'Pokaż pracującą maszynę',
+      back: { label: 'Projekt', note: 'Wraca do szkicu (V)' },
+    },
+    machineState: { IDLE: 'bez programu', RUNNING: 'pracuje', WAITING: 'czeka na wejścia', FULL: 'pełny magazyn', JAM: 'JAM' } as Record<string, string>,
     tools: {
       SELECT: 'Zaznacz',
       ARM: 'Ramię',
@@ -269,6 +281,8 @@ export const PL = {
     },
     machine: {
       tab: 'Maszyna',
+      working: (delivered: number, ticks: number, cycles: string) => `Wdrożona: ${delivered} szt. w ${ticks} taktach · ${cycles} cykli/szt.`,
+      deploying: (left: string, total: string) => `Wdrażanie: ${left} z ${total} min (stara maszyna pracuje)`,
       timePer: 'Czas na sztukę',
       perHour: 'Sztuk na godzinę',
       power: 'Moc',
@@ -297,6 +311,16 @@ export const PL = {
       save: 'Zapisz wariant',
       load: 'Wczytaj',
       noVariants: 'Zapisz wariant, żeby porównać projekty tej receptury.',
+      file: {
+        title: 'Plik projektu',
+        export: 'Eksportuj',
+        import: 'Wczytaj',
+        foreign: 'To nie jest plik projektu maszyny web-game.',
+        otherRecipe: 'Projekt jest dla innej receptury.',
+        notProducing: 'Wczytany projekt nie produkuje: pomiar nie potwierdza pliku.',
+        verified: (claimed: string, measured: string, same: boolean) =>
+          `Plik deklaruje ${claimed} (cykle / obszar / ramiona), pomiar daje ${measured}: ${same ? 'zgodne' : 'niezgodne'}.`,
+      },
     },
   },
   log: {
@@ -391,6 +415,8 @@ export const PL = {
     NO_SHUTTLE: 'Brak wolnego promu',
     NO_COLONY: 'Najpierw postaw port kosmiczny',
     NOT_LANDABLE: 'Na gwieździe nie można wylądować',
+    MACHINE_INVALID: 'Maszyna nie mieści się w limitach budynku albo program ma błędne rozkazy',
+    MACHINE_NOT_PRODUCING: 'Maszyna nie produkuje: próba nie znalazła powtarzalnego cyklu z dostawami',
   } satisfies Record<RejectReason, string>,
   events: {
     SCAN_STARTED: () => 'Skan pasywny układu rozpoczęty',
@@ -402,6 +428,8 @@ export const PL = {
     COLONY_FOUNDED: (body: string) => `Kolonia założona: ${body}`,
     CONSTRUCTION_ORDERED: (name: string) => `Zlecono budowę: ${name}`,
     STRUCTURE_BUILT: (name: string) => `Ukończono: ${name}`,
+    ATANOR_DEPLOY_STARTED: (recipe: string, min: number, cost: string) => `Wdrażanie maszyny ${recipe}: ${min} min${cost ? ' · ' + cost : ''}`,
+    ATANOR_DEPLOYED: (name: string) => `Maszyna wdrożona: ${name}`,
     STRUCTURE_UPGRADED: (name: string, level: number) => `Ukończono: ${name} L${level}`,
     CONSTRUCTION_CANCELLED: (name: string) => `Anulowano budowę: ${name}`,
     STRUCTURE_DEMOLISHED: (name: string) => `Rozebrano: ${name}`,
@@ -456,6 +484,7 @@ export const PL = {
         atanorPowerGrowth: ['Wzrost mocy na poziom', '×'],
         atanorPowerPerHex: ['Moc na heks', 'MW'],
         atanorPowerPerArm: ['Moc na ramię', 'MW'],
+        atanorDeployMinPerKr: ['Czas wdrożenia maszyny', 'min / kr'],
       } as Record<string, readonly [string, string]>,
       era: (e: number) => `E${e}`,
       tick: (l: number) => `Takt L${l} [min]`,

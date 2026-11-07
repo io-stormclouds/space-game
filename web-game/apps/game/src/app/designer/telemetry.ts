@@ -4,7 +4,7 @@ import { GameService, type LogEntry } from '../game/game.service';
 import { measuredRates, pushSample, type Bucket, type MeasuredRates, type Sample } from './series';
 
 /** Events emitted every minute or every batch: kept apart so they do not push the rest out of the log. */
-export const TICK_EVENTS = new Set<DomainEvent['type']>(['EXTRACTION_TICK', 'MINING_TICK', 'BATCH_STARTED', 'BATCH_COMPLETED', 'ROVER_ARRIVED', 'ROVER_MOVE_ORDERED']);
+export const TICK_EVENTS = new Set<DomainEvent['type']>(['EXTRACTION_TICK', 'MINING_TICK', 'BATCH_STARTED', 'BATCH_COMPLETED', 'ROVER_ARRIVED', 'ROVER_MOVE_ORDERED', 'ATANOR_CONSUMED', 'ATANOR_DELIVERED']);
 
 const MAX_SAMPLES = 360;
 const MAX_LOG = 1000;
@@ -88,6 +88,9 @@ export class Telemetry {
       if (e.type === 'EXTRACTION_TICK' && e.bodyId === body) add(flows().extraction, { [e.resource]: e.amount });
       else if (e.type === 'BATCH_COMPLETED' && bodyOf(e.structureId) === body) add(flows().production, e.produced);
       else if (e.type === 'BATCH_STARTED' && bodyOf(e.structureId) === body) add(flows().consumption, e.consumed);
+      // the Fabryka atanorowa's machine (AT4): atoms in, products out
+      else if (e.type === 'ATANOR_DELIVERED' && bodyOf(e.structureId) === body) add(flows().production, e.produced);
+      else if (e.type === 'ATANOR_CONSUMED' && bodyOf(e.structureId) === body) add(flows().consumption, e.consumed);
     }
     // keep the pending buffers bounded between flushes (×600 on the L load sends thousands per second)
     if (this.pendingTicks.length > MAX_TICKS) this.pendingTicks = this.pendingTicks.slice(-MAX_TICKS);
