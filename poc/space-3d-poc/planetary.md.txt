@@ -1,0 +1,219 @@
+System fizyki i nawigacji międzyplanetarnej w *Planetary Annihilation* opiera się na **wielopoziomowej hierarchii układów odniesienia**, uproszczonej mechanice orbitalnej (orbity deterministyczne, a nie pełny problem n-ciał) oraz bezszwowym systemie kamery skalarnej (Infinite Zoom). W architekturze przeglądarkowej (WebGL/Three.js) kluczem do odtworzenia tego modelu jest podział na lokalne strefy grawitacyjne (Sphere of Influence – SOI) oraz nadrzędny układ heliocentryczny.
+
+---
+
+## 1. Model Fizyki i Ruchu
+
+### Hierarchia Przestrzeni i Warstwowość
+
+W silniku gry przestrzeń nie jest jednorodnym polem wektorowym, lecz strukturą warstwową:
+
+* **Warstwa Powierzchniowa (Surface/Sub-surface):** Ruch jednostek na sferze ($S^2$). Wektor grawitacji skierowany jest zawsze do środka planety: $\vec{g} = -\hat{r} \cdot g$. Orientacja jednostek jest wyrównana do normalnej powierzchni.
+* **Warstwa Orbitalna (Orbital Layer):** Sfera o promieniu $R_{\text{orbital}} > R_{\text{planet}}$. Jednostki nie symulują pełnej prędkości orbitalnej I prędkości kosmicznej; poruszają się swobodnie po powłoce sferycznej z możliwością zatrzymania się w miejscu (reprezentacja geostacjonarna/sztuczna stabilizacja).
+* **Warstwa Międzyplanetarna (Solar System Layer):** Przestrzeń nadrzędna, w której poruszają się planety oraz jednostki podróżujące między ciałami niebieskimi.
+
+```
+       [ Układ Słoneczny (Heliocentryczny) ]
+          │                           │
+   [ Planeta A (SOI) ]         [ Planeta B (SOI) ]
+      ├── Orbital                 ├── Orbital
+      └── Surface                 └── Surface
+
+```
+
+### Ruch Planet (Mechanika Deterministyczna)
+
+Orbity planet nie wynikają z dynamicznego całkowania grawitacji, lecz z predefiniowanych krzywych keplerowskich. Pozycja planety w czasie $t$ jest funkcją analityczną:
+
+
+$$x(t) = a \cdot \cos(\omega t + \phi)$$
+
+$$z(t) = b \cdot \sin(\omega t + \phi)$$
+
+
+Gdzie $a, b$ to półosie elipsy, $\omega = \frac{2\pi}{T}$ to prędkość kątowa, a $\phi$ to faza początkowa. Eliminuje to akumulację błędów numerycznych zmiennoprzecinkowych.
+
+### Mechanika Transferu Międzyplanetarnego
+
+Transfer jednostek (np. transporterów *Astraeus*, myśliwców orbitalnych czy rakiet) realizowany jest w trzech etapach:
+
+1. **Ucieczka z SOI (Escape Phase):**
+* Jednostka wznosi się radialnie od środka planety źródłowej wzdłuż wektora normalnego $\hat{n}$.
+* Po przekroczeniu promienia $R_{\text{escape}}$ następuje zmiana układu odniesienia: współrzędne jednostki są transformowane z lokalnego układu planety do globalnego układu heliocentrycznego:
+
+$$\vec{P}_{\text{global}} = \vec{P}_{\text{planet\_origin}} + \vec{P}_{\text{local}}$$
+
+
+
+
+2. **Faza Tranzytu (Transit Phase):**
+* Zamiast energochłonnego manewru transferowego Hohmanna, gra stosuje **kinematyczną interpolację z wyprzedzeniem (Lead Interception)**.
+* Algorytm rozwiązuje problem zbieżności: wyznacza punkt $\vec{P}_{\text{target}}(t + \Delta t)$, w którym planeta docelowa znajdzie się po czasie lotu $\Delta t$:
+
+$$\Delta t \approx \frac{\Vert{}\vec{P}_{\text{target}}(t) - \vec{P}_{\text{unit}}(t)\Vert{}}{v_{\text{cruise}}}$$
+
+
+* Trajektoria jest zakrzywiana za pomocą krzywej Béziera 3. stopnia lub splajnu Hermite’a, łącząc wektor wyjścia z wektorem wejścia na orbitę docelową.
+
+
+3. **Przechwycenie i Wejście na Orbitę (Capture Phase):**
+* Gdy odległość do planety docelowej spadnie poniżej $R_{\text{capture}}$, jednostka zostaje dołączona do lokalnego grafu sceny planety docelowej.
+* Wektor prędkości jest wygaszany i rzutowany na płaszczyznę styczną warstwy orbitalnej nowej planety.
+
+
+
+---
+
+## 2. Interfejs i System Kontroli (UI/UX)
+
+Przenoszenie działań na skalę wielu ciał niebieskich wymaga wyeliminowania martwych punktów pola widzenia.
+
+### Płynna Kamera Skalarna (Infinite Zoom)
+
+Kamera nie operuje w klasycznym układzie kartezjańskim $(X, Y, Z)$, lecz dynamicznie przełącza tryby w oparciu o dystans do aktualnie zogniskowanego obiektu:
+
+* **Tryb Planetocentryczny:** Współrzędne sferyczne $(r, \theta, \psi)$ wokół centrum aktywnej planety. Obrót wokół planety, pochylenie i przybliżenie do powierzchni.
+* **Przejście (Breakout):** Po przekroczeniu granicznego dystansu zoomu kamera płynnie interpoluje swój cel (*look-at target*) z centrum planety do geometrycznego środka układu słonecznego (lub punktu barycentrum).
+* **Tryb Heliocentryczny:** Rzut z góry/izometryczny na cały układ gwiezdny, umożliwiający oglądanie orbit wszystkich ciał.
+
+### Wielowidokowość (Picture-in-Picture / Chrono Cam)
+
+* **Drugi rzut kamery (PiP):** Możliwość podglądu innej planety w małym oknie bez przerywania operacji na planecie macierzystej.
+* **Globalne zaznaczanie i komendy:**
+* Wybór jednostek na planecie A.
+* Oddalenie widoku kółkiem myszy do skali układu słonecznego (lub kliknięcie miniatury planety w interfejsie).
+* Kliknięcie prawym przyciskiem myszy (PPM) na planetę B: silnik interpretuje to jako rozkaz transferu i automatycznie wybiera optymalną warstwę (np. orbitę, jeśli wybrano jednostki kosmiczne, lub desant, jeśli transportowiec ma ładunek).
+
+
+
+### Oznaczenia Wizualne w Przestrzeni (HUD Overlay)
+
+* **Wektory Orbit:** Rysowane w przestrzeni 3D linie orbit planet (np. `LineLoop` w Three.js) z gradientem wskazującym kierunek ruchu.
+* **Wskaźnik Wyprzedzenia (Lead Indicator):** Półprzezroczysty "duch" planety pokazujący, gdzie obiekt dotrze w momencie, gdy wysłana jednostka przetnie jego orbitę.
+* **Trajektorie Tranzytowe:** Przerywane linie wektorowe łączące pozycję startową jednostki z przewidywanym punktem wejścia w strefę grawitacyjną celu.
+
+---
+
+## 3. Architektura Implementacji w Przeglądarce (Three.js / WebGL)
+
+Aby zaimplementować powyższy model w przeglądarce, należy rozwiązać dwa główne problemy: **precyzję zmiennoprzecinkową (Z-fighting)** oraz **zarządzanie hierarchią transformacji**.
+
+### Rozwiązanie Problemu Skali (Depth Buffer)
+
+Odległości międzyplanetarne liczone są w milionach jednostek, podczas gdy jednostki naziemne mają rozmiar rzędu 1-2 jednostek.
+W Three.js konfiguracja renderera wymaga włączenia bufora logarytmicznego:
+
+```javascript
+const renderer = new THREE.WebGLRenderer({
+  antialias: true,
+  logarithmicDepthBuffer: true // Kluczowe dla uniknięcia Z-fightingu przy gigantycznych skalach
+});
+
+```
+
+### Struktura Grafu Sceny (Scene Graph)
+
+Nie należy umieszczać wszystkich obiektów bezpośrednio w `scene`. Należy zastosować hierarchiczne węzły `THREE.Group`:
+
+```
+Scene (Global Solar System)
+│
+├── SunMesh (Position: 0, 0, 0)
+│
+├── Planet_A_OrbitAnchor (Obrót wokół Słońca)
+│   └── Planet_A_Group (Position: x, y, z na orbicie)
+│       ├── PlanetMesh (Promień R)
+│       ├── SurfaceUnitsGroup
+│       └── OrbitalUnitsGroup
+│
+├── Planet_B_OrbitAnchor
+│   └── Planet_B_Group
+│
+└── InterplanetaryTransitGroup (Jednostki w locie międzyplanetarnym)
+
+```
+
+### Matematyka Przelotu – Prototyp Pętli Fizyki
+
+Poniższy kod ilustruje logikę obliczania trajektorii i zmiany układu odniesienia jednostki lecącej z Planety A na Planetę B:
+
+```javascript
+class InterplanetaryTransfer {
+  constructor(unit, sourcePlanet, targetPlanet, cruiseSpeed = 50) {
+    this.unit = unit;
+    this.source = sourcePlanet;
+    this.target = targetPlanet;
+    this.speed = cruiseSpeed;
+    this.progress = 0;
+    
+    // 1. Zapisz pozycję startową w koordynatach globalnych
+    this.startPos = new THREE.Vector3();
+    this.unit.getWorldPosition(this.startPos);
+    
+    // 2. Odepnij jednostkę z grupy planety i podepnij pod scenę globalną
+    unit.parent.remove(unit);
+    scene.add(unit);
+    unit.position.copy(this.startPos);
+
+    // 3. Oszacuj czas lotu i punkt przechwycenia (Lead target)
+    this.estimatedTime = this.calculateInterceptTime();
+    this.targetLeadPos = this.target.getFuturePosition(this.estimatedTime);
+    
+    // 4. Punkty kontrolne krzywej Béziera (płynny łuk)
+    const midPoint = new THREE.Vector3().addVectors(this.startPos, this.targetLeadPos).multiplyScalar(0.5);
+    midPoint.y += this.startPos.distanceTo(this.targetLeadPos) * 0.2; // Wzniesienie trajektorii poza ekliptykę
+    
+    this.curve = new THREE.QuadraticBezierCurve3(this.startPos, midPoint, this.targetLeadPos);
+  }
+
+  calculateInterceptTime() {
+    const currentDist = this.startPos.distanceTo(this.target.mesh.position);
+    return currentDist / this.speed;
+  }
+
+  update(deltaTime) {
+    if (this.progress < 1) {
+      this.progress += (this.speed * deltaTime) / this.curve.getLength();
+      
+      // Dynamiczna korekta punktu końcowego w miarę ruchu celu
+      const currentTargetPos = this.target.mesh.position;
+      this.curve.v2.copy(currentTargetPos);
+
+      const newPos = this.curve.getPoint(Math.min(this.progress, 1));
+      
+      // Orientacja jednostki wzdłuż wektora stycznego do trajektorii
+      const tangent = this.curve.getTangent(Math.min(this.progress, 1));
+      this.unit.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), tangent);
+      this.unit.position.copy(newPos);
+    } else {
+      this.arriveAtTarget();
+    }
+  }
+
+  arriveAtTarget() {
+    // Przepięcie jednostki do warstwy orbitalnej planety docelowej
+    scene.remove(this.unit);
+    this.target.orbitalGroup.add(this.unit);
+    
+    // Przeliczenie pozycji na lokalne współrzędne planety docelowej
+    this.unit.position.copy(this.target.orbitalGroup.worldToLocal(this.unit.position));
+    this.unit.isTransferring = false;
+  }
+}
+
+```
+
+---
+
+## 4. Kluczowe Parametry do Skalowania Prototypu
+
+Aby zachować grywalność w oknie przeglądarki, parametry rzeczywistego kosmosu muszą zostać skompresowane:
+
+| Parametr | Wartość Realna (Układ Słoneczny) | Wartość Prototypu Gry (Units Three.js) | Uwagi |
+| --- | --- | --- | --- |
+| **Promień Planety ($R$)** | $6\,371\text{ km}$ (Ziemia) | $50 - 150$ | Zapewnia widoczność jednostek naziemnych |
+| **Promień Orbity ($R_{\text{orb}}$)** | $149\,600\,000\text{ km}$ (1 AU) | $800 - 2500$ | Pozwala objąć cały układ jednym oddaleniem kamery |
+| **Wysokość Orbity Jednostek** | $200 - 35\,786\text{ km}$ | $1.25 \times R$ | Przestrzeń manewrowa dla satelitów i obrony |
+| **Krzywizna Prędkości** | Prawa Keplera ($v \propto \frac{1}{\sqrt{r}}$) | Ruch jednostajny kątowy ($\omega = \text{const}$) | Zwiększa przewidywalność dla gracza |
+
+Planujesz zbudować ten prototyp w czystym Three.js, czy wykorzystujesz silnik wyższego poziomu (jak Babylon.js lub React Three Fiber)? Mogę przygotować kompletną implementację kamery sferycznej z mechanizmem przyciągania do najbliższego ciała niebieskiego.

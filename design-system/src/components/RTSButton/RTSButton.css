@@ -1,0 +1,270 @@
+/*
+ * RTSButton — two stacked clip-paths draw a chamfered 1px edge without borders or shadows:
+ * the outer element is the edge colour, the inner face is inset by 1px with a cut
+ * 0.6px smaller (≈ cut − (2 − √2)), so the diagonal edge stays 1px thick.
+ *
+ * Every state only swaps three variables. There is no transition anywhere.
+ */
+
+.rts-btn {
+  --btn-edge: var(--hud-color-metal);
+  --btn-fill: var(--hud-color-graphite);
+  --btn-ink: var(--hud-color-text);
+  --btn-accent: var(--hud-color-text-dim);
+  --btn-cut: var(--hud-shape-chamfer);
+
+  position: relative;
+  display: inline-flex;
+  min-width: 0;
+  min-height: var(--hud-size-hit);
+  margin: 0;
+  padding: var(--hud-stroke-hair);
+  border: 0;
+  background: var(--btn-edge);
+  color: var(--btn-ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  clip-path: polygon(
+    var(--btn-cut) 0,
+    100% 0,
+    100% calc(100% - var(--btn-cut)),
+    calc(100% - var(--btn-cut)) 100%,
+    0 100%,
+    0 var(--btn-cut)
+  );
+}
+
+.rts-btn__face {
+  --cut-in: calc(var(--btn-cut) - 0.6px);
+  position: relative;
+  flex: 1;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--hud-space-4);
+  padding: var(--hud-space-3) var(--hud-space-5);
+  background: var(--btn-fill);
+  clip-path: polygon(
+    var(--cut-in) 0,
+    100% 0,
+    100% calc(100% - var(--cut-in)),
+    calc(100% - var(--cut-in)) 100%,
+    0 100%,
+    0 var(--cut-in)
+  );
+}
+
+.rts-btn__icon {
+  display: inline-flex;
+  color: var(--btn-accent);
+}
+
+.rts-btn__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hud-space-1);
+  min-width: 0;
+}
+
+.rts-btn__label {
+  font-size: var(--hud-font-size-body);
+  font-weight: var(--hud-font-weight-bold);
+  letter-spacing: var(--hud-tracking-title);
+  line-height: var(--hud-line-height-tight);
+  text-transform: uppercase;
+}
+
+.rts-btn__cost {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--hud-space-1) var(--hud-space-4);
+  font-size: var(--hud-font-size-label);
+  letter-spacing: var(--hud-tracking-value);
+  color: var(--btn-accent);
+}
+
+.rts-btn__price-code {
+  margin-right: var(--hud-space-2);
+  letter-spacing: var(--hud-tracking-label);
+}
+
+.rts-btn__price.is-missing {
+  color: var(--hud-color-alert);
+}
+
+.rts-btn__reason {
+  font-size: var(--hud-font-size-micro);
+  font-weight: var(--hud-font-weight-bold);
+  letter-spacing: var(--hud-tracking-label);
+  text-transform: uppercase;
+  color: var(--hud-color-alert);
+}
+
+.rts-btn__key {
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 var(--hud-space-1);
+  border: var(--hud-stroke-hair) solid currentColor;
+  font-size: var(--hud-font-size-micro);
+  font-weight: var(--hud-font-weight-bold);
+  line-height: 1;
+  color: var(--btn-accent);
+}
+
+.rts-btn__progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: var(--hud-stroke-heavy);
+  background: var(--hud-color-line);
+}
+
+.rts-btn__progress::after {
+  content: '';
+  display: block;
+  width: calc(var(--p, 0) * 100%);
+  height: 100%;
+  background: var(--hud-color-signal);
+}
+
+/* ---------- states (order matters: later rules win at equal specificity) ---------- */
+
+.rts-btn--primary {
+  --btn-edge: var(--hud-color-signal);
+  --btn-accent: var(--hud-color-signal);
+}
+
+.rts-btn[aria-pressed='true'] {
+  --btn-edge: var(--hud-color-signal);
+  --btn-fill: var(--hud-color-signal-tint);
+  --btn-accent: var(--hud-color-signal);
+}
+
+.rts-btn:hover {
+  --btn-edge: var(--hud-color-signal);
+  --btn-fill: var(--hud-color-graphite-hi);
+  --btn-accent: var(--hud-color-signal);
+}
+
+.rts-btn--danger:hover {
+  --btn-edge: var(--hud-color-alert);
+  --btn-accent: var(--hud-color-alert);
+}
+
+/* The "click": an instant contrast flip to a solid signal block. */
+.rts-btn:active,
+.rts-btn[data-flash] {
+  --btn-edge: var(--hud-color-signal);
+  --btn-fill: var(--hud-color-signal);
+  --btn-ink: var(--hud-color-signal-ink);
+  --btn-accent: var(--hud-color-signal-ink);
+}
+
+.rts-btn--danger:active,
+.rts-btn--danger[data-flash] {
+  --btn-edge: var(--hud-color-alert);
+  --btn-fill: var(--hud-color-alert);
+}
+
+.rts-btn:active .rts-btn__price.is-missing,
+.rts-btn[data-flash] .rts-btn__price.is-missing {
+  color: inherit;
+}
+
+/* Focus: the outer outline would be clipped by clip-path, so draw a dashed inner frame. */
+.rts-btn:focus-visible {
+  outline: none;
+  --btn-edge: var(--hud-color-signal);
+}
+
+.rts-btn:focus-visible .rts-btn__face::before {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  border: var(--hud-stroke-hair) dashed var(--hud-color-signal);
+  pointer-events: none;
+}
+
+/* Unavailable: hatched, dim, never inverts. Hover lights the edge red to say "blocked". */
+.rts-btn[aria-disabled='true'] {
+  --btn-edge: var(--hud-color-line);
+  --btn-fill: var(--hud-color-hull);
+  --btn-ink: var(--hud-color-text-dim);
+  --btn-accent: var(--hud-color-text-faint);
+  cursor: not-allowed;
+}
+
+.rts-btn[aria-disabled='true'] .rts-btn__face {
+  background-image: repeating-linear-gradient(
+    135deg,
+    transparent 0 5px,
+    var(--hud-color-line-faint) 5px 6px
+  );
+}
+
+/* ---------- cell layout (command card) ---------- */
+
+.rts-btn--cell {
+  --btn-cut: var(--hud-shape-chamfer-sm);
+  --btn-edge: var(--hud-color-graphite);
+  width: 100%;
+  height: 100%;
+  min-height: var(--hud-size-cell-h);
+}
+
+.rts-btn--cell .rts-btn__face {
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr);
+  align-items: start;
+  gap: var(--hud-space-2);
+  padding: var(--hud-space-3) var(--hud-space-3) var(--hud-space-3) var(--hud-space-4);
+}
+
+.rts-btn--cell .rts-btn__icon {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.rts-btn--cell .rts-btn__key {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.rts-btn--cell .rts-btn__body {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  align-self: end;
+}
+
+.rts-btn--cell .rts-btn__label {
+  font-size: var(--hud-font-size-micro);
+  letter-spacing: var(--hud-tracking-title);
+}
+
+.rts-btn--cell[aria-pressed='true'],
+.rts-btn--cell.rts-btn--primary {
+  --btn-edge: var(--hud-color-signal);
+}
+
+.rts-btn--cell[aria-disabled='true'] {
+  --btn-edge: var(--hud-color-hull);
+}
+
+.rts-btn--cell:hover {
+  --btn-edge: var(--hud-color-signal);
+}
+
+/* Must stay last: blocked hover/press override every layout and variant. */
+.rts-btn[aria-disabled='true']:hover,
+.rts-btn[aria-disabled='true']:active {
+  --btn-edge: var(--hud-color-alert);
+  --btn-fill: var(--hud-color-hull);
+  --btn-ink: var(--hud-color-text-dim);
+  --btn-accent: var(--hud-color-text-faint);
+}

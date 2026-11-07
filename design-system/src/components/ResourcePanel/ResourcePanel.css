@@ -1,0 +1,187 @@
+.hud-resbar {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  min-height: var(--hud-size-bar);
+  background: var(--hud-color-hull);
+  border-bottom: var(--hud-stroke-hair) solid var(--hud-color-line);
+  /* signal hairline on the top edge: the bar is part of the cockpit frame */
+  border-top: var(--hud-stroke-hair) solid var(--hud-color-signal);
+}
+
+.hud-resbar__id {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--hud-space-1);
+  padding: 0 var(--hud-space-5);
+  border-right: var(--hud-stroke-hair) solid var(--hud-color-line);
+}
+
+.hud-resbar__name {
+  font-size: var(--hud-font-size-body);
+  font-weight: var(--hud-font-weight-bold);
+  letter-spacing: var(--hud-tracking-title);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* Readouts never shrink into each other; on narrow screens the list scrolls inside the bar. */
+.hud-resbar__list {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.hud-res {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+  padding: var(--hud-space-2) var(--hud-space-5);
+  border-right: var(--hud-stroke-hair) solid var(--hud-color-line);
+}
+
+.hud-res__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--hud-space-3);
+  font-size: var(--hud-font-size-micro);
+  letter-spacing: var(--hud-tracking-label);
+  line-height: 1;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--hud-color-text-dim);
+}
+
+.hud-res__led {
+  width: 6px;
+  height: 6px;
+  border: var(--hud-stroke-hair) solid var(--hud-color-text-faint);
+}
+
+.hud-res__code {
+  font-weight: var(--hud-font-weight-bold);
+  color: var(--hud-color-text);
+}
+
+.hud-res__rate {
+  margin-left: auto;
+  padding-left: var(--hud-space-3);
+  letter-spacing: var(--hud-tracking-value);
+}
+
+.hud-res__rate.is-negative {
+  color: var(--hud-color-signal);
+}
+
+.hud-res__data {
+  display: flex;
+  align-items: center;
+  gap: var(--hud-space-4);
+  margin: 0;
+}
+
+.hud-res__value {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 2px;
+  font-size: var(--hud-font-size-value);
+  font-weight: var(--hud-font-weight-bold);
+  letter-spacing: var(--hud-tracking-value);
+  line-height: 1;
+  white-space: nowrap;
+  color: var(--hud-color-text);
+}
+
+.hud-res__max {
+  font-weight: var(--hud-font-weight-regular);
+  color: var(--hud-color-text-dim);
+}
+
+.hud-res__unit {
+  margin-left: var(--hud-space-2);
+  font-size: var(--hud-font-size-micro);
+  font-weight: var(--hud-font-weight-regular);
+  letter-spacing: var(--hud-tracking-label);
+  color: var(--hud-color-text-dim);
+}
+
+.hud-res__meter {
+  display: inline-grid;
+  grid-template-columns: repeat(10, 4px);
+  gap: 1px;
+}
+
+.hud-res__seg {
+  height: 8px;
+  background: var(--hud-color-line);
+}
+
+.hud-res__seg.is-lit {
+  background: var(--hud-color-text-dim);
+}
+
+/* low: the number becomes the signal; critical: alert + blinking LED */
+.hud-res[data-state='low'] .hud-res__value,
+.hud-res[data-state='low'] .hud-res__code {
+  color: var(--hud-color-signal);
+}
+
+.hud-res[data-state='low'] .hud-res__led {
+  border-color: var(--hud-color-signal);
+  background: var(--hud-color-signal);
+}
+
+.hud-res[data-state='low'] .hud-res__seg.is-lit {
+  background: var(--hud-color-signal);
+}
+
+.hud-res[data-state='critical'] .hud-res__value,
+.hud-res[data-state='critical'] .hud-res__code {
+  color: var(--hud-color-alert);
+}
+
+.hud-res[data-state='critical'] .hud-res__led {
+  border-color: var(--hud-color-alert);
+  background: var(--hud-color-alert);
+}
+
+.hud-res[data-state='critical'] .hud-res__seg.is-lit {
+  background: var(--hud-color-alert);
+}
+
+.hud-resbar__trail {
+  display: flex;
+  align-items: center;
+  gap: var(--hud-space-2);
+  margin-left: auto;
+  padding: 0 var(--hud-space-4);
+}
+
+.hud-resbar__serial {
+  align-self: flex-end;
+  padding: 0 var(--hud-space-3) var(--hud-space-1);
+  white-space: nowrap;
+  font-size: var(--hud-font-size-micro);
+  letter-spacing: var(--hud-tracking-label);
+  line-height: 1;
+  color: var(--hud-color-text-faint);
+  pointer-events: none;
+}
+
+/* Narrow screens: the designation and trailing controls wrap onto their own rows. */
+@media (max-width: 720px) {
+  .hud-resbar {
+    flex-wrap: wrap;
+  }
+
+  .hud-resbar__list {
+    flex-basis: 100%;
+    order: 1;
+  }
+}

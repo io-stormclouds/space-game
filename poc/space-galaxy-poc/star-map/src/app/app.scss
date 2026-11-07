@@ -1,0 +1,131 @@
+:host {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.app-shell {
+  position: relative;
+  width: 100%;
+  height: 100vh;
+  overflow: hidden;
+  background: #000005;
+
+  app-star-canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+}
+
+/* HUD panel top-left */
+.hud {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  pointer-events: none;
+  user-select: none;
+}
+
+.hud-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+
+  .title-star {
+    font-size: 1.8rem;
+    color: #ffd;
+    filter: drop-shadow(0 0 8px rgba(255, 240, 150, 0.8));
+    animation: pulse-star 3s ease-in-out infinite;
+  }
+
+  .title-main {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: #e8f0ff;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    text-shadow: 0 0 20px rgba(100, 150, 255, 0.6);
+  }
+
+  .title-sub {
+    font-size: 0.72rem;
+    color: rgba(160, 180, 255, 0.6);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+}
+
+@keyframes pulse-star {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.7; transform: scale(0.92); }
+}
+
+.hud-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.stat-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.75rem;
+  color: rgba(180, 200, 255, 0.7);
+
+  .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+
+    &.dot-yellow { background: #FFF5C0; box-shadow: 0 0 4px #FFF5C0; }
+    &.dot-orange { background: #FFB870; box-shadow: 0 0 4px #FFB870; }
+    &.dot-red    { background: #FF5030; box-shadow: 0 0 4px #FF5030; }
+    &.dot-blue   { background: #B0D0FF; box-shadow: 0 0 4px #B0D0FF; }
+    &.dot-white  { background: #ffffff; box-shadow: 0 0 4px #aaaaff; }
+  }
+}
+
+.hud-controls {
+  border-top: 1px solid rgba(80, 120, 200, 0.2);
+  padding-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ctrl-item {
+  font-size: 0.72rem;
+  color: rgba(150, 170, 255, 0.55);
+}
+
+/* Star count badge bottom-left */
+.star-count {
+  position: absolute;
+  bottom: 20px;
+  left: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  pointer-events: none;
+
+  .count-num {
+    font-size: 2rem;
+    font-weight: 700;
+    color: rgba(180, 210, 255, 0.8);
+    line-height: 1;
+    text-shadow: 0 0 20px rgba(100, 150, 255, 0.5);
+  }
+
+  .count-label {
+    font-size: 0.7rem;
+    color: rgba(130, 160, 255, 0.5);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+}

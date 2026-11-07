@@ -1,0 +1,63 @@
+# Specyfikacja Projektowa: Prototyp Symulatora Cywilizacji Międzyplanetarnej
+
+**Rola AI:** Jesteś ekspertem programowania (Angular, TypeScript, Three.js). Twoim zadaniem jest wygenerowanie struktury i kodu dla prototypu gry przeglądarkowej w stylu RTS / SimCity w przestrzeni kosmicznej. Pisz czysty, modułowy kod, wykorzystując najnowsze wzorce Angulara (Standalone Components, Signals).
+
+## 1. Stos Technologiczny
+
+* **Główny Framework:** Angular (wersja 17/18+, Standalone Components).
+* **Zarządzanie Stanem:** Angular Signals (do reaktywnego UI, zasobów i śledzenia statków).
+* **Renderowanie 3D/Fizyka:** Three.js (osadzony w komponencie Angulara jako główny widok `canvas`).
+* **Stylowanie UI:** Tailwind CSS lub czysty CSS (z przeźroczystymi panelami nałożonymi na canvas).
+
+## 2. Mechanika i Uproszczona Fizyka
+
+Zaimplementuj system przestrzeni oparty na dwóch warstwach (zgodnie z architekturą Sphere of Influence):
+
+1. **Widok Globalny (Układ):** Centralna gwiazda lub punkt referencyjny, wokół którego krążą po stałych, uproszczonych orbitach (okręgi/elipsy, stała prędkość kątowa) Planeta Matka i Asteroida. Wokół Planety Matki krąży Księżyc.
+2. **Fizyka Lotu (Kinematyczna):** Ignorujemy grawitację n-ciał. Lot między ciałami to predefiniowana trajektoria (np. krzywa Béziera) od punktu A do punktu B.
+3. **Zasady Ruchu Statku:** Przesunięcie statku zużywa `paliwo` proporcjonalnie do przebytego dystansu.
+
+## 3. Encje i Modele Danych
+
+Zdefiniuj interfejsy i stan początkowy dla następujących obiektów:
+
+* **Ciała Niebieskie:**
+* `Planeta` (Startowa): Posiada bazę, odnawia paliwo, przechowuje globalne zasoby.
+* `Księżyc`: Miejsce do lądowania (w prototypie pusty punkt nawigacyjny).
+* `Asteroida`: Źródło surowców (posiada pulę "Minerałów" do wydobycia).
+
+
+* **Statek Kosmiczny:**
+* Parametry: `id`, `pozycja (x,y,z)`, `status` (Zadokowany, W locie, Wydobywa).
+* Zasoby statku: `paliwo` (np. max 100, zużywane w locie), `ładownia` (np. max 50 jednostek minerałów).
+
+
+
+## 4. Główne Przypadki Użycia (Scenariusz Prototypu)
+
+Aplikacja musi umożliwiać przeprowadzenie następującej pętli rozgrywki (Point & Click w stylu RTS):
+
+1. **Start:** Użytkownik wybiera kliknięciem myszy statek znajdujący się (zadokowany) na Planecie. W UI pojawia się panel informacyjny statku (stan paliwa: 100/100, ładownia: 0/50).
+2. **Lot na Księżyc:** Użytkownik klika prawym przyciskiem myszy na Księżyc. Statek odrywa się od planety i leci na Księżyc (animacja po krzywej). Zużywa 20 jednostek paliwa. Zadokowuje na Księżycu.
+3. **Wydobycie z Asteroidy:** Użytkownik wybiera statek na Księżycu i klika PPM na Asteroidę. Statek leci (zużywa kolejne 30 paliwa), dociera do Asteroidy i zmienia status na "Wydobywa". Ładownia zapełnia się z upływem czasu (np. +10 minerałów na sekundę), aż osiągnie maksimum.
+4. **Powrót i Rozładunek:** Użytkownik nakazuje powrót na Planetę. Po wylądowaniu zebrane minerały są automatycznie transferowane z ładowni statku do globalnej puli surowców gracza, a paliwo statku zostaje odnowione.
+
+## 5. Wymagania Interfejsu Użytkownika (UI Overlay)
+
+Zbuduj nakładkę UI (HTML/CSS) działającą nad warstwą Three.js:
+
+* **Górny pasek (Top Bar):** Wyświetla globalne zasoby cywilizacji (np. `Kredyty: 0`, `Minerały: 0`).
+* **Panel Boczny (Action/Selection Panel):** Po kliknięciu w obiekt 3D (Raycaster w Three.js) panel wyświetla kontekst. Dla statku: pasek postępu paliwa, pasek pojemności ładowni, aktualny status (np. "Wydobywanie...", "Lot..."). Dla planety: ilość zmagazynowanych minerałów.
+
+## 6. Kolejność Wykonywania Zadań dla Claude Code
+
+1. Skonfiguruj nowy projekt Angular (standalone) i zainstaluj `three`, `@types/three`.
+2. Utwórz serwis `GameStateService` oparty na Signalach do przechowywania stanu obiektów i surowców.
+3. Zbuduj `EngineComponent` z inicjalizacją sceny Three.js, oświetlenia, kamery i podstawowych geometrii dla Planety, Księżyca i Asteroidy.
+4. Zaimplementuj logikę zaznaczania (Raycaster) powiązaną z Angular Signals.
+5. Dodaj logikę przemieszczania statku (aktualizacja pozycji w pętli `requestAnimationFrame` z interpolacją, kalkulacja zużycia paliwa).
+6. Dodaj warstwę UI za pomocą komponentów Angulara nakładających się na widok canvas.
+
+---
+
+Czy w tym prototypie chcesz, aby Angular bezpośrednio sterował pętlą animacji Three.js z poziomu komponentu, czy wolisz wydzielić całą logikę 3D do oddzielnej, czystej klasy TypeScript, z którą Angular będzie się komunikował wyłącznie przez zdarzenia?

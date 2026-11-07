@@ -1,0 +1,56 @@
+<div class="app-shell">
+  <app-star-canvas (starSelected)="onStarSelected($event)"></app-star-canvas>
+
+  <!-- HUD -->
+  <div class="hud">
+    <div class="hud-title">
+      <span class="title-star">✦</span>
+      <div>
+        <div class="title-main">Galaxy Star Map</div>
+        <div class="title-sub">Solar Neighbourhood &amp; Beyond</div>
+      </div>
+    </div>
+
+    <div class="hud-stats">
+      <div class="stat-chip">
+        <span class="dot dot-yellow"></span>
+        <span>G-type</span>
+      </div>
+      <div class="stat-chip">
+        <span class="dot dot-orange"></span>
+        <span>K-type</span>
+      </div>
+      <div class="stat-chip">
+        <span class="dot dot-red"></span>
+        <span>M-dwarf</span>
+      </div>
+      <div class="stat-chip">
+        <span class="dot dot-blue"></span>
+        <span>A/B-type</span>
+      </div>
+      <div class="stat-chip">
+        <span class="dot dot-white"></span>
+        <span>Giant/Super</span>
+      </div>
+    </div>
+
+    <div class="hud-controls">
+      <div class="ctrl-item">🖱️ <strong>Drag</strong> to rotate</div>
+      <div class="ctrl-item">🔍 <strong>Scroll</strong> to zoom</div>
+      <div class="ctrl-item">⭐ <strong>Click star</strong> for details</div>
+    </div>
+  </div>
+
+  <div class="star-count">
+    <span class="count-num">{{ 41 }}</span>
+    <span class="count-label">stars mapped</span>
+  </div>
+
+  <!-- Star info dialog -->
+  @if (selectedStar()) {
+    <app-star-dialog
+      [star]="selectedStar()"
+      (close)="closeDialog()"
+    ></app-star-dialog>
+  }
+</div>

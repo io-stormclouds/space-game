@@ -1,0 +1,58 @@
+<div class="app-layout">
+  <!-- Top Header Navigation -->
+  <header class="app-header">
+    <div class="header-left">
+      <div class="logo-mark">⚗️</div>
+      <div class="brand-text">
+        <h1 class="brand-title">STAR-ATANOR</h1>
+        <span class="brand-subtitle">ALCHEMICAL KINEMATICS & GRAPH ENGINE // PoC (ANGULAR + PIXI.JS)</span>
+      </div>
+    </div>
+
+    <div class="header-center">
+      <div class="level-indicator">
+        <span class="tag">AKTYWNY ETAP:</span>
+        <span class="name">{{ gameState.activeLevel().name }}</span>
+      </div>
+    </div>
+
+    <div class="header-right">
+      <div class="status-chip" [class.success]="gameState.productsDelivered() >= gameState.targetRequired()" [class.jam]="gameState.hasCrashed()">
+        @if (gameState.hasCrashed()) {
+          ⚠️ AWARIA (JAM)
+        } @else if (gameState.productsDelivered() >= gameState.targetRequired()) {
+          ✨ POZIOM UKOŃCZONY
+        } @else if (gameState.isPlaying()) {
+          ⚙️ SYMULACJA AKTYWNA
+        } @else {
+          ⏸ WSTRZYMANO
+        }
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Viewport (PixiJS Canvas + Educational Overlay) -->
+  <main class="viewport-area">
+    <app-board-canvas class="canvas-view"></app-board-canvas>
+
+    <div class="edu-overlay">
+      <app-educational-panel></app-educational-panel>
+    </div>
+  </main>
+
+  <!-- Bottom Dock (Controls + Palette + Sequencer) -->
+  <footer class="bottom-dock">
+    <app-control-bar></app-control-bar>
+
+    <app-build-toolbar></app-build-toolbar>
+
+    <div class="dock-lower-row">
+      <div class="palette-wrapper">
+        <app-command-palette></app-command-palette>
+      </div>
+      <div class="timeline-wrapper">
+        <app-timeline></app-timeline>
+      </div>
+    </div>
+  </footer>
+</div>

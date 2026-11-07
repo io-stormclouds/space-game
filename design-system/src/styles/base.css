@@ -1,0 +1,107 @@
+/* Base layer for every HUD surface. Requires tokens.generated.css. */
+
+.hud-root {
+  background: var(--hud-color-void);
+  color: var(--hud-color-text);
+  font-family: var(--hud-font-mono);
+  font-size: var(--hud-font-size-body);
+  font-weight: var(--hud-font-weight-regular);
+  line-height: var(--hud-line-height-normal);
+  font-variant-numeric: tabular-nums slashed-zero;
+  text-rendering: geometricPrecision;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Hard rules of the style: square geometry, no shadows, no soft motion. */
+.hud-root *,
+.hud-root *::before,
+.hud-root *::after {
+  box-sizing: border-box;
+  border-radius: var(--hud-shape-radius);
+  box-shadow: none;
+  transition: none;
+}
+
+.hud-root :focus-visible {
+  outline: var(--hud-stroke-heavy) solid var(--hud-color-signal);
+  outline-offset: var(--hud-space-1);
+}
+
+/* 1px grid field — the "screen" behind panels. */
+.hud-gridfield {
+  background-color: var(--hud-color-void);
+  background-image:
+    linear-gradient(var(--hud-color-line-faint) 1px, transparent 1px),
+    linear-gradient(90deg, var(--hud-color-line-faint) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+/* Dot matrix for empty or inert areas. */
+.hud-dots {
+  background-image: radial-gradient(var(--hud-color-line) 1px, transparent 1.25px);
+  background-size: 6px 6px;
+}
+
+/* Text roles */
+.hud-label {
+  font-size: var(--hud-font-size-label);
+  font-weight: var(--hud-font-weight-medium);
+  letter-spacing: var(--hud-tracking-label);
+  line-height: var(--hud-line-height-tight);
+  text-transform: uppercase;
+  color: var(--hud-color-text-dim);
+}
+
+.hud-micro {
+  font-size: var(--hud-font-size-micro);
+  letter-spacing: var(--hud-tracking-label);
+  line-height: var(--hud-line-height-tight);
+  text-transform: uppercase;
+  color: var(--hud-color-text-dim);
+}
+
+.hud-title {
+  font-size: var(--hud-font-size-title);
+  font-weight: var(--hud-font-weight-bold);
+  letter-spacing: var(--hud-tracking-title);
+  line-height: var(--hud-line-height-tight);
+  text-transform: uppercase;
+  color: var(--hud-color-text);
+}
+
+.hud-signal {
+  color: var(--hud-color-signal);
+}
+
+.hud-alert {
+  color: var(--hud-color-alert);
+}
+
+/* Critical indicators blink in hard steps; never for motion-sensitive viewers. */
+@keyframes hud-blink {
+  50% {
+    opacity: 0.2;
+  }
+}
+
+.hud-blink {
+  animation: hud-blink var(--hud-motion-blink) steps(1, end) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hud-blink {
+    animation: none;
+  }
+}
+
+.hud-visually-hidden {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}

@@ -1,0 +1,54 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Commands
+
+```bash
+npm start                                   # ng serve → http://localhost:4200
+npm run build                               # production build to dist/space-3d-poc
+npx ng test --watch=false                   # all unit tests (vitest + jsdom), single run
+npx ng test --watch=false --include='**/orbit-solver.spec.ts'   # one spec file
+npx ng test                                 # watch mode
+```
+
+`.npmrc` sets `legacy-peer-deps=true`: plain `npm install` fails on this machine with an npm 10.9 arborist bug (`Cannot read properties of null (reading 'edgesOut')`) while resolving vitest peers. Keep the flag.
+
+## Project
+
+Browser space-RTS proof of concept. One spacecraft starts on the home planet's landing pad, is ordered (right-click) to fly to a moon or an asteroid, mines Ferryt there and lands back on the pad to unload and refuel. The planet and the moon are covered with a Goldberg-polyhedron tile grid with seeded resource deposits; a build bar places structures (extractors on deposits, power plants, habitat, depot, landing pad) with a translucent ghost preview. Three resources (Ferryt, Kriol, Silicyt), a per-body power balance that blocks construction, and a rover that drives tile to tile. The asteroid is an irregular seeded rock that shrinks as it is mined. Inspired by *Planetary Annihilation* (scale, deterministic orbits), explicitly **not** hard astrodynamics.
+
+Design docs, in Polish: `staff.md.txt` is the binding spec, `planetary.md.txt` the reference analysis, `POC-PLAN.md` the implementation plan (architecture, contracts, phases, risks, Definition of Done). The code follows the plan; where they differ, the code wins and the plan should be updated.
+
+Stack: Angular 22 (standalone, zoneless, Signals), Three.js 0.187 with `logarithmicDepthBuffer`, Tailwind 4 via `@tailwindcss/postcss`, vitest. Strict TypeScript.
+
+## Architecture
+
+Four layers under `src/app/` with one dependency direction: `ui → state → game ← engine`.
+
+- **`game/`** — pure TypeScript. Imports nothing from `@angular/*` or `three`; uses its own `Vec3 {x,y,z}` (`game/math/vec3.ts`). All numeric logic and all unit tests live here. `full-loop.spec.ts` simulates the entire gameplay loop headlessly (flights, mining, building) and is the fastest way to validate a mechanic change. Geometry generators also live here: `math/geodesic.ts` (icosahedron subdivision, shared), `math/goldberg-grid.ts` (tile grid = dual of the geodesic sphere), `math/asteroid-shape.ts` + `math/seeded-noise.ts` (deterministic lumpy rock, `depletionScale`).
+- **`state/`** — Angular services. `GameStateService` holds the Signals (`stockpile`, `structures`, `deposits`, `rovers`, selections, `placementKind`) and is the only place state mutates, via `apply(events)` → `game/reducer.ts`; `world()` hands the pure systems an immutable `WorldState`. `SimulationService` owns the game systems, clock, `FrameSnapshot`, the grids/shapes (from `game/config/world.ts`, generated once per process) and keeps the orbit solver's docking offsets in sync with landing pads. `CommandService` validates player orders (flights, `build(kind, body, tile)`, `orderRoverMove`) and queues engine-relevant events for the loop. `GameLoopService` runs the `requestAnimationFrame` loop and owns the engine objects.
+- **`engine/`** — Three.js only. `SceneManager` builds and draws; holds no game state. `PlanetGridView` is one non-indexed mesh per gridded body (fan triangles per tile, per-vertex colours for hover/selection, `faceIndex → tile`); `AsteroidView` the flat-shaded rock; `StructureView` one `InstancedMesh` of boxes per body. `PickingService` turns clicks into `PickResult`s (`SHIP`, `TILE`, `BODY`, `EMPTY`) and throttles hover picks to ~30 Hz. `ModelLibrary` + `model-registry.ts` load KayKit glTF models from `public/assets/kaykit/` (CC0) and flatten each to one geometry; `SceneManager.loadModels()` swaps them in after `buildWorld` (ship = `dropship`, mine = `drill_structure`), placeholder cone/box until then. Registry bounds are of the *flattened* scene and `model-library.spec.ts` checks them against the files, so a wrong number fails a test. `CameraController` wraps `OrbitControls` and follows a moving focus point.
+- **`ui/`** — HUD components. Read Signals only; never import `three`.
+
+### Data flow per frame
+
+`GameLoopService.frame` → `SimulationService.step(dt)` runs systems → systems return `DomainEvent[]` → `GameStateService.apply` reduces them into Signals → loop forwards `TRANSFER_STARTED` / `TRANSFER_ARRIVED` (ship reparenting), `STRUCTURE_BUILT` (new instance on a tile) and `MINING_TICK` (asteroid scale) to `SceneManager` → `SceneManager.sync(snapshot)` → render. Events raised by `CommandService` outside the frame are queued and drained by the loop (`drainStarted`).
+
+**Discrete vs continuous state.** Anything the HUD shows as a value (fuel, cargo, ship state, minerals) is a domain event into Signals. Anything that changes every frame (body positions, ship position in flight, curve progress) is written into the mutable `FrameSnapshot` and never into a Signal; the loop copies a few of these into Signals at 10 Hz (`gameTime`, `selectedTransitProgress`, `labels`). Keep it that way or change detection runs every frame.
+
+### Physics model
+
+- Body positions are analytic: `localPosition = (r·cos(ωt+φ), 0, r·sin(ωt+φ))` in the parent's frame, `worldPosition` sums the parent chain. No integration, so pausing, speeding up or clamping `dt` never desynchronises anything.
+- **Spheres of influence are the Three.js scene graph.** Each body's `Group` is a child of its parent's `Group`; `SceneManager.sync` sets `Group.position` from `snapshot.bodyLocalPos` and Three.js composes the transforms. Docked ships sit in the body's `OrbitalUnitsGroup` at `(0, radius×1.25, 0)` and move with it for free.
+- A transfer is `Object3D.attach` to the world-space transit group, then quadratic Bézier interpolation whose end point is re-aimed every frame at `dockingPosition(target, t + remaining)`, then `attach` into the target's orbital group and snap to the analytic docking offset. `TransferSystem` keeps the per-flight mutable state (path, progress); `TransferPlan` in game state is immutable.
+- Lead interception is a fixed-point iteration in `game/math/lead-intercept.ts`; it requires every body's `maxLinearSpeed` to be well below `cruiseSpeed`. `orbit-solver.spec.ts` asserts this for the world config, so changing orbits or speed in `game/config/` will fail that test if the invariant breaks.
+- **Economy** is pure data in `game/`: `ResourceKind` / `Stockpile` (`models/resource.model.ts`), `STRUCTURE_INFO` (cost, power, what it extracts), `powerBalance` (`economy/power.ts`), `BuildSystem.check` (the only place build rules live: `NO_GRID`, `TILE_OCCUPIED`, `NO_DEPOSIT`, `NO_RESOURCES`, `NO_POWER`), `ExtractionSystem` (1 Hz `EXTRACTION_TICK` from deposits into the stockpile), `RoverSystem` (BFS over `tile.neighbors`, great-circle interpolation, positions into `FrameSnapshot.roverLocalPos`). Deposits are generated with the grid from `surfaceGrid.depositSeed` (`math/deposit-generator.ts`, ~12% of tiles in clusters); their remaining amounts live in `WorldState.deposits`. Power never goes negative because `BuildSystem` refuses a consumer that would exceed production.
+- **Landing pads** move a body's docking point: `OrbitSolver.setDockingOffset` (local frame) replaces the default `(0, radius × 1.25, 0)`; the home planet starts with a pad on its top tile (`INITIAL_STRUCTURES` in `world.ts`) and ships dock upright on the tile normal. Bodies without a pad still dock 1.25 R above the centre.
+- **Surface grids** are Goldberg polyhedra GP(n,0) (`surfaceGrid.frequency` on a body): tiles = 10·n² + 2, always exactly 12 pentagons. The planet uses n = 8 (642 tiles), the moon n = 3 (92); `goldberg-grid.spec.ts` asserts both give tiles 6–8 units wide so picking feels the same. Tile ids are `${bodyId}:${index}` and are stable because generation is deterministic. The grid mesh *replaces* the body's sphere and is a child of the body group, so structures placed at `tile.center` along `tile.normal` orbit with the body for free.
+- **Asteroid** mesh = frequency-4 geodesic sphere with vertices displaced radially by seeded value noise (`shape.seed`, `shape.roughness`); no `Math.random` anywhere. It shrinks by `depletionScale = max(0.4, ∛(minerals/initial))`, applied on `MINING_TICK` only. The logical radius (capture, docking altitude) does not change.
+- Fuel is charged at departure: `distance × fuelRate`. Orders to a non-home body are also rejected unless the ship keeps a worst-case return reserve (`TransferSystem.returnReserve`, based on `maxDistanceBetween`), so the ship can never strand. `transfer-system.spec.ts` asserts a full tank always covers planet → asteroid → planet.
+
+### Controls
+
+LMB selects a ship, the rover, or a surface tile (tile panel: deposit, structure); click on empty space clears the selection. Hovering a tile lightens it. The build bar at the bottom enters placement mode: hovering shows a green/red ghost, LMB on a tile builds, RMB or Escape cancels. With the rover selected, RMB on a tile of its body drives it there (structures block the path, landing pads do not). RMB on a body (or any of its tiles) orders the selected ship there. A pointer move over 5 px between down and up is a camera drag and never picks. Space pauses, keys 1/2/3 set time scale 1×/3×/10×, Escape clears ship and tile selection. The camera follows the selected ship, else the body of the selected tile, else the home planet.

@@ -1,0 +1,99 @@
+.hud-cmd {
+  display: flex;
+  flex-direction: column;
+  width: max-content;
+  max-width: 100%;
+  padding-top: var(--hud-space-3);
+}
+
+.hud-cmd__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--hud-space-5);
+  padding: var(--hud-space-3) var(--hud-space-4) var(--hud-space-3);
+}
+
+.hud-cmd__context {
+  font-size: var(--hud-font-size-body);
+  font-weight: var(--hud-font-weight-bold);
+  letter-spacing: var(--hud-tracking-title);
+  text-transform: uppercase;
+  color: var(--hud-color-signal);
+}
+
+/* 1px division lines come from the grid gap over the line-coloured background. */
+.hud-cmd__grid {
+  display: grid;
+  grid-template-columns: repeat(var(--cols), var(--hud-size-cell-w));
+  grid-auto-rows: var(--hud-size-cell-h);
+  gap: var(--hud-stroke-hair);
+  background: var(--hud-color-line);
+  border-top: var(--hud-stroke-hair) solid var(--hud-color-line);
+  border-bottom: var(--hud-stroke-hair) solid var(--hud-color-line);
+  overflow-x: auto;
+}
+
+.hud-cmd__cell {
+  display: flex;
+  min-width: 0;
+  background: var(--hud-color-graphite);
+}
+
+.hud-cmd__cell--empty {
+  position: relative;
+  background-color: var(--hud-color-hull);
+}
+
+.hud-cmd__slot-no {
+  position: absolute;
+  top: var(--hud-space-2);
+  right: var(--hud-space-3);
+  font-size: var(--hud-font-size-micro);
+  letter-spacing: var(--hud-tracking-label);
+  color: var(--hud-color-text-faint);
+}
+
+.hud-cmd__inspector {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hud-space-2);
+  min-height: 64px;
+  padding: var(--hud-space-4) var(--hud-space-4) var(--hud-space-6);
+}
+
+.hud-cmd__insp-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--hud-space-5);
+}
+
+.hud-cmd__insp-title {
+  font-size: var(--hud-font-size-body);
+  font-weight: var(--hud-font-weight-bold);
+  letter-spacing: var(--hud-tracking-title);
+  text-transform: uppercase;
+}
+
+.hud-cmd__insp-cost {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--hud-space-1) var(--hud-space-5);
+  font-size: var(--hud-font-size-label);
+  letter-spacing: var(--hud-tracking-value);
+  color: var(--hud-color-text-dim);
+}
+
+.hud-cmd__insp-reason {
+  font-size: var(--hud-font-size-micro);
+  font-weight: var(--hud-font-weight-bold);
+  letter-spacing: var(--hud-tracking-label);
+  text-transform: uppercase;
+  color: var(--hud-color-alert);
+}
+
+.hud-cmd__insp-desc {
+  font-size: var(--hud-font-size-label);
+  color: var(--hud-color-text-dim);
+}

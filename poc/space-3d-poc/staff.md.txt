@@ -1,0 +1,135 @@
+# Specyfikacja Projektowa: Prototyp Symulatora Cywilizacji Międzyplanetarnej
+
+**Rola AI:** Jesteś ekspertem inżynierii oprogramowania (Angular, TypeScript, Three.js). Twoim celem jest wygenerowanie kompletnej struktury i implementacji prototypu gry przeglądarkowej łączącej mechaniki RTS oraz SimCity/Space Builder w układzie planetarnym. Pisz czysty, reaktywny kod w najnowszych standardach Angulara (Standalone Components, Signals).
+
+---
+
+## 1. Kontekst Projektu i Gry Referencyjne
+
+* **Główna Inspiracja (Skala i Nawigacja):** ***Planetary Annihilation*** (Uber Entertainment) – wieloplanetarny teatr działań, bezszwowe przechodzenie między skalą bazy na planecie a skalą układu słonecznego, transfery orbitalne oraz deterministyczne orbity ciał niebieskich.
+* **Elementy Ekonomiczne i Logistyczne:** *SimCity* / *Offworld Trading Company* / *Factorio* – zbieranie surowców z peryferii (asteroidy), transfer do centrum logistycznego (Planeta Matka) oraz zarządzanie rezerwami eksploatacyjnymi (paliwo, ładunek).
+* **Kontrast:** W odróżnieniu od gier z twardą astrodynamiką (np. *Kerbal Space Program*), rozgrywka stawia na płynność RTS i przewidywalność taktyczną, a nie precyzyjne planowanie manewrów Hohmanna.
+
+---
+
+## 2. Model Fizyki: Kinematyka Orbitalna i Sfery Wpływów (SOI)
+
+Fizyka w prototypie ma być **uproszczona, deterministyczna i kinematyczna** (rezygnujemy z pełnej symulacji newtonowskiej grawitacji n-ciał na rzecz wydajności i przewidywalności w przeglądarce):
+
+* **Układ Odniesienia (Hierarchiczne SOI – Sphere of Influence):**
+* **Układ Globalny (Heliocentryczny):** Ciała niebieskie (Planeta, Asteroida) poruszają się po predefiniowanych, zamkniętych orbitach kołowych/eliptycznych z równomierną prędkością kątową ($\omega = \text{const}$).
+* **Układ Lokalny (Planetocentryczny):** Księżyc porusza się w lokalnym układzie odniesienia Planety Matki. Statki zadokowane dzielą transformację macierzy (MatrixTransform) ciała nadrzędnego.
+
+
+* **Kinematyka Tranzytu Międzyplanetarnego:**
+* Lot statku nie jest symulowany ciągłym wektorem przyspieszenia, lecz **interpolowaną trajektorią przestrzenną (krzywa Béziera 3. stopnia)**.
+* Punkt docelowy lotu dynamicznie kalkuluje wyprzedzenie celu (*Lead Interception*): statek leci do punktu $\vec{P}_{\text{celu}}(t + \Delta t)$, w którym cel znajdzie się w momencie zakończenia lotu.
+
+
+* **Model Paliwa i Ograniczeń:**
+* Koszt paliwa obliczany jest na starcie manewru: $\text{FuelCost} = \text{Dystans}(\vec{A}, \vec{B}) \times \text{WspółczynnikZużycia}$.
+* Jeśli $\text{Paliwo} < \text{FuelCost}$, komenda lotu jest odrzucana przez system z powiadomieniem w UI.
+
+
+
+---
+
+## 3. Stos Technologiczny
+
+* **Framework bazowy:** Angular (wersja 17/18+, Standalone Components).
+* **Zarządzanie Stanem:** Angular Signals (`signal`, `computed`, `effect`) do reaktywnego UI, stanu ładowni, paliwa oraz wskaźników bazy.
+* **Renderowanie 3D:** Three.js z włączonym `logarithmicDepthBuffer: true` (zapobieganie Z-fightingowi w skali kosmicznej).
+* **Warstwa UI:** Tailwind CSS lub elastyczny CSS nakładany jako HUD (Pointer-events: none na kontenerze głównym, pointer-events: auto na interaktywnych panelach).
+
+---
+
+## 4. Encje i Architektura Danych
+
+Zdefiniuj interfejsy i modele stanu:
+
+```typescript
+export interface CelestialBody {
+  id: string;
+  name: string;
+  radius: number;
+  orbitRadius: number;
+  orbitSpeed: number;
+  currentAngle: number;
+  meshRef?: THREE.Mesh;
+  resources?: { minerals: number };
+}
+
+export interface Spacecraft {
+  id: string;
+  name: string;
+  fuel: number;
+  maxFuel: number;
+  cargo: number;
+  maxCargo: number;
+  state: 'DOCKED' | 'IN_TRANSIT' | 'MINING';
+  currentBodyId: string;
+  targetBodyId: string | null;
+}
+
+```
+
+---
+
+## 5. Przypadki Użycia i Pętla Rozgrywki (RTS / Builder Loop)
+
+1. **Selekcja i Podgląd (Raycasting):**
+* Gracz klika LPM w statek zadokowany na Planecie Matce. Angular Signals aktywują boczny panel statku: `Paliwo: 100/100`, `Ładunek: 0/50`, `Status: Gotowy`.
+
+
+2. **Transfer na Księżyc (Lądowanie):**
+* Gracz klika PPM na Księżyc.
+* Walidacja paliwa (wymagane np. 20 jednostek).
+* Statek odrywa się, przechodzi w tryb tranzytu po trajektorii łukowej, dokuje na Księżycu. Wartość paliwa spada do 80.
+
+
+3. **Ekspedycja Wydobywcza (Asteroida):**
+* Z Księżyca gracz wydaje rozkaz lotu na oddaloną Asteroidę (koszt: 30 paliwa).
+* Po dotarciu statek przełącza się w status `MINING`.
+* Pętla czasowa co sekundę transferuje 10 jednostek minerałów z Asteroidy do ładowni statku aż do osiągnięcia `maxCargo = 50`.
+
+
+4. **Powrót i Zasilenie Bazy:**
+* Gracz klika PPM na Planetę Matkę. Statek wraca (koszt: 30 paliwa).
+* Po lądowaniu: minerały z ładowni zasilają globalny magazyn cywilizacji (`GlobalMinerals += 50`), a paliwo statku zostaje uzupełnione do maksimum (100/100).
+
+
+
+---
+
+## 6. Wymagania Interfejsu Użytkownika (UI Overlay)
+
+* **Górny Pasek Cywilizacyjny:** Wyświetla stan zasobów imperium (Kredyty, Zmagazynowane Minerały, Liczba Aktywnych Statków).
+* **Panel Kontekstowy Jednostki (Prawy/Dolny Róg):**
+* Paski postępu (Progress Bars): Paliwo (kolor niebieski/żółty), Pojemność ładowni (kolor pomarańczowy).
+* Przycisk awaryjny / rozkaz powrotu do bazy.
+
+
+* **Wizualizacja Wektorowa w 3D:**
+* Linie orbit dla ciał niebieskich (`THREE.LineLoop`).
+* Przerywana linia trajektorii wyświetlana w momencie wyznaczenia trasy przelotu.
+
+
+
+---
+
+## 7. Instrukcja Krok po Kroku dla Claude Code
+
+1. Wygeneruj czysty projekt Angular z architekturą opartą na `standalone: true`.
+2. Utwórz `GameStateService` zarządzający stanem jednostek i surowców w oparciu o Signals.
+3. Przygotuj serwis lub klasę `SceneManager` enkapsulującą Three.js:
+* Konfiguracja kamery, świateł i pętli renderowania (`requestAnimationFrame`).
+* Generowanie Planety, Księżyca (jako child lub powiązany obiekt) oraz Asteroidy.
+
+
+4. Zaimplementuj mechanizm `Raycaster` do obsługi zaznaczania jednostek i wskazywania celów kliknięciem myszy.
+5. Zbuduj moduł matematyczny wyliczający lot po krzywej (`QuadraticBezierCurve3`) z detekcją dotarcia do celu.
+6. Zintegruj komponenty interfejsu Angulara z widokiem WebGL.
+
+---
+
+Czy w implementacji Three.js chcesz, aby ruch orbitalny ciał był zatrzymywany (pauza taktyczna) podczas zaznaczania celów, czy symulacja ma działać w czasie rzeczywistym nieprzerwanie?

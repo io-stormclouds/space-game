@@ -1,0 +1,67 @@
+/* GENERATED from src/tokens/design-tokens.ts by `npm run tokens` — do not edit by hand. */
+:root {
+  --hud-color-void: #0B0C10;
+  --hud-color-hull: #111419;
+  --hud-color-graphite: #1F2833;
+  --hud-color-graphite-hi: #2A3644;
+  --hud-color-metal: #3B4756;
+  --hud-color-line: rgba(112, 128, 146, 0.24);
+  --hud-color-line-faint: rgba(112, 128, 146, 0.10);
+  --hud-color-text: #C5C6C7;
+  --hud-color-text-dim: #8A939D;
+  --hud-color-text-faint: #58616B;
+  --hud-color-signal: #FFB000;
+  --hud-color-signal-dim: rgba(255, 176, 0, 0.14);
+  --hud-color-signal-tint: #3E3B2C;
+  --hud-color-signal-ink: #0B0C10;
+  --hud-color-alert: #FF5A4A;
+  --hud-color-alert-dim: rgba(255, 90, 74, 0.14);
+  --hud-font-mono: "JetBrains Mono", "IBM Plex Mono", "Cascadia Mono", Consolas, monospace;
+  --hud-font-size-micro: 10px;
+  --hud-font-size-label: 11px;
+  --hud-font-size-body: 12px;
+  --hud-font-size-value: 14px;
+  --hud-font-size-title: 16px;
+  --hud-font-size-display: 22px;
+  --hud-font-weight-regular: 400;
+  --hud-font-weight-medium: 500;
+  --hud-font-weight-bold: 700;
+  --hud-line-height-tight: 1.1;
+  --hud-line-height-normal: 1.3;
+  --hud-tracking-label: 0.14em;
+  --hud-tracking-title: 0.08em;
+  --hud-tracking-value: 0.02em;
+  --hud-space-0: 0px;
+  --hud-space-1: 2px;
+  --hud-space-2: 4px;
+  --hud-space-3: 6px;
+  --hud-space-4: 8px;
+  --hud-space-5: 12px;
+  --hud-space-6: 16px;
+  --hud-space-7: 24px;
+  --hud-stroke-hair: 1px;
+  --hud-stroke-heavy: 2px;
+  --hud-shape-radius: 0px;
+  --hud-shape-chamfer: 6px;
+  --hud-shape-chamfer-sm: 4px;
+  --hud-size-hit: 44px;
+  --hud-size-bar: 44px;
+  --hud-size-cell-w: 96px;
+  --hud-size-cell-h: 72px;
+  --hud-size-tick: 8px;
+  --hud-motion-instant: 0ms;
+  --hud-motion-flash: 70ms;
+  --hud-motion-blink: 1000ms;
+}
+
+[data-hud-signal="amber"] {
+  --hud-color-signal: #FFB000;
+  --hud-color-signal-dim: rgba(255, 176, 0, 0.14);
+  --hud-color-signal-tint: #3E3B2C;
+}
+
+[data-hud-signal="cyan"] {
+  --hud-color-signal: #4FFFB0;
+  --hud-color-signal-dim: rgba(79, 255, 176, 0.14);
+  --hud-color-signal-tint: #264644;
+}

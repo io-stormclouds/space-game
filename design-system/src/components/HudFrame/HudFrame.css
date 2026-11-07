@@ -1,0 +1,83 @@
+.hud-frame {
+  --frame-label-bg: var(--hud-color-void);
+  position: relative;
+  background: var(--hud-color-hull);
+  border: var(--hud-stroke-hair) solid var(--hud-color-line);
+}
+
+.hud-frame__ticks {
+  position: absolute;
+  inset: -1px;
+  pointer-events: none;
+}
+
+.hud-frame__tick {
+  position: absolute;
+  width: var(--hud-size-tick);
+  height: var(--hud-size-tick);
+  border: 0 solid var(--hud-color-signal);
+}
+
+.hud-frame__tick--tl {
+  top: 0;
+  left: 0;
+  border-top-width: 1px;
+  border-left-width: 1px;
+}
+
+.hud-frame__tick--tr {
+  top: 0;
+  right: 0;
+  border-top-width: 1px;
+  border-right-width: 1px;
+}
+
+.hud-frame__tick--bl {
+  bottom: 0;
+  left: 0;
+  border-bottom-width: 1px;
+  border-left-width: 1px;
+}
+
+.hud-frame__tick--br {
+  bottom: 0;
+  right: 0;
+  border-bottom-width: 1px;
+  border-right-width: 1px;
+}
+
+/* Label tab cut into the top edge: "─[ CMD ]──────" */
+.hud-frame__label {
+  position: absolute;
+  top: 0;
+  left: var(--hud-space-6);
+  transform: translateY(-50%);
+  padding: 0 var(--hud-space-2);
+  background: var(--frame-label-bg);
+  font-size: var(--hud-font-size-micro);
+  font-weight: var(--hud-font-weight-bold);
+  letter-spacing: var(--hud-tracking-label);
+  line-height: 1;
+  text-transform: uppercase;
+  color: var(--hud-color-signal);
+}
+
+.hud-frame__label::before {
+  content: '[ ';
+}
+
+.hud-frame__label::after {
+  content: ' ]';
+}
+
+.hud-frame__serial {
+  position: absolute;
+  right: var(--hud-space-3);
+  bottom: var(--hud-space-1);
+  font-size: var(--hud-font-size-micro);
+  letter-spacing: var(--hud-tracking-label);
+  line-height: 1;
+  text-transform: uppercase;
+  color: var(--hud-color-text-faint);
+  pointer-events: none;
+}

@@ -1,0 +1,16 @@
+# Dependencies and build output (all packages, PoC included)
+node_modules/
+dist/
+out-tsc/
+.angular/
+coverage/
+
+# Test reports
+test-results/
+playwright-report/
+blob-report/
+
+# Logs and OS files
+*.log
+.DS_Store
+Thumbs.db
