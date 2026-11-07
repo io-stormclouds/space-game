@@ -1,0 +1,10 @@
+{
+  "name": "@space-game/domain",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Framework-free game domain: rules, catalog, world model, systems, Atanor engine, star data. No Angular, no Three.js.",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

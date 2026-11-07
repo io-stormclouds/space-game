@@ -16,6 +16,7 @@
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "paths": {
       "@space-game/ui": ["./packages/ui/src/index.ts"],
+      "@space-game/domain": ["./packages/domain/src/index.ts"],
       "@space-game/hud-design-system/core": ["./node_modules/@space-game/hud-design-system/src/core/index.ts"]
     }
   },
