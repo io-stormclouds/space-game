@@ -324,6 +324,10 @@ Na prośbę „decyzje wg rekomendacji” rozstrzygam pytania P1–P6 i kwestie 
 | A23 | Atomy na portach przy zatrzymaniu (pyt. 9) | Wracają do magazynu. |
 | A24 | Histogramy (pyt. 10) | Na razie tabela wariantów projektu. Histogramy po decyzji SOC-4. |
 | A25 | Produkty uboczne i zlecenia NPC (pyt. 11) | Później, po kroku AT4. |
+| A26 | Kolizje w ruchu (AT5, POC-6) | 12 próbek ruchu na takt; atomy lub chwytaki bliżej niż 0,5 odstępu heksów → JAM `TRAJECTORY_COLLISION` / `ARM_COLLISION`. Pusty chwytak nad atomem i belki ramion się nie zderzają. Atom może leżeć na polu podstawy ramienia, a belka może przechodzić nad portem (rozwiązania A_PRO i A_KAP). |
+| A27 | Obszar | Pola dotknięte przez atomy i chwytaki w trakcie ruchu (POC-5 B; zmienia „później” z A11). A_NAD: 13 zamiast 12. |
+| A28 | Ramiona wielochwytowe (L4) | 2, 3 albo 6 chwytaków; każdy dodatkowy chwytak +10 pkt i +2 STA (propozycja z README silnika). |
+| A29 | Kilka portów jednego materiału | Dozwolone, ze wspólnym buforem (A1); A_PRO ma dwa porty UKL. Chwytak poza planszą na starcie zgłasza tylko `validateMachine`. |
 | D37 | Karta rozkazów (K4) | Komórki karty w doku zmniejszone tak, żeby oba rzędy mieściły się z podpisem (rekomendacja K4: ok. 58 px). |
 | D32 | Budowa z karty ciała | Karta skanera planety ma „Buduj” (B): aktywne na ciele z portem kosmicznym, na pozostałych zablokowane z powodem „Najpierw postaw port kosmiczny”. Główna akcja karty (wybór miejsca albo budowa) jest w pierwszym rzędzie. |
 
@@ -342,6 +346,6 @@ Na prośbę „decyzje wg rekomendacji” rozstrzygam pytania P1–P6 i kwestie 
 | ID | Pytanie | Blokuje |
 |---|---|---|
 | P4 | Adres zdalnego repozytorium | — |
-| P7 | Czy przyjąć zmierzone liczby Atanora (A_NAD: obszar 12 zamiast 9) do dokumentu ekonomii (§8.3)? Skutek: moc +1,5 MW, wartość NAD +4% (45,33 → 47,13 kr). | aktualizację dokumentu ekonomii |
+| P7 | Czy przyjąć zmierzone liczby Atanora do dokumentu ekonomii (§8.3)? A_NAD: obszar 13 zamiast 9 (moc +2 MW, koszt NAD 45,33 → 47,73 kr). Rozwiązania wzorcowe AT5 są dużo szybsze od §8.3: A_MET 7 cykli wobec 16, A_KAP 7 wobec 18, A_PRO 6 wobec 24. Czy wzorce mają być celowo „przeciętne”? Od AT4 produkcja idzie z maszyny gracza (A17), więc §8.3 to tylko wycena. | aktualizację dokumentu ekonomii |
 | P8 | Docelowa liczba budowli na ciało (od niej zależy, czy odcinanie i LOD z zadań F5 są potrzebne przed betą) | zadania naprawcze F5 |
 | P9 | Czy kolory wykresów (D26) i materiałów (G8) dołączyć do design systemu? | — |

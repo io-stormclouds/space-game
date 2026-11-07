@@ -94,10 +94,15 @@ export interface CreateSimulationOptions extends SimulationOptions {
 /**
  * New simulation of `level` running `options.solution` (default: the reference solution).
  * Step it with `sim.step()`, read it with `sim.getSnapshot()` / `sim.getStats()`.
+ * `options.boardRadius` (e.g. `getAtanorBuildingLevel(n).boardRadius`) jams atoms and grippers
+ * that leave the board (OFF_BOARD); without it the board is unlimited, as in the PoC.
  */
 export function createAtanorSimulation(level: LevelConfig, options: CreateSimulationOptions = {}): SimulationEngine {
   const solution = options.solution ?? getReferenceSolution(level);
-  return new SimulationEngine(composeLevel(level, solution), options.supply ? { supply: options.supply } : {});
+  return new SimulationEngine(composeLevel(level, solution), {
+    ...(options.supply ? { supply: options.supply } : {}),
+    ...(options.boardRadius !== undefined ? { boardRadius: options.boardRadius } : {}),
+  });
 }
 
 /**
@@ -111,9 +116,20 @@ export function runAtanorSimulation(sim: SimulationEngine, maxTicks = 1000): Ata
   return sim.getSnapshot();
 }
 
-/** Steady-state throughput of a solution, measured with unlimited inputs. */
-export function measureAtanorSolution(level: LevelConfig, solution?: AtanorSolution, maxTicks = 2000): ThroughputMetrics {
-  const sim = createAtanorSimulation(level, solution ? { solution } : {});
+/**
+ * Steady-state throughput of a solution, measured with unlimited inputs. `options.boardRadius`
+ * measures on a bounded board (a machine leaving it reports a JAM with reason OFF_BOARD).
+ */
+export function measureAtanorSolution(
+  level: LevelConfig,
+  solution?: AtanorSolution,
+  maxTicks = 2000,
+  options: { readonly boardRadius?: number } = {}
+): ThroughputMetrics {
+  const sim = createAtanorSimulation(level, {
+    ...(solution ? { solution } : {}),
+    ...(options.boardRadius !== undefined ? { boardRadius: options.boardRadius } : {}),
+  });
   return measureThroughput(sim, maxTicks);
 }
 

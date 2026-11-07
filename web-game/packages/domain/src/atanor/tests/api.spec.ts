@@ -15,16 +15,17 @@ import { createArm } from '../engine/arm';
 import { machineMaterials, validateMachine } from '../engine/building';
 import { createInputGlyph } from '../engine/glyph';
 import { LEVEL_2_WATER, LEVEL_4_TRACK, POC_LEVELS } from '../engine/levels';
-import { LEVEL_A_KAT, LEVEL_A_NAD } from '../engine/recipes';
+import { LEVEL_A_KAT, LEVEL_A_NAD, LEVEL_A_PRO } from '../engine/recipes';
 
 describe('Atanor API', () => {
   it('lists the 4 PoC levels and the recipe levels', () => {
     expect(listAtanorLevels('poc')).toEqual(POC_LEVELS);
     expect(POC_LEVELS.map(l => l.kind)).toEqual(['poc', 'poc', 'poc', 'poc']);
-    expect(listRecipeLevels().map(l => l.recipe?.recipeId)).toEqual(['A_NAD', 'A_KAT']);
-    expect(listAtanorLevels()).toHaveLength(6);
+    expect(listRecipeLevels().map(l => l.recipe?.recipeId)).toEqual(['A_NAD', 'A_KAT', 'A_MET', 'A_KAP', 'A_PRO']);
+    expect(listAtanorLevels()).toHaveLength(9);
     expect(findRecipeLevel('A_KAT')).toBe(LEVEL_A_KAT);
-    expect(findRecipeLevel('A_PRO')).toBeUndefined();
+    expect(findRecipeLevel('A_PRO')).toBe(LEVEL_A_PRO);
+    expect(findRecipeLevel('A_XYZ')).toBeUndefined();
     expect(getAtanorLevel('level-2-salt-water')).toBe(LEVEL_2_WATER);
   });
 

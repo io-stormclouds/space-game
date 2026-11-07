@@ -212,12 +212,12 @@ describe('readout', () => {
       target: 6,
       jam: null,
       starved: false,
-      // A3: measured A_NAD 12 / 12 / 2 (doc §8.3: 12 / 9 / 2).
+      // A3: measured A_NAD 12 / 13 / 2 (doc §8.3: 12 / 9 / 2); area from the swept path (AT5, POC-5 B).
       cyclesPerOutput: 12,
-      area: 12,
+      area: 13,
       arms: 2,
       docReference: { cycles: 12, area: 9, arms: 2 },
-      spec: { level: 1, cycles: 12, area: 12, arms: 2 },
+      spec: { level: 1, cycles: 12, area: 13, arms: 2 },
       throughputProblem: null,
     });
     expect(r.delivered).toBe(sim.getSnapshot().delivered);

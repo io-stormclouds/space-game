@@ -1,7 +1,9 @@
 // Fabryka atanorowa: what each building level allows (doc §8.1), machine validation
 // (doc §8.5 p. 5 "limity zależne od poziomu budynku") and the machine's bill of materials (§8.2).
 // New in web-game. Takt and power per level live in the economy module (economy-model.ts).
+// AT5: multi-gripper arms (L4+), grippers on the board, cost of extra grippers.
 import { HexCoord, hexDistance, hexKey } from '../grid/hex';
+import { getGripperPositions, GRIPPER_COUNTS, gripperCount } from './arm';
 import { glyphCells, isPortGlyph } from './glyph';
 import { AtanorSolution, GlyphType, LevelConfig } from './types';
 
@@ -17,7 +19,7 @@ export interface AtanorBuildingLevel {
   readonly pistons: boolean;
   readonly glyphs: readonly PlayerGlyphType[];
   readonly tracks: boolean;
-  /** L4+: multi-gripper arms (§8.1). Not implemented by the engine yet. */
+  /** L4+: multi-gripper arms (§8.1): `ArmState.grippers` 2, 3 or 6. */
   readonly multiArms: boolean;
   /** L5: second board with its own program (§8.1). Not implemented by the engine yet. */
   readonly boards: number;
@@ -44,7 +46,11 @@ export type MachineIssueCode =
   | 'PISTON_LOCKED'
   | 'GLYPH_LOCKED'
   | 'TRACKS_LOCKED'
-  | 'OFF_BOARD';
+  | 'OFF_BOARD'
+  /** An arm with more than one gripper below the level with `multiArms` (L4). */
+  | 'MULTI_GRIPPER_LOCKED'
+  /** `grippers` is not 1, 2, 3 or 6. */
+  | 'GRIPPER_COUNT_INVALID';
 
 export interface MachineIssue {
   readonly code: MachineIssueCode;
@@ -57,7 +63,9 @@ const ORIGIN: HexCoord = { q: 0, r: 0 };
 
 /**
  * Checks a machine (level ports + player solution) against the limits of a building level.
- * Static placement only: grippers and moving atoms are not checked (open question in README).
+ * Static placement: arm bases, grippers at the start, glyphs and tracks must be on the board.
+ * Atoms and grippers that leave the board while moving jam in the engine (OFF_BOARD with
+ * `boardRadius`, see SimulationOptions).
  */
 export function validateMachine(level: LevelConfig, solution: AtanorSolution, buildingLevel: number): MachineIssue[] {
   const limits = getAtanorBuildingLevel(buildingLevel);
@@ -86,8 +94,22 @@ export function validateMachine(level: LevelConfig, solution: AtanorSolution, bu
     if (arm.trackId && !limits.tracks) {
       issues.push({ code: 'TRACKS_LOCKED', message: 'Tracks are not available', elementId: arm.id });
     }
+    if (arm.grippers !== undefined && !GRIPPER_COUNTS.includes(arm.grippers)) {
+      issues.push({
+        code: 'GRIPPER_COUNT_INVALID',
+        message: `${arm.grippers} grippers; allowed ${GRIPPER_COUNTS.join(', ')}`,
+        elementId: arm.id,
+      });
+    } else if (gripperCount(arm) > 1 && !limits.multiArms) {
+      issues.push({ code: 'MULTI_GRIPPER_LOCKED', message: 'Multi-gripper arms are not available', elementId: arm.id });
+    }
     if (offBoard(arm.basePos)) {
       issues.push({ code: 'OFF_BOARD', message: `Arm base ${hexKey(arm.basePos)} is off the board`, elementId: arm.id });
+    } else {
+      const gripper = getGripperPositions(arm).find(offBoard);
+      if (gripper) {
+        issues.push({ code: 'OFF_BOARD', message: `Gripper ${hexKey(gripper)} is off the board`, elementId: arm.id });
+      }
     }
   }
   for (const glyph of [...level.glyphs.filter(isPortGlyph), ...solution.glyphs]) {
@@ -115,10 +137,14 @@ function add(bill: Record<string, number>, material: string, units: number): voi
   bill[material] = (bill[material] ?? 0) + units;
 }
 
+/** Materials of each gripper beyond the first (AT5 proposal, not in §8.2; = 10 PoC points). */
+export const EXTRA_GRIPPER_MATERIALS: Readonly<Record<string, number>> = { STA: 2 };
+
 /**
  * Materials needed to build the machine (§8.2): arm L1 = 4 STA + 1 SLN; length 2 +2 STA;
  * length 3 +4 STA + 1 STP; piston +1 SLN; Bonder/Unbonder 2 PRZ + 1 UKL; transmutation
  * 1 NAD + 1 UKL; track 1 STA per hex (proposed in §8.2, free in the PoC). Ports are free.
+ * Proposal (AT5): each extra gripper of a multi-gripper arm +2 STA (EXTRA_GRIPPER_MATERIALS).
  */
 export function machineMaterials(solution: AtanorSolution): Record<string, number> {
   const bill: Record<string, number> = {};
@@ -131,6 +157,9 @@ export function machineMaterials(solution: AtanorSolution): Record<string, numbe
       add(bill, 'STP', 1);
     }
     if (arm.isPiston) add(bill, 'SLN', 1);
+    for (let i = 1; i < gripperCount(arm); i++) {
+      for (const [material, units] of Object.entries(EXTRA_GRIPPER_MATERIALS)) add(bill, material, units);
+    }
   }
   for (const glyph of solution.glyphs) {
     if (glyph.type === 'BONDER' || glyph.type === 'UNBONDER') {

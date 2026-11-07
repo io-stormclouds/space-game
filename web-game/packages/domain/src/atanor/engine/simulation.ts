@@ -8,6 +8,8 @@
 //  - getSnapshot() for the UI; consumed / produced material counters.
 //  - Area also counts atom positions right after the motion phase (fix: the output hex of a
 //    delivered product was never counted), getVisitedHexes().
+//  - AT5: area also counts the hexes swept by moving atoms and grippers inside a tick (POC-5 B);
+//    optional board radius (OFF_BOARD JAM, A8); every gripper of a multi-gripper arm; jam details.
 import { HexCoord, hexEquals, hexFromKey, hexKey } from '../grid/hex';
 import { MoleculeGraph } from '../graph/molecule';
 import {
@@ -16,11 +18,12 @@ import {
   AtanorSnapshot,
   Glyph,
   InputReagentGlyph,
+  JamDetail,
   JamReason,
   LevelConfig,
   SimulationStepResult,
 } from './types';
-import { cloneArm, getArmCost, getGripperPosition } from './arm';
+import { cloneArm, getArmCost, getGripperPositions, setHeldAtomIds } from './arm';
 import { getGlyphCost } from './glyph';
 import { executeTick, spawnAtInput, TickContext } from './pipeline';
 
@@ -31,6 +34,12 @@ export interface SimulationOptions {
    * Buffers are shared by all input ports of the same element.
    */
   readonly supply?: Readonly<Record<string, number>>;
+  /**
+   * Board = hexes within this distance of (0,0): a moving atom or gripper outside it jams with
+   * OFF_BOARD (A8). Overrides `LevelConfig.boardRadius`; both missing = unlimited board (PoC).
+   * The Fabryka atanorowa board of each building level is `ATANOR_BUILDING_LEVELS[i].boardRadius`.
+   */
+  readonly boardRadius?: number;
 }
 
 export interface SimulationStats {
@@ -40,11 +49,15 @@ export interface SimulationStats {
   readonly timelinePosition: number;
   /** Tick on which the target was reached, null before that. */
   readonly completedAtTick: number | null;
-  /** PoC cost points (arms + glyphs; tracks are free as in the PoC). */
+  /**
+   * PoC cost points of the machine as built (arms incl. extra grippers + glyphs; tracks are free
+   * as in the PoC).
+   */
   readonly cost: number;
   /**
    * Unique hexes visited by arm bases, grippers and atoms at tick ends (PoC definition), plus
-   * atom positions right after the motion phase (so delivered products count too).
+   * atom positions right after the motion phase (so delivered products count too), plus the hexes
+   * swept by moving atoms and grippers inside each tick (sampled path, POC-5 B).
    */
   readonly area: number;
   readonly arms: number;
@@ -69,6 +82,8 @@ export class SimulationEngine {
   public hasCrashed = false;
   public crashMessage?: string;
   public jamReason: JamReason | null = null;
+  /** Atoms, arms, hex and moment of the JAM; null without a JAM. */
+  public jamDetail: JamDetail | null = null;
   public isCompleted = false;
   /** Ticks executed since reset — the CYKLE counter. Never wraps. */
   public ticksExecuted = 0;
@@ -86,6 +101,8 @@ export class SimulationEngine {
   private history: SimulationStepResult[] = [];
   private deliveryTicks: number[] = [];
   private readonly initialSupply: Readonly<Record<string, number>> | null;
+  /** Board radius (OFF_BOARD JAM); null = unlimited. */
+  public readonly boardRadius: number | null;
   private buffers: Map<string, number> | null = null;
   private consumed: Record<string, number> = {};
   private produced: Record<string, number> = {};
@@ -102,6 +119,7 @@ export class SimulationEngine {
       this.instructions[armId] = [...tape];
     }
     this.initialSupply = options.supply ? { ...options.supply } : null;
+    this.boardRadius = options.boardRadius ?? level.boardRadius ?? null;
     this.reset();
   }
 
@@ -111,6 +129,7 @@ export class SimulationEngine {
     this.hasCrashed = false;
     this.crashMessage = undefined;
     this.jamReason = null;
+    this.jamDetail = null;
     this.isCompleted = false;
     this.ticksExecuted = 0;
     this.completedAtTick = null;
@@ -127,8 +146,7 @@ export class SimulationEngine {
     // Reset arms to initial positions and empty grippers
     this.arms = this.level.initialArms.map(cloneArm);
     for (const arm of this.arms) {
-      arm.isHolding = false;
-      arm.heldAtomId = null;
+      setHeldAtomIds(arm, []);
       // If the arm sits on a track, resolve its starting index from its base position.
       if (arm.trackId) {
         const track = (this.level.tracks ?? []).find(t => t.id === arm.trackId);
@@ -214,6 +232,8 @@ export class SimulationEngine {
       hasCrashed: this.hasCrashed,
       crashMessage: this.crashMessage,
       jamReason: this.jamReason,
+      jamDetail: this.jamDetail,
+      boardRadius: this.boardRadius,
       takeInput: glyph => this.takeInput(glyph),
       onDelivered: glyph => {
         if (glyph.product) {
@@ -231,6 +251,7 @@ export class SimulationEngine {
     this.hasCrashed = ctx.hasCrashed;
     this.crashMessage = ctx.crashMessage;
     this.jamReason = ctx.jamReason ?? null;
+    this.jamDetail = ctx.jamDetail ?? null;
     this.isCompleted = result.isLevelCompleted;
     for (let i = deliveredBefore; i < this.productsDelivered; i++) {
       this.deliveryTicks.push(this.ticksExecuted);
@@ -307,7 +328,7 @@ export class SimulationEngine {
   private recordVisitedArea(): void {
     for (const arm of this.arms) {
       this.visitedHexes.add(hexKey(arm.basePos));
-      this.visitedHexes.add(hexKey(getGripperPosition(arm)));
+      for (const gripper of getGripperPositions(arm)) this.visitedHexes.add(hexKey(gripper));
     }
     for (const atom of this.graph.getAtoms()) {
       this.visitedHexes.add(hexKey(atom.pos));
@@ -328,6 +349,7 @@ export class SimulationEngine {
       collisionDetected: this.hasCrashed,
       ...(this.crashMessage !== undefined ? { collisionMessage: this.crashMessage } : {}),
       jamReason: this.jamReason,
+      ...(this.jamDetail ? { jamDetail: this.jamDetail } : {}),
       starved: this.isStarved,
       productsDelivered: this.productsDelivered,
       isLevelCompleted: this.isCompleted,
@@ -350,7 +372,13 @@ export class SimulationEngine {
       target: this.level.targetRequired,
       completed: this.isCompleted,
       completedAtTick: this.completedAtTick,
-      jam: this.hasCrashed ? { reason: this.jamReason ?? 'ATOM_COLLISION', message: this.crashMessage ?? '' } : null,
+      jam: this.hasCrashed
+        ? {
+            reason: this.jamReason ?? 'ATOM_COLLISION',
+            message: this.crashMessage ?? '',
+            ...(this.jamDetail ? { detail: this.jamDetail } : {}),
+          }
+        : null,
       starved: this.isStarved,
       starvedSteps: this.starvedSteps,
       supply: this.getSupply(),
@@ -360,8 +388,10 @@ export class SimulationEngine {
   }
 
   public getStats(): SimulationStats {
+    // Cost of the machine as built (initial arms): a piston's cost no longer changes while it
+    // extends (the PoC summed the live arms).
     let cost = 0;
-    for (const arm of this.arms) {
+    for (const arm of this.level.initialArms) {
       cost += getArmCost(arm);
     }
     for (const glyph of this.level.glyphs) {

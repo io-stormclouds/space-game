@@ -25,7 +25,30 @@ export { SimulationEngine } from './engine/simulation';
 export type { SimulationOptions, SimulationStats } from './engine/simulation';
 export { executeTick } from './engine/pipeline';
 export type { TickContext } from './engine/pipeline';
-export { cloneArm, createArm, getArmCost, getGripperPosition } from './engine/arm';
+export {
+  cloneArm,
+  createArm,
+  EXTRA_GRIPPER_COST,
+  getArmCost,
+  getGripperPosition,
+  getGripperPositions,
+  getHeldAtomIds,
+  GRIPPER_COUNTS,
+  gripperCount,
+  gripperRotations,
+  setHeldAtomIds,
+} from './engine/arm';
+export {
+  distanceSquared,
+  hexToPoint,
+  motionEnd,
+  motionPoint,
+  pointToHex,
+  sweptHexes,
+  TRAJECTORY_CLEARANCE,
+  TRAJECTORY_SUBSTEPS,
+} from './engine/trajectory';
+export type { Motion, Point } from './engine/trajectory';
 export {
   createBonderGlyph,
   createInputGlyph,
@@ -44,11 +67,12 @@ export {
   LEVEL_4_TRACK,
   POC_LEVELS,
 } from './engine/levels';
-export { LEVEL_A_KAT, LEVEL_A_NAD, RECIPE_LEVELS } from './engine/recipes';
+export { LEVEL_A_KAP, LEVEL_A_KAT, LEVEL_A_MET, LEVEL_A_NAD, LEVEL_A_PRO, RECIPE_LEVELS } from './engine/recipes';
 export { machineStateKey, measureThroughput } from './engine/throughput';
 export type { ThroughputMetrics, ThroughputProblem } from './engine/throughput';
 export {
   ATANOR_BUILDING_LEVELS,
+  EXTRA_GRIPPER_MATERIALS,
   getAtanorBuildingLevel,
   machineMaterials,
   validateMachine,
@@ -66,6 +90,7 @@ export type {
   Glyph,
   GlyphType,
   InputReagentGlyph,
+  JamDetail,
   JamReason,
   LevelConfig,
   OutputProduct,
@@ -118,3 +143,6 @@ export {
   pixelToHex,
 } from './grid/hex';
 export type { HexCoord, HexCoord3D } from './grid/hex';
+
+// Machine editor (AT2)
+export * from './editor/index';

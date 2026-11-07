@@ -5,7 +5,8 @@
 // loops forever. The loop length divided by the products delivered in it is the steady-state
 // cycles per product, independent of warm-up and of `targetRequired`.
 import { hexKey } from '../grid/hex';
-import { JamReason } from './types';
+import { getHeldAtomIds } from './arm';
+import { JamDetail, JamReason } from './types';
 import { SimulationEngine } from './simulation';
 
 export type ThroughputProblem =
@@ -21,7 +22,7 @@ export type ThroughputProblem =
 export interface ThroughputMetrics {
   readonly ok: boolean;
   readonly problem: ThroughputProblem | null;
-  readonly jam: { readonly reason: JamReason; readonly message: string } | null;
+  readonly jam: { readonly reason: JamReason; readonly message: string; readonly detail?: JamDetail } | null;
   /** Steady-state ticks per delivered product (may be fractional). */
   readonly cyclesPerOutput: number | null;
   /** Length of the repeating loop in ticks. */
@@ -36,7 +37,10 @@ export interface ThroughputMetrics {
   readonly ticksToTarget: number | null;
   /** Steady-state material units taken from inputs per product. */
   readonly inputsPerOutput: Record<string, number> | null;
-  /** PoC area (unique hexes visited by bases, grippers and atoms) over the measured run. */
+  /**
+   * Area over the measured run: unique hexes visited by bases, grippers and atoms at tick ends
+   * (PoC), atoms right after the motion and the hexes swept by moving atoms and grippers (POC-5 B).
+   */
   readonly area: number;
   readonly arms: number;
   /** PoC cost points. */
@@ -56,7 +60,7 @@ export function machineStateKey(engine: SimulationEngine): string {
   };
   const arms = [...engine.getArms()]
     .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
-    .map(a => `${a.id}@${hexKey(a.basePos)}/${a.rotation}/${a.length}/${a.trackIndex ?? ''}/${a.isHolding ? posOf(a.heldAtomId) : '-'}`);
+    .map(a => `${a.id}@${hexKey(a.basePos)}/${a.rotation}/${a.length}/${a.trackIndex ?? ''}/${getHeldAtomIds(a).map(posOf).join(',')}`);
   const atoms = graph.getAtoms().map(a => `${hexKey(a.pos)}:${a.element}`).sort();
   const bonds = graph
     .getBonds()
@@ -129,7 +133,13 @@ export function measureThroughput(engine: SimulationEngine, maxTicks = 2000): Th
   return {
     ok: problem === null,
     problem,
-    jam: engine.hasCrashed ? { reason: engine.jamReason ?? 'ATOM_COLLISION', message: engine.crashMessage ?? '' } : null,
+    jam: engine.hasCrashed
+      ? {
+          reason: engine.jamReason ?? 'ATOM_COLLISION',
+          message: engine.crashMessage ?? '',
+          ...(engine.jamDetail ? { detail: engine.jamDetail } : {}),
+        }
+      : null,
     cyclesPerOutput: productive && loop ? loop.period / loop.outputs : null,
     periodTicks: loop ? loop.period : null,
     outputsPerPeriod: loop ? loop.outputs : null,
