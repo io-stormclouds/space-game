@@ -1,19 +1,18 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
-import { CommandCard, HudFrame, ResourcePanel } from '@space-game/ui';
-import { TEXT } from './i18n/pl';
-import { sampleCommands, sampleReadouts } from './shell/sample';
+import { ChangeDetectionStrategy, Component } from '@angular/core';
+import { RouterOutlet } from '@angular/router';
 
-/** F0 shell: resource bar, a frame for the world view and the command card from the design system. */
+/** Root: the entry screens and the game are routes (W15 C). */
 @Component({
   selector: 'wg-root',
-  imports: [ResourcePanel, HudFrame, CommandCard],
+  imports: [RouterOutlet],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  templateUrl: './app.html',
-  styleUrl: './app.css',
+  host: { class: 'hud-root' },
+  template: `<router-outlet />`,
+  styles: `
+    :host {
+      display: block;
+      height: 100%;
+    }
+  `,
 })
-export class App {
-  protected readonly t = inject(TEXT);
-  protected readonly lastCommand = signal<string | null>(null);
-  protected readonly readouts = sampleReadouts(this.t);
-  protected readonly commands = sampleCommands(this.t, (label) => this.lastCommand.set(label));
-}
+export class App {}

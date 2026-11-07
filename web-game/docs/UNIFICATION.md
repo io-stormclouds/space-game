@@ -102,6 +102,53 @@ Wspólna domena w `packages/domain` jest w czystym TypeScripcie, bez Angulara, T
   - ten sam skrypt daje identyczny JSON stanu i dziennik zdarzeń;
   - wczytanie zapisu w trakcie budowy daje ten sam wynik co gra bez przerwy.
 
+## 3b. Wykonane w F2–F4 (FAKT)
+
+- **F2: warstwa mock.**
+  - `packages/api`: kontrakt `GameApi` (rozkazy, migawki ~10 Hz, zdarzenia, dane klatki, tempo, pauza, krok, zapis, wczytanie, powtórka, katalog, dostępność, podgląd budowy, propozycja pola) i klient protokołu Web Workera.
+  - `packages/mock-server`:
+    - symulacja stałym krokiem (1/60 s × tempo / 60 min modelu);
+    - dziennik rozkazów z numerem kroku; powtórka z pliku daje identyczny świat (test);
+    - zapis i wczytanie JSON;
+    - symulowani gracze i rynek w hubach Syriusz i Słońce (W11 B, ceny według dok. 4.6);
+    - statystyki czasu kroku.
+  - Aplikacja ładuje mocka w Web Workerze (`game.worker.ts`). Interfejs importuje tylko `@space-game/api` i `@space-game/render`, nie logikę domeny.
+- **F3: interfejs z kanwy.**
+  - Trasy: strona główna, logowanie (mock przyjmuje dowolne dane), gra, wejście adresem `#/scenariusz-przybycie | skan | port | kolonia | planeta-matka` (W15 C). Presety grają przepływ tymi samymi rozkazami co gracz.
+  - HUD z kanwy:
+    - pasek górny 48 px: zegar, ładownia Arki albo magazyn kolonii z ENE i POP, tempo, widoki;
+    - panele: rozkaz misji, status, wyniki skanu, dziennik;
+    - dok 240 px: mapa (schemat układu), zaznaczenie, karta rozkazów 4×2;
+    - katalog budowy, nakładka wydajności.
+  - Teksty w słowniku `apps/game/src/app/i18n/pl.ts` (W16 B).
+  - Przepływ Play przechodzi w e2e od strony głównej do kolonii z wydobyciem FER, SIL, KRI.
+- **F4: widoki świata** (`packages/render`):
+  - `RenderHost` z zasadą jednego kontekstu WebGL (W13 A);
+  - jeden widok układu i planety, w którym przełącznik przesuwa tylko kamerę (W12 A, port silnika 3D PoC);
+  - galaktyka jako jedno `THREE.Points` (6 draw calls zamiast ok. 185 w PoC, Deneb w zasięgu kamery);
+  - Atanor w PixiJS ładowanym leniwie (W08 A: receptury A_NAD i A_KAT, sterowanie z HUD).
+  - Styl W14 C: modele KayKit w palecie DS, płaskie cieniowanie, wektorowe nakładki, bez tekstur i poświat.
+  - e2e: każdy widok dostępny z HUD; liczniki w nakładce (planeta 19 wywołań / 31 tys. trójkątów, układ 17 / 29 tys., galaktyka 6, Atanor 2); po 20 przełączeniach geometrie i tekstury wracają do stanu wyjściowego; zawsze 1 kontekst WebGL.
+- **Paczka startowa:** 279 kB (75 kB w transferze). Three.js i PixiJS ładują się dopiero z ekranem gry.
+
+### Różnice względem plansz kanwy (zrzuty 1440×900, F3)
+
+| Plansza | Różnica | Powód |
+|---|---|---|
+| wszystkie | tempo ×1 / ×60 / ×600 zamiast ×1 / ×3 / ×10 | Z6: ×1 to czas rzeczywisty, ×60 tempo PoC, ×600 testy (D12) |
+| wszystkie | czwarta zakładka widoku „Atanor” | W08 A, W13 A; kanwa nie ma planszy Atanora (P2) |
+| 1 Strona główna | inny rzut mapy gwiazd; część nazw z danych po angielsku (np. WISE 0855-0714) | dane `stars.data.ts`; polskie nazwy tylko w słowniku `starNames` |
+| 3 Przybycie | panel Arki: paliwo w układzie 100 / 100 zamiast kapsuł 12 / 40; brak kolonistów i mocy pokładowej | kapsuły i koloniści nie mają mechaniki w E0–E1 (D14) |
+| 4 Skanowanie | bez zmian merytorycznych; sonda, porównanie i „oznacz” zablokowane z powodem „Jeszcze nie w web-game” | D7 |
+| 5 Port | zamiast kart katalogu: karta trybu stawiania (Postaw port · Obróć · Najbliższe pole · Anuluj); duch na planecie 3D | jeden wzorzec stawiania dla portu i budynków |
+| 6 Kolonia | planeta jako glob 3D z siatką Goldberga zamiast płaskiej tarczy heksów | W12 A, W14 C |
+| 6 Kolonia | panel „Cele · era E1” (Huta, moc, Karbonit) zastąpiony rozkazem misji z pierwszej sesji | cele er nie są jeszcze danymi |
+| 6 Kolonia | rozkazy budynku: brak „Wstrzymaj”, „Priorytet mocy”, „Podłącz taśmę” | domena nie ma pauzy budynków, priorytetów na budynek ani taśm (D4) |
+| 6 Kolonia | pasek mieści 5–6 odczytów przy 1440 px, reszta przewija się w pasku | długie etykiety i przełączniki po prawej |
+| 7 Układ | brak wykresu okien transferowych | czas przylotu liczony przy rozkazie, wykres później |
+| 8 Galaktyka | odległości od Tau Ceti inne niż na planszy (np. Epsilon Eridani 2,14 zamiast 3,05 ly) | W10: pozycje dopasowane do `distance` |
+| mapa w doku | bez ramki widocznego obszaru | schemat układu, nie miniatura kamery |
+
 ### Zasady wspólnej domeny (DECYZJA według planu i rekomendacji)
 
 | Obszar | Zasada | Źródło |
@@ -180,6 +227,34 @@ Na prośbę „decyzje wg rekomendacji” rozstrzygam pytania P1–P6 i kwestie 
 | A12 | Tory w punktach kosztu PoC | Nie; tylko w materiałach maszyny. |
 | A13 | Ułamkowe cykle na produkt | Tak, jako średnia z okresu powtarzania. |
 | A14 | Kierunek zależności receptur | Źródłem jest katalog ekonomii. Poziomy trzymają układ portów, a test `catalog-link.spec.ts` pilnuje zgodności wejść i wyjść. |
+| D12 | Tempo | ×1 (czas rzeczywisty), ×60 (tempo PoC, domyślne), ×600 (testy); Spacja pauza, `+` / `−` zmiana. |
+| D13 | Atanor w przełączniku widoków | Czwarta zakładka, dostępna od razu: Fabryka atanorowa to budynek E3, poza grywalnym E0–E1, a widok ma być testowalny. |
+| D14 | Kapsuły, koloniści, moc pokładowa Arki | Tylko w danych opisu; bez mechaniki w E0–E1. |
+| D15 | Autoustawienie budowy | „Najbliższe pole” szuka od portu; wydobywarka najpierw złoża materiału brakującego do celu misji. |
+| D16 | Cel „Uruchom wydobycie” | Liczy materiał złoża pod wydobywarką, nie listę możliwości budynku; wyczerpane złoże nadal się liczy (to kamień milowy). |
+| S1 | `STRUCTURE.tileIndex` w wyniku wskazania | Pole pod kursorem (duch podąża za kursorem po budynkach). |
+| S2 | Kamera układu | Środek w gwieździe, kadr wszystkich orbit; `focusBodyId` dotyczy kamery planety (poprawiony komentarz w `view.ts`). |
+| S3 | Modele dla rodzajów bez odpowiednika KayKit | Na razie `structure_tall`; FARM → `basemodule_A`, GAR → `cargodepot_A`, MLT → `water_storage` przyjęte. |
+| S4 | Postój Arki | Jak każdy statek: 1,25 R nad ciałem (port nie jest punktem dokowania). Osobna orbita postojowa później. |
+| S5 | Krzywa lotu przechodząca przez gwiazdę (np. e → f) | Znany problem domeny; poprawka w domenie później (K1). |
+| S6 | Obrót ducha budynku | Kolejność `tiles` (kotwica pierwsza) wyznacza orientację; bez osobnego pola obrotu. |
+| S7 | Etykiety ciał | DOM w pakiecie `render`, usuwany przy zamknięciu widoku. |
+| G1 | Warstwy mapy galaktyki | Później, przez nowe pole `ViewInput`. |
+| G2 | Polskie nazwy gwiazd | Ze słownika UI (`starNames`), przekazywane do widoku. |
+| G3 | Kamera po zaznaczeniu gwiazdy | Bez przesunięcia (później). |
+| G4 | Pierścień Mk III, zasięgi napędów jako liczby w domenie | Później; dziś Mk I 5 ly i Mk II 9 ly. |
+| G5 | Nazwy gwiazd graczy w mocku | Zostają nazwy systemów z kanwy („Alpha Centauri”); widok rozpoznaje gwiazdę główną. |
+| G6 | Kto liczy maszynę Atanora | Widok (podgląd budynku). Produkcja T3 w ekonomii zostaje na liczbach dokumentu (A3). Przeniesienie do mocka po F6. |
+| G7 | Tempo maszyny i wejścia z magazynu kolonii | Później; dziś własne takty na sekundę i nieograniczone wejścia. |
+| G8 | Kolory materiałów | Propozycja w `packages/render/src/atanor/style.ts`; do DS później. |
+
+## 5a. Znane problemy
+
+| ID | Problem | Gdzie |
+|---|---|---|
+| K1 | Łuk Béziera między ciałami może przejść przez gwiazdę | domena: `TransferSystem` / `BezierPath.arc` |
+| K2 | Nakładka 2D w widoku układu to drugi przebieg renderowania; `renderer.info` widzi tylko ostatni, więc liczniki pochodzą ze `stats()` widoku | `packages/render/src/system` |
+| K3 | Przy wczytaniu zapisu łazik w drodze zaczyna bieżący odcinek od nowa | domena: `RoverSystem` |
 
 ## 6. Pytania otwarte
 

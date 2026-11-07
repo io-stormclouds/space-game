@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<title>Harness · Atanor</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #0B0C10; color: #C5C6C7; font: 12px "JetBrains Mono", Consolas, monospace; }
+  #stage { position: absolute; inset: 0 320px 0 0; overflow: hidden; }
+  #side { position: absolute; top: 0; right: 0; bottom: 0; width: 320px; box-sizing: border-box; padding: 12px; background: #111419; border-left: 1px solid rgba(112,128,146,.24); }
+  #side button { font: inherit; font-size: 11px; color: #C5C6C7; background: #1F2833; border: 1px solid #3B4756; padding: 4px 8px; margin: 0 4px 6px 0; cursor: pointer; }
+  #side button:hover { border-color: #FFB000; color: #FFB000; }
+  #readout { white-space: pre; margin-top: 8px; line-height: 1.5; }
+</style>
+<script type="module">
+  import '@fontsource/jetbrains-mono/400.css';
+  import '@fontsource/jetbrains-mono/700.css';
+</script>
+</head>
+<body>
+<div id="stage"></div>
+<div id="side">
+  <div id="buttons"></div>
+  <div id="readout"></div>
+</div>
+<script type="module" src="./main.ts"></script>
+</body>
+</html>

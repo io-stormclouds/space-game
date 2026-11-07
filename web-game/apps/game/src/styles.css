@@ -11,6 +11,8 @@
 @import '@space-game/hud-design-system/css/resource-panel.css';
 @import '@space-game/hud-design-system/css/command-card.css';
 
+@import './game-hud.css';
+
 html,
 body {
   height: 100%;

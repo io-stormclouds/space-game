@@ -1,0 +1,15 @@
+{
+  "name": "@space-game/mock-server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Mock game server behind GameApi: fixed-step simulation, command log, save/load/replay, simulated players and market. Runs in a Web Worker.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./worker": "./src/worker.ts"
+  },
+  "dependencies": {
+    "@space-game/api": "*",
+    "@space-game/domain": "*"
+  }
+}

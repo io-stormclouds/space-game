@@ -71,7 +71,7 @@ function playFirstSession(stopAfterPort = false): Flow {
   f.ok({ type: 'BUILD', bodyId: TC_E, tileId: f.depositTile(TC_E, 'FER'), kind: 'MIN' });
   f.ok({ type: 'BUILD', bodyId: TC_E, tileId: f.depositTile(TC_E, 'KRI'), kind: 'ICE' });
   f.ok({ type: 'BUILD', bodyId: TC_E, tileId: f.depositTile(TC_E, 'SIL'), kind: 'SIT' });
-  f.runUntil(() => colonyObjectives(f.world, f.sim.rules).every((o) => o.done), 240);
+  f.runUntil(() => colonyObjectives(f.world, f.sim.rules, f.sim.grids).every((o) => o.done), 240);
   f.runUntil(() => f.sim.time >= 300, 300); // let the colony work until minute 300
   return f;
 }
@@ -85,7 +85,7 @@ describe('Canvas flow on the unified domain (W06 A: Tau Ceti)', () => {
     expect(ark.onboard).toEqual({ rovers: 2, shuttles: 1, probes: 1 });
     const hidden = f.world.bodies.filter((b) => b.revealed === false);
     expect(hidden.map((b) => b.unknownName)).toEqual(['Obiekt 1', 'Obiekt 2', 'Obiekt 3', 'Obiekt 4', 'Obiekt 5']);
-    expect(colonyObjectives(f.world, f.sim.rules).map((o) => o.done)).toEqual([false, false, false, false]);
+    expect(colonyObjectives(f.world, f.sim.rules, f.sim.grids).map((o) => o.done)).toEqual([false, false, false, false]);
     // grids from the scan board: b, c 252 tiles; d, f 362; e 642
     expect(f.sim.grids.get(TC_B)!.tiles).toHaveLength(252);
     expect(f.sim.grids.get(TC_E)!.tiles).toHaveLength(642);
@@ -127,7 +127,7 @@ describe('Canvas flow on the unified domain (W06 A: Tau Ceti)', () => {
 
   it('first colony: shuttle supplies, rovers build wind, habitat and three extractors; FER, SIL, KRI flow in', () => {
     const f = playFirstSession();
-    expect(colonyObjectives(f.world, f.sim.rules).every((o) => o.done)).toBe(true);
+    expect(colonyObjectives(f.world, f.sim.rules, f.sim.grids).every((o) => o.done)).toBe(true);
     const store = storageOf(f.world, TC_E);
     for (const code of ['FER', 'SIL', 'KRI']) {
       expect(f.log.some((e) => e.type === 'EXTRACTION_TICK' && e.resource === code)).toBe(true);

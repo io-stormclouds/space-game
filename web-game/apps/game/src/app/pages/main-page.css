@@ -1,0 +1,26 @@
+:host { display: block; height: 100%; }
+.page { display: grid; grid-template-rows: auto 1fr auto; height: 100%; }
+.stage { position: relative; display: grid; grid-template-columns: 340px minmax(0, 1fr) 340px; gap: var(--hud-space-6); padding: var(--hud-space-7) var(--hud-space-6) var(--hud-space-5); min-height: 0; }
+.catalog, .card { align-self: start; padding: var(--hud-space-6) var(--hud-space-5) var(--hud-space-6); display: flex; flex-direction: column; gap: var(--hud-space-3); }
+.card { align-self: end; }
+h1, h2 { margin: 0; }
+table { width: 100%; border-collapse: collapse; margin-top: var(--hud-space-4); font-size: var(--hud-font-size-label); }
+th { text-align: left; font-weight: var(--hud-font-weight-regular); color: var(--hud-color-text-dim); letter-spacing: var(--hud-tracking-label); text-transform: uppercase; padding: 4px 6px; border-bottom: 1px solid var(--hud-color-line); }
+td { padding: 4px 6px; border-bottom: 1px solid var(--hud-color-line-faint); text-transform: uppercase; letter-spacing: var(--hud-tracking-value); cursor: pointer; }
+tr:hover td { background: var(--hud-color-graphite); }
+tr.is-on td { background: var(--hud-color-signal-tint); color: var(--hud-color-signal); }
+.r { text-align: right; }
+.map { width: 100%; height: 100%; min-height: 0; }
+.ring { fill: none; stroke: var(--hud-color-line); stroke-dasharray: 3 5; }
+.ring-label, .star text { fill: var(--hud-color-text-dim); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; }
+.star { cursor: pointer; }
+.star circle { fill: var(--hud-color-text); }
+.star.is-on circle, .star.is-on text { fill: var(--hud-color-signal); }
+.bracket { fill: none; stroke: var(--hud-color-signal); stroke-width: 1.5; }
+.card-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.tag { padding: 2px 6px; border: 1px solid var(--hud-color-signal); color: var(--hud-color-signal); font-size: var(--hud-font-size-micro); font-weight: var(--hud-font-weight-bold); letter-spacing: var(--hud-tracking-label); text-transform: uppercase; }
+dl { margin: var(--hud-space-4) 0; display: grid; }
+dl div { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--hud-color-line-faint); }
+dt { color: var(--hud-color-text-dim); font-size: var(--hud-font-size-label); letter-spacing: var(--hud-tracking-label); text-transform: uppercase; }
+dd { margin: 0; font-weight: var(--hud-font-weight-bold); }
+.foot { display: flex; justify-content: space-between; padding: var(--hud-space-4) var(--hud-space-6); }

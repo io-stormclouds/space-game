@@ -1,0 +1,385 @@
+import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
+import type { Availability, BodyId, CatalogView, Structure, WorldState } from '@space-game/api';
+import type { CommandSlot, IconName } from '@space-game/ui';
+import { TEXT } from '../i18n/pl';
+import { buildingName, costText, reasonText } from './format';
+import { GameService } from './game.service';
+import { UiState } from './ui-state';
+
+export interface CardModel {
+  title: string;
+  context: string;
+  status: string;
+  slots: Array<CommandSlot | null>;
+}
+
+/** Letters for the build catalog, in order (view keys 1–4 stay free). */
+export const BUILD_KEYS = ['Q', 'W', 'E', 'R', 'A', 'S', 'D', 'F', 'Z', 'X', 'C', 'V', 'T', 'Y', 'U', 'I', 'O', 'P', 'G', 'H', 'J', 'K', 'L', 'B', 'N', 'M'];
+
+/** Order in which the shuttle loads the hold (proposal D3: 250 j. per trip). */
+const SHUTTLE_ORDER: Array<[string, number]> = [
+  ['FER', 100],
+  ['SIL', 70],
+  ['KRI', 40],
+  ['STA', 30],
+  ['BET', 10],
+];
+
+/**
+ * The command card for the current context (canvas boards: Arka-1 CC-01, Skaner CC-02, port,
+ * buildings, rovers, placement). Every command has a hotkey; a blocked one says why.
+ */
+@Injectable({ providedIn: 'root' })
+export class CommandsService {
+  private readonly t = inject(TEXT);
+  private readonly game = inject(GameService);
+  private readonly ui = inject(UiState);
+  /** Availability answers from the server, by kind (and "KIND@L" for upgrades). */
+  readonly availability = signal<Record<string, Availability>>({});
+
+  constructor() {
+    // Refresh availability when the world or the context changes (throttled by the snapshot rate).
+    effect(() => {
+      const snap = this.game.snapshot();
+      const body = this.ui.focusBodyId();
+      const sel = this.ui.selection();
+      const catalog = this.game.catalog();
+      if (!snap || !body || !catalog) return;
+      const kinds = catalog.buildings.filter((b) => b.buildable).map((b) => b.id);
+      if (sel.kind === 'STRUCTURE') {
+        const s = snap.world.structures.find((x) => x.id === sel.structureId);
+        if (s) kinds.push(`${s.kind}@${s.level + 1}`);
+      }
+      untracked(() => void this.game.availability(body, kinds).then((a) => this.availability.set(a)));
+    });
+  }
+
+  readonly card = computed<CardModel>(() => {
+    const t = this.t;
+    const snap = this.game.snapshot();
+    const world = snap?.world ?? null;
+    const catalog = this.game.catalog();
+    const sel = this.ui.selection();
+    const placement = this.ui.placement();
+    if (!world || !catalog) return { title: t.cmd.title, context: '—', status: '', slots: [] };
+
+    if (this.ui.view() === 'atanor') return this.atanorCard();
+    if (placement) return this.placementCard(placement.kind, world, catalog);
+    if (this.ui.buildMenu()) return this.buildCard(world, catalog);
+    if (sel.kind === 'STRUCTURE') {
+      const s = world.structures.find((x) => x.id === sel.structureId);
+      if (s) return s.kind === 'HQ' ? this.portCard(s, world, catalog) : this.structureCard(s, world, catalog);
+    }
+    if (sel.kind === 'ROVER') return this.roverCard(sel.roverId, world);
+    if (sel.kind === 'BODY' || sel.kind === 'TILE') {
+      const body = world.bodies.find((b) => b.id === sel.bodyId);
+      if (body && body.kind !== 'STAR' && world.scan.state === 'DONE') return this.scannerCard(sel.bodyId, world);
+    }
+    return this.mothershipCard(world, catalog);
+  });
+
+  /** How many of the card's commands are blocked (inspector hint). */
+  readonly blocked = computed(() => this.card().slots.filter((s) => s?.disabledReason).length);
+
+  private slot(id: string, label: string, hotkey: string, icon: IconName | undefined, opts: Partial<CommandSlot> & { run?: () => void }): CommandSlot {
+    const { run, ...rest } = opts;
+    return { id, label, hotkey, ...(icon ? { icon } : {}), ...rest, ...(run ? { onActivate: run } : {}) };
+  }
+
+  private locked(id: string, label: string, hotkey: string, reason: string, icon?: IconName): CommandSlot {
+    return this.slot(id, label, hotkey, icon, { disabledReason: reason });
+  }
+
+  /** Building view of the Fabryka atanorowa (W08 A): run, step, reset, recipe, speed. */
+  private atanorCard(): CardModel {
+    const t = this.t;
+    const c = t.commands;
+    const a = this.ui.atanor();
+    const r = this.ui.atanorReadout();
+    if (!a) return { title: t.cmd.title, context: t.atanor.tab, status: '', slots: [] };
+    const levels = a.levels();
+    const i = Math.max(0, levels.findIndex((l) => l.id === r?.levelId));
+    const next = levels[(i + 1) % levels.length]!;
+    const tps = r?.ticksPerSecond ?? 1.67;
+    const slots: Array<CommandSlot | null> = [
+      r?.playing
+        ? this.slot('pause', c.atanorPause.label, 'P', 'stop', { description: c.atanorPause.note, selected: true, run: () => a.pause() })
+        : this.slot('play', c.atanorPlay.label, 'P', 'produce', { variant: 'primary', description: c.atanorPlay.note, run: () => a.play() }),
+      this.slot('step', c.atanorStep.label, 'K', 'move', { description: c.atanorStep.note, run: () => a.step() }),
+      this.slot('reset', c.atanorReset.label, 'R', 'repeat', { description: c.atanorReset.note, run: () => a.reset() }),
+      this.slot('level', c.atanorLevel.label, 'L', 'research', {
+        description: c.atanorLevel.note(r?.levelName ?? '—'),
+        run: () => {
+          a.setLevel(next.recipeId ?? next.id);
+          this.ui.atanorLevel.set(next.recipeId ?? next.id);
+        },
+      }),
+      this.slot('faster', c.atanorFaster.label, 'F', 'upgrade', { description: c.atanorFaster.note(Math.round(tps * 10) / 10), run: () => a.setTicksPerSecond(tps >= 30 ? 1.67 : tps * 3) }),
+    ];
+    return { title: t.cmd.title, context: r ? `${r.recipeId ?? ''} ${r.levelName}`.trim() : t.atanor.tab, status: 'ATN', slots };
+  }
+
+  private mothershipCard(world: WorldState, catalog: CatalogView): CardModel {
+    const t = this.t;
+    const c = t.commands;
+    const ark = world.ships.find((s) => s.role === 'MOTHERSHIP');
+    if (!ark) return { title: t.cmd.title, context: t.selection.none, status: '', slots: [] };
+    const scan = world.scan.state;
+    const site = world.colony.siteBodyId;
+    const founded = world.colony.foundedAt !== null;
+    const atSite = ark.state === 'DOCKED' && ark.currentBodyId === site && site !== null;
+    const portPlaced = world.structures.some((s) => s.kind === 'HQ');
+    const used = Object.values(ark.cargo).reduce((s, q) => s + q, 0);
+    const load = this.shuttleLoad(world);
+    const slots: Array<CommandSlot | null> = [
+      scan === 'NONE'
+        ? this.slot('scan', c.scan.label, 'Q', 'research', { variant: 'primary', description: c.scan.note(catalog.colonization.scanMinutes), run: () => void this.game.command({ type: 'SCAN_SYSTEM', shipId: ark.id }) })
+        : this.locked('scan', c.scan.label, 'Q', scan === 'RUNNING' ? t.reject.SCAN_RUNNING : t.status.choose.title, 'research'),
+      this.locked('probe', c.probe.label, 'W', t.cmd.notYet),
+      ark.state === 'DOCKED' && scan !== 'RUNNING'
+        ? this.slot('fly', c.flyTo.label, 'E', 'move', { description: c.flyTo.note, selected: this.ui.targeting(), run: () => this.ui.targeting.set(!this.ui.targeting()) })
+        : this.locked('fly', c.flyTo.label, 'E', scan === 'RUNNING' ? t.reject.SCAN_RUNNING : t.reject.IN_TRANSIT, 'move'),
+      this.locked('stop', c.stop.label, 'S', t.cmd.notYet, 'stop'),
+      this.slot('hold', c.hold.label, 'L', undefined, { description: c.hold.note(used, ark.maxCargo, Object.keys(ark.cargo).length), run: () => this.ui.select({ kind: 'SHIP', shipId: ark.id }) }),
+      founded
+        ? this.slot('shuttle', c.shuttle.label, 'T', undefined, { description: c.shuttle.note(costText(load)), run: () => void this.callShuttle(world) })
+        : this.locked('shuttle', c.shuttle.label, 'T', site ? t.reject.NO_COLONY : t.reject.NO_COLONY_SITE),
+      scan !== 'DONE'
+        ? this.locked('colony', c.foundColony.label, 'C', t.reject.NOT_SCANNED, 'rally')
+        : !site
+          ? this.locked('colony', c.foundColony.label, 'C', t.reject.NO_COLONY_SITE, 'rally')
+          : portPlaced
+            ? this.locked('colony', c.foundColony.label, 'C', t.status.building.title, 'rally')
+            : !atSite
+              ? this.locked('colony', c.foundColony.label, 'C', `${t.reject.NO_SHIP}: ${ark.name} musi być na orbicie`, 'rally')
+              : this.slot('colony', c.foundColony.label, 'C', 'rally', { variant: 'primary', description: c.foundColony.note, run: () => this.ui.startPlacement('PORT') }),
+      this.locked('unload', c.unloadOrbit.label, 'R', c.unloadOrbit.note),
+    ];
+    return { title: t.cmd.title, context: ark.name, status: 'CC-01', slots };
+  }
+
+  private scannerCard(bodyId: BodyId, world: WorldState): CardModel {
+    const t = this.t;
+    const c = t.commands;
+    const body = world.bodies.find((b) => b.id === bodyId)!;
+    const canChoose = !world.colony.siteBodyId && !!body.profile && body.kind !== 'BELT';
+    const slots: Array<CommandSlot | null> = [
+      this.locked('probe', c.probe.label, 'W', t.cmd.notYet),
+      this.slot('zoom', c.zoom.label, 'Z', 'research', { description: c.zoom.note, run: () => this.ui.view.set('planet') }),
+      this.locked('compare', c.compare.label, 'V', t.cmd.notYet),
+      this.locked('mark', c.mark.label, 'M', t.cmd.notYet),
+      canChoose
+        ? this.slot('choose', t.scan.choose, 'Enter', 'rally', { variant: 'primary', description: t.scan.final, run: () => void this.chooseSite(bodyId) })
+        : null,
+    ];
+    return { title: t.cmd.title, context: `Skaner · ${body.name}`, status: 'CC-02', slots };
+  }
+
+  private placementCard(kind: string, world: WorldState, catalog: CatalogView): CardModel {
+    const t = this.t;
+    const c = t.commands;
+    const p = this.ui.placement()!;
+    const isPort = kind === 'PORT';
+    const name = isPort ? buildingName(catalog, 'HQ') : buildingName(catalog, kind);
+    const cost = isPort ? catalog.colonization.portCost : (catalog.buildings.find((b) => b.id === kind)?.levels[0]?.cost ?? {});
+    const minutes = isPort ? catalog.colonization.portBuildMinutes : (catalog.buildings.find((b) => b.id === kind)?.levels[0]?.buildTime ?? 0);
+    const preview = p.preview;
+    const reason = preview && !preview.valid ? reasonText(t, preview.reason as never, preview.detail) : '';
+    const slots: Array<CommandSlot | null> = [
+      this.slot('place', isPort ? c.placePort.label : name, 'Enter', 'build', {
+        variant: 'primary',
+        description: c.placePort.note(costText(cost), Math.round(minutes)),
+        ...(reason ? { disabledReason: reason } : {}),
+        run: () => void this.confirmPlacement(world),
+      }),
+      this.slot('rotate', c.rotate.label, 'R', 'repeat', { description: c.rotate.note, run: () => this.ui.rotate() }),
+      this.slot('auto', c.autoPlace.label, 'A', 'rally', { description: c.autoPlace.note, run: () => void this.autoPlace(world) }),
+      this.slot('cancel', c.cancel.label, 'Esc', 'cancel', { variant: 'danger', description: c.cancel.note, run: () => this.ui.placement.set(null) }),
+    ];
+    return { title: t.cmd.title, context: name, status: p.preview ? `POLE ${p.preview.tileIndex}` : '', slots };
+  }
+
+  private buildCard(world: WorldState, catalog: CatalogView): CardModel {
+    const t = this.t;
+    const back = this.slot('back', t.commands.back.label, 'Esc', 'cancel', { description: t.commands.back.note, run: () => this.ui.buildMenu.set(false) });
+    return { title: t.cmd.title, context: t.catalog.title(this.bodyLabel(world)), status: '', slots: [back] };
+  }
+
+  private portCard(s: Structure, world: WorldState, catalog: CatalogView): CardModel {
+    const t = this.t;
+    const c = t.commands;
+    const rover = catalog.rover;
+    const avail = this.availability()[`HQ@${s.level + 1}`];
+    const next = catalog.buildings.find((b) => b.id === 'HQ')?.levels[s.level];
+    const load = this.shuttleLoad(world);
+    const slots: Array<CommandSlot | null> = [
+      this.slot('produce', c.produceRover.label, 'Q', 'produce', {
+        variant: 'primary',
+        cost: Object.entries(rover.cost).map(([code, amount]) => ({ code, amount })),
+        description: c.produceRover.note(costText(rover.cost), rover.buildTime),
+        run: () => void this.game.command({ type: 'PRODUCE_ROVER', bodyId: s.bodyId }),
+      }),
+      this.slot('call', c.callShuttle.label, 'T', 'move', { description: c.callShuttle.note(costText(load)), run: () => void this.callShuttle(world) }),
+      this.upgradeSlot(s, next, avail),
+      this.slot('build', c.build.label, 'B', 'build', { description: c.build.note, run: () => this.ui.buildMenu.set(true) }),
+      this.locked('report', c.report.label, 'R', t.cmd.notYet),
+      this.slot('hold', c.hold.label, 'L', undefined, { description: `${t.selection.hold} Arki-1`, run: () => this.selectArk(world) }),
+    ];
+    return { title: t.cmd.title, context: `${buildingName(catalog, 'HQ')} · poz. ${s.level || 1}`, status: s.id.split('@')[1] ?? '', slots };
+  }
+
+  private structureCard(s: Structure, world: WorldState, catalog: CatalogView): CardModel {
+    const t = this.t;
+    const c = t.commands;
+    const def = catalog.buildings.find((b) => b.id === s.kind);
+    const name = def?.name ?? s.kind;
+    const slots: Array<CommandSlot | null> = [];
+    if (s.state === 'ACTIVE') {
+      slots.push(this.upgradeSlot(s, def?.levels[s.level], this.availability()[`${s.kind}@${s.level + 1}`]));
+      if ((def?.recipes.length ?? 0) > 1) {
+        const i = Math.max(0, def!.recipes.indexOf(s.recipe ?? ''));
+        const nextRecipe = def!.recipes[(i + 1) % def!.recipes.length]!;
+        slots.push(this.slot('recipe', c.recipe.label(nextRecipe), 'P', 'repeat', { description: c.recipe.note, run: () => void this.game.command({ type: 'SET_RECIPE', structureId: s.id, recipe: nextRecipe }) }));
+      }
+      if (s.kind === 'ATN') slots.push(this.slot('atanor', c.atanor.label, 'A', 'research', { description: c.atanor.note, run: () => this.ui.view.set('atanor') }));
+      slots.push(this.slot('demolish', c.demolish.label, 'X', 'cancel', { variant: 'danger', description: c.demolish.note, run: () => void this.game.command({ type: 'DEMOLISH', structureId: s.id }) }));
+    } else {
+      const idle = world.rovers.find((r) => r.bodyId === s.bodyId && r.state === 'IDLE' && !r.job);
+      slots.push(
+        idle
+          ? this.slot('addRover', c.addRover.label, 'A', 'harvest', { variant: 'primary', description: c.addRover.note, run: () => void this.game.command({ type: 'ASSIGN_ROVER', roverId: idle.id, structureId: s.id }) })
+          : this.locked('addRover', c.addRover.label, 'A', t.reject.ROVER_MOVING, 'harvest'),
+        this.slot('cancelBuild', c.cancelBuild.label, 'X', 'cancel', { variant: 'danger', description: c.cancelBuild.note, run: () => void this.game.command({ type: 'CANCEL_CONSTRUCTION', structureId: s.id }) }),
+      );
+    }
+    return { title: t.cmd.title, context: `${name} · poz. ${Math.max(1, s.level)}`, status: s.id.split('@')[1] ?? '', slots };
+  }
+
+  private roverCard(roverId: string, world: WorldState): CardModel {
+    const t = this.t;
+    const c = t.commands;
+    const r = world.rovers.find((x) => x.id === roverId);
+    if (!r) return { title: t.cmd.title, context: '—', status: '', slots: [] };
+    const slots: Array<CommandSlot | null> = [
+      this.slot('build', c.build.label, 'B', 'build', { variant: 'primary', description: c.build.note, run: () => this.ui.buildMenu.set(true) }),
+      this.locked('moveTo', c.moveTo.label, 'J', t.cmd.notYet, 'move'),
+    ];
+    return { title: t.cmd.title, context: r.name, status: r.id, slots };
+  }
+
+  private upgradeSlot(s: Structure, next: CatalogView['buildings'][number]['levels'][number] | undefined, avail: Availability | undefined): CommandSlot {
+    const t = this.t;
+    const c = t.commands;
+    const L = s.level + 1;
+    if (!next) return this.locked('upgrade', c.upgrade.label(L), 'U', t.reject.MAX_LEVEL, 'upgrade');
+    const cost = Object.entries(next.cost).map(([code, amount]) => ({ code, amount }));
+    return this.slot('upgrade', c.upgrade.label(L), 'U', 'upgrade', {
+      cost,
+      description: c.upgrade.note(costText(next.cost), t.units.min(next.buildTime)),
+      ...(avail && !avail.ok ? { disabledReason: reasonText(t, avail.reason, avail.detail) } : {}),
+      run: () => void this.game.command({ type: 'UPGRADE', structureId: s.id }),
+    });
+  }
+
+  /** Build catalog rows (panel next to the card): every buildable kind with its availability. */
+  readonly buildList = computed(() => {
+    const catalog = this.game.catalog();
+    const avail = this.availability();
+    if (!catalog) return [];
+    return catalog.buildings
+      .filter((b) => b.buildable)
+      .sort((a, b) => a.era - b.era)
+      .map((b, i) => {
+        const a = avail[b.id];
+        const l1 = b.levels[0]!;
+        return {
+          id: b.id,
+          name: b.name,
+          era: b.era,
+          footprint: b.footprint,
+          hotkey: BUILD_KEYS[i] ?? '',
+          cost: Object.entries(l1.cost).map(([code, amount]) => ({ code, amount, missing: a?.reason === 'NO_RESOURCES' })),
+          power: l1.power,
+          crew: l1.crew,
+          minutes: l1.buildTime,
+          reason: a && !a.ok ? reasonText(this.t, a.reason, a.detail) : '',
+        };
+      });
+  });
+
+  async chooseSite(bodyId: BodyId): Promise<void> {
+    const res = await this.game.command({ type: 'CHOOSE_COLONY_SITE', bodyId });
+    const ark = this.game.world()?.ships.find((s) => s.role === 'MOTHERSHIP');
+    if (res.ok && ark && ark.currentBodyId !== bodyId) await this.game.command({ type: 'MOVE_SHIP', shipId: ark.id, to: bodyId });
+  }
+
+  /** Places the current placement on its previewed tile, or the suggested one. */
+  async confirmPlacement(world: WorldState): Promise<void> {
+    const p = this.ui.placement();
+    const body = this.placementBody(world);
+    if (!p || !body) return;
+    const tile = p.preview?.tileIndex ?? (await this.game.suggestTile(body, p.kind))?.tileIndex;
+    if (tile === undefined) return;
+    await this.place(body, p.kind, tile, p.rotation);
+  }
+
+  /**
+   * Nearest valid tile; for an extractor, preferably on a material the colony goal still misses
+   * (a Kopalnia goes to Ferryt before Kupryt), else the nearest deposit it can work.
+   */
+  async autoPlace(world: WorldState): Promise<void> {
+    const p = this.ui.placement();
+    const body = this.placementBody(world);
+    if (!p || !body) return;
+    const extracts = this.game.catalog()?.buildings.find((b) => b.id === p.kind)?.extracts.map((e) => e.material) ?? [];
+    const missing = this.game.snapshot()?.objectives.find((o) => o.id === 'extract')?.missing ?? [];
+    const wanted = missing.find((m) => extracts.includes(m));
+    const s = (wanted ? await this.game.suggestTile(body, p.kind, wanted) : null) ?? (await this.game.suggestTile(body, p.kind));
+    if (s) await this.place(body, p.kind, s.tileIndex, s.rotation);
+  }
+
+  async place(bodyId: BodyId, kind: string, tileIndex: number, rotation: number): Promise<boolean> {
+    const tileId = `${bodyId}:${tileIndex}` as never;
+    const res =
+      kind === 'PORT'
+        ? await this.game.command({ type: 'PLACE_SPACEPORT', bodyId, tileId, rotation })
+        : await this.game.command({ type: 'BUILD', bodyId, tileId, kind, rotation });
+    if (res.ok) this.ui.placement.set(null);
+    return res.ok;
+  }
+
+  placementBody(world: WorldState): BodyId | null {
+    return this.ui.placement()?.kind === 'PORT' ? world.colony.siteBodyId : this.ui.focusBodyId();
+  }
+
+  async callShuttle(world: WorldState): Promise<void> {
+    const body = world.colony.siteBodyId;
+    if (body) await this.game.command({ type: 'CALL_SHUTTLE', bodyId: body, cargo: this.shuttleLoad(world) });
+  }
+
+  /** What the shuttle takes on its next trip: the order of SHUTTLE_ORDER, up to its capacity. */
+  shuttleLoad(world: WorldState): Record<string, number> {
+    const ark = world.ships.find((s) => s.role === 'MOTHERSHIP');
+    const cap = this.game.catalog()?.colonization.shuttleCapacity ?? 250;
+    const out: Record<string, number> = {};
+    let left = cap;
+    for (const [code, max] of SHUTTLE_ORDER) {
+      const q = Math.min(max, ark?.cargo[code] ?? 0, left);
+      if (q > 0) {
+        out[code] = q;
+        left -= q;
+      }
+    }
+    return out;
+  }
+
+  private selectArk(world: WorldState): void {
+    const ark = world.ships.find((s) => s.role === 'MOTHERSHIP');
+    if (ark) this.ui.select({ kind: 'SHIP', shipId: ark.id });
+  }
+
+  private bodyLabel(world: WorldState): string {
+    const id = this.ui.focusBodyId();
+    return world.bodies.find((b) => b.id === id)?.name ?? '—';
+  }
+}

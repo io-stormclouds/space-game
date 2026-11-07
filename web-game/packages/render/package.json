@@ -1,0 +1,20 @@
+{
+  "name": "@space-game/render",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Scenes: system/planet (Three.js, from the 3D PoC), galaxy (Three.js), Atanor (PixiJS, lazy). No game state: reads the world snapshot and geometry from the domain.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@space-game/api": "*",
+    "@space-game/domain": "*",
+    "pixi.js": "^8.22.0",
+    "three": "^0.187.0"
+  },
+  "devDependencies": {
+    "@space-game/hud-design-system": "file:../../../design-system",
+    "@types/three": "^0.187.0"
+  }
+}

@@ -32,6 +32,15 @@ export interface CommandSlot {
   onActivate?: () => void;
 }
 
+/** Hotkey labels that differ from `KeyboardEvent.key` (the badge shows the short form). */
+const KEY_ALIASES: Readonly<Record<string, string>> = { ESC: 'ESCAPE', SPACJA: ' ', DEL: 'DELETE' };
+
+/** Normalised key of a hotkey label or a KeyboardEvent.key, for comparison. */
+export function normalizeKey(key: string): string {
+  const k = key.toUpperCase();
+  return KEY_ALIASES[k] ?? k;
+}
+
 function isTypingTarget(t: EventTarget | null): boolean {
   if (!(t instanceof HTMLElement)) return false;
   return t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName);
@@ -154,9 +163,9 @@ export class CommandCard {
   protected onKey(e: KeyboardEvent): void {
     if (!this.hotkeys()) return;
     if (e.defaultPrevented || e.repeat || e.altKey || e.ctrlKey || e.metaKey || isTypingTarget(e.target)) return;
-    const key = e.key.toUpperCase();
+    const key = normalizeKey(e.key);
     const live = this.cells().filter((s): s is CommandSlot => s !== null);
-    const index = live.findIndex((s) => s.hotkey?.toUpperCase() === key);
+    const index = live.findIndex((s) => s.hotkey !== undefined && normalizeKey(s.hotkey) === key);
     if (index < 0) return;
     e.preventDefault();
     this.inspectId.set(live[index]!.id);

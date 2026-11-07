@@ -19,6 +19,7 @@
           "options": {
             "browser": "apps/game/src/main.ts",
             "tsConfig": "apps/game/tsconfig.app.json",
+            "webWorkerTsConfig": "apps/game/tsconfig.worker.json",
             "outputPath": "dist/game",
             "assets": [
               {

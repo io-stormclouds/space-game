@@ -1,0 +1,13 @@
+{
+  "name": "@space-game/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "GameApi contract between the UI and the game server (mock now, real server later), plus the Web Worker client.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@space-game/domain": "*"
+  }
+}

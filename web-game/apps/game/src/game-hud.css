@@ -1,0 +1,46 @@
+/* Shared HUD layout of the game screen (canvas boards 3–9). Uses only DS tokens. */
+
+.game { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: 48px 1fr 240px; height: 100%; overflow: hidden; background: var(--hud-color-void); }
+.game__world { position: relative; grid-row: 1 / 4; grid-column: 1; min-height: 0; }
+.game__top { grid-row: 1; grid-column: 1; z-index: 2; }
+.game__float { grid-row: 2; grid-column: 1; z-index: 2; position: relative; pointer-events: none; }
+.game__float > * { pointer-events: auto; }
+.game__dock { grid-row: 3; grid-column: 1; z-index: 2; display: grid; grid-template-columns: 220px minmax(0, 1fr) auto; grid-template-rows: minmax(0, 1fr); gap: var(--hud-space-5); padding: var(--hud-space-3) var(--hud-space-6) var(--hud-space-6); align-items: stretch; min-height: 0; }
+.game__dock > * { min-height: 0; }
+
+.panel { padding: var(--hud-space-6) var(--hud-space-5) var(--hud-space-5); display: flex; flex-direction: column; gap: var(--hud-space-3); min-width: 0; }
+.panel h2, .panel h3 { margin: 0; }
+.panel--left { position: absolute; left: var(--hud-space-6); top: var(--hud-space-7); width: 300px; }
+.panel--right { position: absolute; right: var(--hud-space-6); top: var(--hud-space-7); width: 360px; max-height: calc(100% - 48px); }
+/* Scrolling lives inside the frame: overflow on the frame itself would clip its "[ LABEL ]" tab. */
+.scroll { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: var(--hud-space-3); }
+.panel--center { position: absolute; left: 50%; top: var(--hud-space-7); transform: translateX(-50%); width: 500px; }
+
+/* Segmented control: "II ×1 ×60 ×600", "Planeta Układ Galaktyka". */
+.seg { display: inline-flex; align-self: center; border: 1px solid var(--hud-color-line); }
+.seg button { min-width: 44px; height: 30px; padding: 0 10px; background: var(--hud-color-hull); border: 0; border-right: 1px solid var(--hud-color-line); border-bottom: 2px solid transparent; color: var(--hud-color-text-dim); font: inherit; font-size: var(--hud-font-size-label); font-weight: var(--hud-font-weight-bold); letter-spacing: var(--hud-tracking-title); text-transform: uppercase; cursor: pointer; }
+.seg button:last-child { border-right: 0; }
+.seg button:hover:not(:disabled) { color: var(--hud-color-text); background: var(--hud-color-graphite); }
+.seg button[aria-pressed='true'], .seg button[aria-current='page'] { background: var(--hud-color-signal-tint); color: var(--hud-color-signal); border-bottom-color: var(--hud-color-signal); }
+.seg button:disabled { color: var(--hud-color-text-faint); cursor: not-allowed; }
+.seg button:focus-visible { outline: 2px solid var(--hud-color-signal); outline-offset: -2px; }
+
+/* Key/value rows. */
+.kv { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: var(--hud-space-7); }
+.kv > div { display: flex; justify-content: space-between; gap: var(--hud-space-4); padding: 5px 0; border-bottom: 1px solid var(--hud-color-line-faint); font-size: var(--hud-font-size-label); }
+.kv dt, .k { color: var(--hud-color-text-dim); letter-spacing: var(--hud-tracking-label); text-transform: uppercase; }
+.kv dd { margin: 0; font-weight: var(--hud-font-weight-bold); }
+
+.tagline { display: flex; flex-wrap: wrap; gap: var(--hud-space-3); }
+.tag { padding: 2px 6px; border: 1px solid var(--hud-color-metal); font-size: var(--hud-font-size-micro); font-weight: var(--hud-font-weight-bold); letter-spacing: var(--hud-tracking-label); text-transform: uppercase; white-space: nowrap; }
+.tag--sg { border-color: var(--hud-color-signal); color: var(--hud-color-signal); }
+.tag--al { border-color: var(--hud-color-alert); color: var(--hud-color-alert); }
+.tag--ok { border-color: var(--hud-color-text-dim); }
+
+.sg { color: var(--hud-color-signal); }
+.al { color: var(--hud-color-alert); }
+.dim { color: var(--hud-color-text-dim); }
+.list { list-style: none; margin: 0; padding: 0; display: grid; }
+.list > li { display: grid; gap: var(--hud-space-4); align-items: center; padding: 6px 0; border-bottom: 1px solid var(--hud-color-line-faint); font-size: var(--hud-font-size-label); }
+.bar-meter { height: 4px; background: var(--hud-color-graphite); }
+.bar-meter > span { display: block; height: 100%; background: var(--hud-color-signal); }
