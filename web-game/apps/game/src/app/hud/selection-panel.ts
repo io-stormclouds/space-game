@@ -46,7 +46,7 @@ const round1 = (n: number) => (Math.round(n * 10) / 10).toLocaleString('pl-PL');
               [hotkey]="b.hotkey"
               [cost]="b.cost"
               [disabledReason]="b.reason || undefined"
-              (activated)="ui.startPlacement(b.id)"
+              (activated)="commands.startPlacement(b.id)"
             />
           }
         </div>
@@ -58,6 +58,10 @@ const round1 = (n: number) => (Math.round(n * 10) / 10).toLocaleString('pl-PL');
             <dl class="kv">
               <div><dt>{{ t.selection.fuel }}</dt><dd>{{ round(s.fuel) }} / {{ s.maxFuel }}</dd></div>
               <div><dt>{{ t.selection.hold }}</dt><dd>{{ used(s.cargo) }} / {{ s.maxCargo }} j.</dd></div>
+              @if (s.state === 'IN_TRANSIT' && s.transfer; as plan) {
+                <div><dt>{{ t.selection.target }}</dt><dd>{{ bodyLabel(plan.toBodyId) }}</dd></div>
+                <div><dt>{{ t.selection.eta }}</dt><dd data-ship="eta">{{ t.units.min(max0(plan.startTime + plan.estimatedDuration - game.time())) }}</dd></div>
+              }
             </dl>
             @if (s.onboard) {
               <div class="tagline"><span class="k">{{ t.selection.onboard }}</span>
@@ -110,6 +114,50 @@ const round1 = (n: number) => (Math.round(n * 10) / 10).toLocaleString('pl-PL');
               </ul>
             }
           }
+          @case ('tile') {
+            @let b = view().body!;
+            @let ti = commands.tile();
+            <div class="head" [attr.data-tile]="view().tileIndex">
+              <h2 class="hud-title sg">{{ t.selection.tile(view().tileIndex) }}</h2>
+              <span class="hud-micro">{{ b.name }}{{ ti ? ' · ' + t.selection.tileKind[ti.kind] : '' }}</span>
+              <span class="tag" [class.tag--sg]="!!ti?.deposit">{{ ti?.structureId ? t.selection.tileTaken : ti?.deposit ? ti!.deposit!.material : t.selection.tileFree }}</span>
+            </div>
+            @if (!ti) {
+              <span class="dim">{{ t.selection.checking }}</span>
+            } @else {
+              <div class="split">
+                <div class="stack">
+                  @if (ti.deposit; as d) {
+                    <dl class="kv">
+                      <div><dt>{{ t.selection.deposit }}</dt><dd data-tile-deposit>{{ d.material }} · {{ materialName(d.material) }}</dd></div>
+                      <div><dt>{{ t.selection.left }}</dt><dd>{{ round(d.remaining) }} / {{ d.initial }}</dd></div>
+                    </dl>
+                    <div class="bar-meter"><span [style.width.%]="d.initial ? (100 * d.remaining) / d.initial : 0"></span></div>
+                  } @else {
+                    <span class="dim" data-tile-deposit>{{ t.selection.noDeposit }}</span>
+                  }
+                  @if (standing(); as st) {
+                    <ul class="list structures">
+                      <li (click)="ui.select({ kind: 'STRUCTURE', structureId: st.id })" [attr.data-structure]="st.id">
+                        <span>{{ t.selection.standsHere }}: {{ st.name }}</span><span class="dim">L{{ st.level || 1 }}</span><span class="tag" [class.tag--sg]="st.state !== 'ACTIVE'">{{ st.stateText }}</span>
+                      </li>
+                    </ul>
+                  }
+                  <span class="hud-micro">{{ t.selection.onBody(view().structures.length) }}</span>
+                </div>
+                <div class="stack">
+                  <span class="k">{{ t.selection.fits }}</span>
+                  <div class="tagline" data-tile-fits>
+                    @for (o of fits(); track o.kind) {
+                      <span class="tag" [class.tag--sg]="!!o.extracts">{{ o.name }}</span>
+                    } @empty {
+                      <span class="dim">{{ t.selection.fitsNone }}</span>
+                    }
+                  </div>
+                </div>
+              </div>
+            }
+          }
           @case ('structure') {
             @let x = view().structure!;
             <div class="head">
@@ -125,6 +173,9 @@ const round1 = (n: number) => (Math.round(n * 10) / 10).toLocaleString('pl-PL');
               @if (x.recipe) {<div><dt>{{ t.selection.recipe }}</dt><dd>{{ x.recipe }}</dd></div>}
               @if (x.storage) {<div><dt>{{ t.selection.storage }}</dt><dd>{{ x.storage }}</dd></div>}
             </dl>
+            @if (x.s.kind === 'LAND') {
+              <p class="note dim">{{ t.selection.padNote }}</p>
+            }
             @if (x.next) {
               <span class="hud-micro">{{ x.next.title }}</span>
               <div class="tagline">@for (c of x.next.cost; track c.code) {<span class="tag" [class.tag--al]="c.missing" [class.tag--ok]="!c.missing">{{ c.code }} {{ c.amount }}</span>}</div>
@@ -136,6 +187,9 @@ const round1 = (n: number) => (Math.round(n * 10) / 10).toLocaleString('pl-PL');
             <dl class="kv">
               <div><dt>{{ t.selection.job }}</dt><dd>{{ view().job }}</dd></div>
               <div><dt>{{ t.selection.tile(r.tileIndex) }}</dt><dd>{{ bodyLabel(r.bodyId) }}</dd></div>
+              @if (r.state === 'MOVING') {
+                <div><dt>{{ t.selection.toGo }}</dt><dd data-rover="to-go">{{ t.selection.tilesToGo(r.path.length) }}</dd></div>
+              }
             </dl>
           }
           @default {
@@ -159,6 +213,7 @@ const round1 = (n: number) => (Math.round(n * 10) / 10).toLocaleString('pl-PL');
     .structures li:hover { background: var(--hud-color-graphite); }
     .structures .tag { justify-self: end; }
     .catalog { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--hud-space-3); }
+    .stack { display: flex; flex-direction: column; gap: var(--hud-space-3); min-width: 0; }
   `,
 })
 export class SelectionPanel {
@@ -178,7 +233,7 @@ export class SelectionPanel {
     const w = this.game.world();
     const cat = this.game.catalog();
     const sel = this.ui.selection();
-    const empty = { kind: 'none' as const, ship: null, body: null, structure: null, rover: null, structures: [], rovers: [], canChoose: false, job: '' };
+    const empty = { kind: 'none' as const, ship: null, body: null, structure: null, rover: null, structures: [], rovers: [], canChoose: false, job: '', tileIndex: -1 };
     if (!w) return empty;
     if (sel.kind === 'SHIP') {
       const ship = w.ships.find((s) => s.id === sel.shipId);
@@ -193,7 +248,12 @@ export class SelectionPanel {
       const rovers = w.rovers
         .filter((r) => r.bodyId === body.id)
         .map((r) => ({ id: r.id, name: r.name, stateText: this.t.selection.roverState[r.state] ?? r.state, where: this.t.selection.tile(r.tileIndex) }));
-      return { ...empty, kind: 'body' as const, body, structures, rovers, canChoose: !w.colony.siteBodyId && w.scan.state === 'DONE' && !!body.surfaceGrid };
+      const canChoose = !w.colony.siteBodyId && w.scan.state === 'DONE' && !!body.surfaceGrid;
+      // a tile of a revealed grid body: the tile panel (3D PoC); before the scan, the body
+      if (sel.kind === 'TILE' && body.surfaceGrid && body.revealed !== false && !canChoose) {
+        return { ...empty, kind: 'tile' as const, body, structures, rovers, tileIndex: sel.tileIndex };
+      }
+      return { ...empty, kind: 'body' as const, body, structures, rovers, canChoose };
     }
     if (sel.kind === 'STRUCTURE') {
       const s = w.structures.find((x) => x.id === sel.structureId);
@@ -228,6 +288,31 @@ export class SelectionPanel {
     return empty;
   });
 
+  /** What can stand on the selected tile now (server check), extractors of its deposit first. */
+  protected readonly fits = computed(() => {
+    const ti = this.commands.tile();
+    const cat = this.game.catalog();
+    if (!ti) return [];
+    return ti.options
+      .filter((o) => o.ok)
+      .sort((a, b) => Number(!!b.extracts && !!ti.deposit) - Number(!!a.extracts && !!ti.deposit))
+      .map((o) => ({ kind: o.kind, name: buildingName(cat, o.kind), extracts: ti.deposit && o.extracts ? o.extracts : null }));
+  });
+
+  /** The structure on the selected tile (3D PoC tile panel), as listed in the body view. */
+  protected readonly standing = computed(() => {
+    const id = this.commands.tile()?.structureId;
+    return id ? (this.view().structures.find((s) => s.id === id) ?? null) : null;
+  });
+
+  protected materialName(code: string): string {
+    return this.game.catalog()?.materials.find((m) => m.id === code)?.name ?? code;
+  }
+
+  protected max0(n: number): number {
+    return Math.max(0, n);
+  }
+
   /** Build catalog keys (the catalog is not a command card, so it listens itself). */
   protected onKey(e: KeyboardEvent): void {
     if (!this.ui.buildMenu() || e.defaultPrevented || e.ctrlKey || e.altKey || e.metaKey || e.repeat) return;
@@ -236,7 +321,7 @@ export class SelectionPanel {
     const row = this.commands.buildList()[i];
     if (!row || row.reason) return;
     e.preventDefault();
-    this.ui.startPlacement(row.id);
+    this.commands.startPlacement(row.id);
   }
 
   protected stateText(s: Structure): string {

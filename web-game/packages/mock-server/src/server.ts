@@ -14,6 +14,7 @@ import type {
   ScenarioId,
   StepStats,
   Tempo,
+  TileInfo,
 } from '@space-game/api';
 import {
   POC_SCENARIO,
@@ -307,6 +308,40 @@ export class MockServer {
     const size = this.sim.rules.has(kind) ? this.sim.rules.spec(kind).footprint : 1;
     const tiles = grid ? footprintTiles(grid, tileIndex, size, rotation) ?? [] : [];
     return { ok: false, reason: check.reason, ...(check.detail ? { detail: check.detail } : {}), tiles };
+  }
+
+  /**
+   * One surface tile for the tile panel (3D PoC `tile-panel`): shape, deposit with what is left,
+   * what stands on it, and every buildable kind checked here (rotation 0), extractors with the
+   * material they would take from this tile.
+   */
+  tileInfo(bodyId: BodyId, tileIndex: number): TileInfo | null {
+    const tile = this.sim.grids.get(bodyId)?.tiles[tileIndex];
+    if (!tile) return null;
+    const w = this.sim.world;
+    const rules = this.sim.rules;
+    const owner = w.structures.find((s) => s.bodyId === bodyId && s.tiles.includes(tile.id));
+    const options = rules.buildableKinds().map((kind) => {
+      const p = this.previewBuild(bodyId, tileIndex, kind, 0);
+      const ext = rules.extraction(kind);
+      const anywhere = rules.extractsAnywhere(kind);
+      const match = tile.deposit ? ext.find((e) => e.material === tile.deposit!.resource) : anywhere;
+      return {
+        kind,
+        ok: p.ok,
+        ...(p.reason ? { reason: p.reason } : {}),
+        ...(p.detail ? { detail: p.detail } : {}),
+        ...(match ? { extracts: match.material } : {}),
+      };
+    });
+    return {
+      bodyId,
+      index: tile.index,
+      kind: tile.kind,
+      deposit: tile.deposit ? { material: tile.deposit.resource, initial: tile.deposit.amount, remaining: w.deposits[tile.id] ?? tile.deposit.amount } : null,
+      structureId: owner?.id ?? null,
+      options,
+    };
   }
 
   /**

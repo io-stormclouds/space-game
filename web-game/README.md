@@ -19,6 +19,7 @@ npm run check        # typy, testy, build produkcyjny i e2e, w tej kolejności
   - `Esc`: anuluj;
   - `` ` ``: nakładka wydajności;
   - `F2`: panel projektanta (parametry ekonomii, tabele dokumentu, przepływy, dziennik, Atanor, plik zapisu);
+  - na planecie (jak w 3D PoC): kliknięcie pola otwiera panel pola; `Enter` stawia wydobywarkę złoża, `D` lądowisko, `B` katalog wycelowany w pole, `J` wysyła łazik; prawy przycisk na polu przy zaznaczonym łaziku: jazda; przy zaznaczonym statku prawy przycisk na ciele: lot;
   - rozkazy mają klawisze pokazane na karcie.
 
 ## Skrypty

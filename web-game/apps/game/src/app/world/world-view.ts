@@ -12,6 +12,7 @@ import {
   untracked,
   viewChild,
 } from '@angular/core';
+import type { RoverId } from '@space-game/api';
 import { RenderHost, isAtanorControls, type PickResult, type ViewInput } from '@space-game/render';
 import { VIEW_FACTORIES } from './view-factories.token';
 import { CommandsService } from '../game/commands';
@@ -26,7 +27,23 @@ export { VIEW_FACTORIES };
 /** Real pixels a pointer may move between down and up and still count as a click (PoC: 5 px). */
 const DRAG_PX = 5;
 
-type DevWindow = Window & { wgWorld?: { screenOf(id: string): { x: number; y: number } | null } };
+type Point = { x: number; y: number };
+type ScenePoint = { x: number; y: number; depth: number; visible: boolean };
+/** The planet/system scene as the dev hook reads it (`SystemView.internals`). */
+interface SceneProbe {
+  screenOf(id: string): ScenePoint | null;
+  screenOfUnit(id: string): ScenePoint | null;
+  screenOfLocal(id: string, p: { x: number; y: number; z: number }): ScenePoint | null;
+  gridOf(id: string): { radius: number; tiles: ReadonlyArray<{ index: number; center: { x: number; y: number; z: number } }> } | undefined;
+}
+type DevWindow = Window & {
+  wgWorld?: {
+    screenOf(id: string): Point | null;
+    screenOfUnit(id: string): Point | null;
+    /** Tiles of the body's near side on the page, nearest to the camera first. */
+    frontTiles(bodyId: string): Array<Point & { index: number }>;
+  };
+};
 
 /**
  * The world view: hosts the scenes (RenderHost), runs the animation loop, turns clicks into
@@ -85,7 +102,13 @@ export class WorldView {
         this.ready.set(true);
       }
       // dev builds only: where a body is on the page, for the e2e tests (like the harness's screenOf)
-      if (isDevMode()) (window as DevWindow).wgWorld = { screenOf: (id) => this.screenOf(id) };
+      if (isDevMode()) {
+        (window as DevWindow).wgWorld = {
+          screenOf: (id) => this.page(this.probe()?.screenOf(id)),
+          screenOfUnit: (id) => this.page(this.probe()?.screenOfUnit(id)),
+          frontTiles: (bodyId) => this.frontTiles(bodyId),
+        };
+      }
       const loop = (now: number) => {
         this.raf = requestAnimationFrame(loop);
         this.frame(now);
@@ -175,13 +198,30 @@ export class WorldView {
     });
   }
 
-  /** Page position of a body centre in the planet/system scene, or null when not visible. */
-  private screenOf(id: string): { x: number; y: number } | null {
-    const scene = (this.render?.currentView as { internals?: { screenOf(id: string): { x: number; y: number; visible: boolean } | null } } | null)?.internals;
-    const p = scene?.screenOf(id);
+  // dev hook (e2e): positions in the planet/system scene, in page pixels
+
+  private probe(): SceneProbe | null {
+    return (this.render?.currentView as { internals?: SceneProbe | null } | null)?.internals ?? null;
+  }
+
+  private page(p: ScenePoint | null | undefined): Point | null {
     if (!p?.visible) return null;
     const r = this.hostEl().nativeElement.getBoundingClientRect();
     return { x: r.left + p.x, y: r.top + p.y };
+  }
+
+  private frontTiles(bodyId: string): Array<Point & { index: number }> {
+    const s = this.probe();
+    const grid = s?.gridOf(bodyId);
+    const centre = s?.screenOf(bodyId);
+    if (!s || !grid || !centre?.visible) return [];
+    const out: Array<Point & { index: number; depth: number }> = [];
+    for (const t of grid.tiles) {
+      const p = s.screenOfLocal(bodyId, t.center);
+      // near side: closer to the camera than the body centre by a third of the radius
+      if (p?.visible && p.depth < centre.depth - grid.radius / 3) out.push({ ...this.page(p)!, index: t.index, depth: p.depth });
+    }
+    return out.sort((a, b) => a.depth - b.depth).map(({ depth: _d, ...rest }) => rest);
   }
 
   private pickAt(e: PointerEvent): PickResult | null {
@@ -203,7 +243,17 @@ export class WorldView {
       this.ui.placement.set(null);
       return;
     }
-    const ship = world.ships.find((s) => s.role === 'MOTHERSHIP') ?? world.ships[0];
+    const sel = this.ui.selection();
+    // a rover drives to the tile: "Jedź do" mode, or RMB with the rover selected (3D PoC)
+    const rover = this.ui.driveRover() ?? (secondary && sel.kind === 'ROVER' ? sel.roverId : null);
+    if (rover && (pick.kind === 'TILE' || pick.kind === 'STRUCTURE')) {
+      this.ui.driveRover.set(null);
+      await this.game.command({ type: 'MOVE_ROVER', roverId: rover as RoverId, tileIndex: pick.tileIndex });
+      return;
+    }
+    // flight orders go to the selected ship (3D PoC), else to the mothership
+    const selectedShip = sel.kind === 'SHIP' ? world.ships.find((s) => s.id === sel.shipId) : undefined;
+    const ship = selectedShip ?? world.ships.find((s) => s.role === 'MOTHERSHIP') ?? world.ships[0];
     const bodyOf = (p: PickResult) => (p.kind === 'BODY' || p.kind === 'TILE' || p.kind === 'STRUCTURE' ? p.bodyId : null);
     if ((this.ui.targeting() || secondary) && ship && bodyOf(pick)) {
       this.ui.targeting.set(false);

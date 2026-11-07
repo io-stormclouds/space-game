@@ -10,6 +10,7 @@ import type {
   SaveFile,
   ScenarioId,
   Tempo,
+  TileInfo,
 } from './contract';
 
 // Messages between the UI thread and the mock server in a Web Worker. Requests carry an id; the
@@ -30,6 +31,7 @@ export type Request =
   | { kind: 'availability'; bodyId: BodyId; kinds: string[] }
   | { kind: 'previewBuild'; bodyId: BodyId; tileIndex: number; buildingKind: string; rotation: number }
   | { kind: 'suggestTile'; bodyId: BodyId; buildingKind: string; material?: string }
+  | { kind: 'tileInfo'; bodyId: BodyId; tileIndex: number }
   | { kind: 'economyReport'; economy?: EconomyParams }
   | { kind: 'nominalFlows'; bodyId: BodyId };
 
@@ -45,6 +47,7 @@ export type ReplyValue =
   | { tileIndex: number; rotation: number }
   | EconomyReport
   | NominalFlows
+  | TileInfo
   | null;
 
 export type WorkerMessage =

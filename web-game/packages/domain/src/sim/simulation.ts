@@ -234,7 +234,7 @@ export class Simulation {
     if (ship.state === 'IN_TRANSIT' || !ship.currentBodyId) return { type: 'COMMAND_REJECTED', shipId, reason: 'IN_TRANSIT' };
     if (ship.currentBodyId === to) return { type: 'COMMAND_REJECTED', shipId, reason: 'ALREADY_THERE' };
     if (w.scan.state === 'RUNNING' && w.scan.shipId === shipId) return { type: 'COMMAND_REJECTED', shipId, reason: 'SCAN_RUNNING' };
-    const cost = this.transfers.fuelCost(ship.currentBodyId, to, w.time);
+    const cost = this.transfers.fuelCost(ship.currentBodyId, to, w.time, ship.role === 'MOTHERSHIP');
     if (ship.fuel < cost) {
       return { type: 'COMMAND_REJECTED', shipId, reason: 'NO_FUEL', detail: `potrzeba ${cost.toFixed(0)}, dostępne ${ship.fuel.toFixed(0)}` };
     }

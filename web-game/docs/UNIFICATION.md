@@ -309,6 +309,10 @@ Na prośbę „decyzje wg rekomendacji” rozstrzygam pytania P1–P6 i kwestie 
 | D29 | Zwrot E0 | Nie jest parametrem w panelu: k ery E0 = 1 z definicji modelu. |
 | D30 | Gwiazda jako cel lotu | Na prośbę użytkownika: nie da się na niej wylądować ani do niej polecieć. Domena odrzuca `MOVE_SHIP` do gwiazdy kodem `NOT_LANDABLE` („Na gwieździe nie można wylądować”). Arka startuje przy gwieździe i może z niej odlecieć. |
 | D31 | Wybór planety w widoku Układ | Na prośbę użytkownika: kliknięcie planety lub księżyca z siatką zaznacza ciało i przełącza na widok Planeta ze zbliżeniem. Gwiazda i pas zostają zaznaczone w przeglądzie. Mapa w doku i lista skanu zaznaczają bez zmiany widoku. Widok Planeta jest dostępny, gdy jest ciało w fokusie (zaznaczone albo kolonia). |
+| D33 | Statek-matka a lądowisko | Arka nie ląduje na lądowisku: dokuje na orbicie postojowej (1,25 R), jak na kanwie, i rozładowuje się promem. Statki transportowe (`SHIP`) dokują na lądowisku jak w 3D PoC. Zmienia S4 tylko dla statku-matki: start, punkt przechwycenia i paliwo Arki liczone z orbity (`OrbitSolver.stationPosition`). |
+| D34 | Pole na planecie (3D PoC `tile-panel` + pasek budowy) | Zaznaczone pole ma własny panel: numer, sześciokąt lub pięciokąt, złoże z pozostałą ilością, budowla stojąca na polu, lista „Tu można postawić” ze sprawdzenia serwera (nowe zapytanie `GameApi.tileInfo`). Karta pola: „Postaw: [wydobywarka złoża]” (Enter), „Lądowisko tutaj” (D), oba od razu; „Buduj tutaj…” (B) otwiera katalog wycelowany w pole (duch startuje na polu, Enter stawia); „Wyślij łazik” (J). |
+| D35 | Łazik | „Jedź do” (J), potem pole; albo prawy przycisk na polu przy zaznaczonym łaziku (jak w PoC). „Wróć do portu” (H). Panel pokazuje długość trasy. |
+| D36 | Rozkazy statku | Rozkaz lotu (prawy przycisk, „Leć do…”, mapa) idzie do zaznaczonego statku, a bez zaznaczenia do Arki. Statek transportowy ma własną kartę: „Leć do…” (E), „Wróć do bazy” (H). Panel statku w locie pokazuje cel i czas do przylotu. Zamyka K5. |
 | D32 | Budowa z karty ciała | Karta skanera planety ma „Buduj” (B): aktywne na ciele z portem kosmicznym, na pozostałych zablokowane z powodem „Najpierw postaw port kosmiczny”. Główna akcja karty (wybór miejsca albo budowa) jest w pierwszym rzędzie. |
 
 ## 5a. Znane problemy
@@ -319,7 +323,7 @@ Na prośbę „decyzje wg rekomendacji” rozstrzygam pytania P1–P6 i kwestie 
 | K2 | Nakładka 2D w widoku układu to drugi przebieg renderowania; `renderer.info` widzi tylko ostatni, więc liczniki pochodzą ze `stats()` widoku | `packages/render/src/system` |
 | K3 | Przy wczytaniu zapisu łazik w drodze zaczyna bieżący odcinek od nowa | domena: `RoverSystem` |
 | K4 | Drugi rząd karty rozkazów jest ucięty o 27 px (widać ikonę i klawisz, bez podpisu). Siatka potrzebuje 2 × 72 px, a w doku 240 px dostaje 118 px; `overflow-x: auto` pozwala jej się skurczyć. Dotyczy wszystkich kart, np. „Załóż kolonię” Arki. | `design-system` `CommandCard.css` + dok 240 px w `game-hud.css` |
-| K5 | Prawy przycisk i „Leć do…” zawsze wysyłają Arkę (albo pierwszy statek), nie zaznaczony statek; zaznaczony frachtowiec dostaje kartę Arki | `world-view.ts`, `commands.ts` |
+| K5 | ~~Prawy przycisk i „Leć do…” zawsze wysyłają Arkę~~ — naprawione (D36) | `world-view.ts`, `commands.ts` |
 
 ## 6. Pytania otwarte
 

@@ -22,6 +22,8 @@ export class UiState {
   readonly placement = signal<PlacementMode | null>(null);
   /** Next click on a body orders the selected ship there ("Leć do…"). */
   readonly targeting = signal<boolean>(false);
+  /** Next click on a tile drives this rover there ("Jedź do", 3D PoC: RMB with the rover selected). */
+  readonly driveRover = signal<string | null>(null);
   readonly buildMenu = signal<boolean>(false);
   readonly perfVisible = signal<boolean>(true);
   readonly atanorLevel = signal<string>('A_NAD');
@@ -42,6 +44,7 @@ export class UiState {
   select(s: Selection): void {
     this.selection.set(s);
     this.buildMenu.set(false);
+    this.driveRover.set(null);
     // e.g. a planet chosen in the overview before there is a colony, then deselected
     if (this.view() === 'planet' && !this.planetAvailable()) this.view.set('system');
   }
@@ -49,6 +52,7 @@ export class UiState {
   clear(): void {
     this.placement.set(null);
     this.targeting.set(false);
+    this.driveRover.set(null);
     this.buildMenu.set(false);
     this.selection.set({ kind: 'NONE' });
   }
@@ -78,6 +82,7 @@ export class UiState {
   startPlacement(kind: string): void {
     this.placement.set({ kind, rotation: 0, preview: null });
     this.targeting.set(false);
+    this.driveRover.set(null);
     this.buildMenu.set(false);
   }
 

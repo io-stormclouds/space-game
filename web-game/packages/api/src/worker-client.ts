@@ -12,6 +12,7 @@ import type {
   SaveFile,
   ScenarioId,
   Tempo,
+  TileInfo,
   Unsubscribe,
 } from './contract';
 import type { ReplyValue, Request, WorkerLike, WorkerMessage } from './protocol';
@@ -78,6 +79,7 @@ export function createWorkerGameApi(worker: WorkerLike): GameApi {
       call<BuildPreview>({ kind: 'previewBuild', bodyId, tileIndex, buildingKind, rotation }),
     suggestTile: (bodyId: BodyId, buildingKind: string, material?: string) =>
       call<{ tileIndex: number; rotation: number } | null>({ kind: 'suggestTile', bodyId, buildingKind, ...(material ? { material } : {}) }),
+    tileInfo: (bodyId: BodyId, tileIndex: number) => call<TileInfo | null>({ kind: 'tileInfo', bodyId, tileIndex }),
     economyReport: (economy?: EconomyParams) => call<EconomyReport>({ kind: 'economyReport', ...(economy ? { economy } : {}) }),
     nominalFlows: (bodyId: BodyId) => call<NominalFlows>({ kind: 'nominalFlows', bodyId }),
     onSnapshot: (l) => subscribe(snapshotListeners, l),

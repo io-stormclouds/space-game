@@ -11,6 +11,8 @@ export interface LeadResult {
 export interface LeadOptions {
   maxIter?: number;
   eps?: number;
+  /** Aim at the parking orbit instead of the docking point (the mothership). */
+  orbit?: boolean;
 }
 
 /**
@@ -30,19 +32,20 @@ export function solveLeadIntercept(
   const maxIter = opts.maxIter ?? 8;
   const eps = opts.eps ?? 1e-3;
   const leadPos = vec3();
+  const target = (time: number) => solver.stationPosition(targetId, time, leadPos, opts.orbit === true);
 
-  solver.dockingPosition(targetId, t, leadPos);
+  target(t);
   let dt = distance(start, leadPos) / cruiseSpeed;
   let iterations = 1;
 
   for (; iterations <= maxIter; iterations++) {
-    solver.dockingPosition(targetId, t + dt, leadPos);
+    target(t + dt);
     const next = distance(start, leadPos) / cruiseSpeed;
     const converged = Math.abs(next - dt) < eps;
     dt = next;
     if (converged) break;
   }
 
-  solver.dockingPosition(targetId, t + dt, leadPos);
+  target(t + dt);
   return { leadPos, flightTime: dt, iterations: Math.min(iterations, maxIter) };
 }

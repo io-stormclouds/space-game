@@ -144,6 +144,7 @@ export class SystemScene {
 
   // per-frame scratch
   private readonly v: Vec3 = vec3();
+  private readonly orbitTmp: Vec3 = vec3();
   private readonly tmp = new THREE.Vector3();
   private readonly tmp2 = new THREE.Vector3();
   private readonly color = new THREE.Color();
@@ -194,6 +195,13 @@ export class SystemScene {
       grids: this.grids,
       bodyWorld: (id) => this.bodies.get(id)?.world,
       docking: (id) => this.bodies.get(id)?.docking ?? this.v,
+      orbit: (id) => {
+        const b = this.bodies.get(id)?.body;
+        this.orbitTmp.x = 0;
+        this.orbitTmp.y = b ? b.radius * b.orbitalAltitudeFactor : 0;
+        this.orbitTmp.z = 0;
+        return this.orbitTmp;
+      },
       selectedShip: null,
     };
 

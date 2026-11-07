@@ -17,6 +17,7 @@ import type {
   SaveFile,
   ScenarioId,
   Tempo,
+  TileInfo,
 } from '@space-game/api';
 import { TEXT } from '../i18n/pl';
 import { GAME_API } from './game-api';
@@ -95,6 +96,10 @@ export class GameService {
   onRestart(listener: () => void): () => void {
     this.restarted.add(listener);
     return () => this.restarted.delete(listener);
+  }
+
+  tileInfo(bodyId: BodyId, tileIndex: number): Promise<TileInfo | null> {
+    return this.api.tileInfo(bodyId, tileIndex);
   }
 
   economyReport(params?: EconomyParams): Promise<EconomyReport> {

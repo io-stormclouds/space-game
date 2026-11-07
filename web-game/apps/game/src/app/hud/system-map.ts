@@ -102,7 +102,9 @@ export class SystemMap {
   protected async pick(bodyId: BodyId): Promise<void> {
     const w = this.game.world();
     if (this.ui.targeting() && w) {
-      const ship = w.ships.find((s) => s.role === 'MOTHERSHIP') ?? w.ships[0];
+      const sel = this.ui.selection();
+      const selected = sel.kind === 'SHIP' ? w.ships.find((s) => s.id === sel.shipId) : undefined;
+      const ship = selected ?? w.ships.find((s) => s.role === 'MOTHERSHIP') ?? w.ships[0];
       this.ui.targeting.set(false);
       if (ship) await this.game.command({ type: 'MOVE_SHIP', shipId: ship.id, to: bodyId });
       return;

@@ -141,6 +141,7 @@ export class GamePage {
           if (e.defaultPrevented) return;
           if (this.ui.placement()) this.ui.placement.set(null);
           else if (this.ui.targeting()) this.ui.targeting.set(false);
+          else if (this.ui.driveRover()) this.ui.driveRover.set(null);
           else if (this.ui.buildMenu()) this.ui.buildMenu.set(false);
           else this.ui.select({ kind: 'NONE' });
         });

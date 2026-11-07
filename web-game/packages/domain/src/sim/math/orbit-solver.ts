@@ -62,6 +62,24 @@ export class OrbitSolver {
     return add(out, out, this.tmp);
   }
 
+  /** Parking orbit in the body's local frame, ignoring landing pads: (0, radius × factor, 0). */
+  orbitOffset(bodyId: BodyId, out: Vec3): Vec3 {
+    const b = this.body(bodyId);
+    return set(out, 0, b.radius * b.orbitalAltitudeFactor, 0);
+  }
+
+  /** World-space parking orbit point (the mothership never lands, canvas: it unloads by shuttle). */
+  orbitPosition(bodyId: BodyId, t: number, out: Vec3): Vec3 {
+    this.worldPosition(bodyId, t, out);
+    this.orbitOffset(bodyId, this.tmp);
+    return add(out, out, this.tmp);
+  }
+
+  /** Where a ship of this role waits at a body: transports on the landing pad, the mothership in orbit. */
+  stationPosition(bodyId: BodyId, t: number, out: Vec3, mothership: boolean): Vec3 {
+    return mothership ? this.orbitPosition(bodyId, t, out) : this.dockingPosition(bodyId, t, out);
+  }
+
   /** Distance of the docking point from the body centre. */
   dockingAltitude(b: CelestialBody): number {
     return length(this.dockingOffset(b.id, this.tmp));

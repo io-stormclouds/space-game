@@ -32,10 +32,10 @@ export class TransferSystem {
     private readonly cfg: GameConstants,
   ) {}
 
-  /** Fuel for a hop between two docking points at time t. */
-  fuelCost(from: BodyId, to: BodyId, t: number): number {
-    const a = this.solver.dockingPosition(from, t, vec3());
-    const b = this.solver.dockingPosition(to, t, vec3());
+  /** Fuel for a hop between two stations at time t (docking points; parking orbits for the mothership). */
+  fuelCost(from: BodyId, to: BodyId, t: number, mothership = false): number {
+    const a = this.solver.stationPosition(from, t, vec3(), mothership);
+    const b = this.solver.stationPosition(to, t, vec3(), mothership);
     return distance(a, b) * this.cfg.fuelRate;
   }
 
@@ -48,8 +48,10 @@ export class TransferSystem {
   plan(ship: Spacecraft, to: BodyId, t: number): TransferPlan {
     if (!ship.currentBodyId) throw new Error(`Ship ${ship.id} is not docked`);
     const from = ship.currentBodyId;
-    const startPos = this.solver.dockingPosition(from, t, vec3());
-    const lead = solveLeadIntercept(startPos, to, t, this.cfg.cruiseSpeed, this.solver);
+    // the mothership never lands on a pad: it flies between parking orbits (canvas, D33)
+    const orbit = ship.role === 'MOTHERSHIP';
+    const startPos = this.solver.stationPosition(from, t, vec3(), orbit);
+    const lead = solveLeadIntercept(startPos, to, t, this.cfg.cruiseSpeed, this.solver, { orbit });
     const plan: TransferPlan = {
       shipId: ship.id,
       fromBodyId: from,
@@ -59,7 +61,7 @@ export class TransferSystem {
       leadPos: lead.leadPos,
       cruiseSpeed: this.cfg.cruiseSpeed,
       estimatedDuration: lead.flightTime,
-      fuelCost: this.fuelCost(from, to, t),
+      fuelCost: this.fuelCost(from, to, t, orbit),
     };
     this.register(plan);
     return plan;

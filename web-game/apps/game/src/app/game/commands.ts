@@ -1,8 +1,8 @@
 import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
-import type { Availability, BodyId, CatalogView, Structure, WorldState } from '@space-game/api';
+import type { Availability, BodyId, CatalogView, Structure, TileInfo, WorldState } from '@space-game/api';
 import type { CommandSlot, IconName } from '@space-game/ui';
 import { TEXT } from '../i18n/pl';
-import { buildingName, costText, reasonText } from './format';
+import { buildingName, costText, reasonText, tileIndexFromId } from './format';
 import { GameService } from './game.service';
 import { UiState } from './ui-state';
 
@@ -36,8 +36,24 @@ export class CommandsService {
   private readonly ui = inject(UiState);
   /** Availability answers from the server, by kind (and "KIND@L" for upgrades). */
   readonly availability = signal<Record<string, Availability>>({});
+  /** The selected surface tile as the server sees it (tile panel and card), refreshed with the snapshots. */
+  readonly tile = signal<TileInfo | null>(null);
 
   constructor() {
+    effect(() => {
+      const snap = this.game.snapshot();
+      const sel = this.ui.selection();
+      if (!snap || sel.kind !== 'TILE') {
+        untracked(() => this.tile.set(null));
+        return;
+      }
+      untracked(() =>
+        void this.game.tileInfo(sel.bodyId, sel.tileIndex).then((info) => {
+          const cur = this.ui.selection();
+          if (cur.kind === 'TILE' && cur.bodyId === sel.bodyId && cur.tileIndex === sel.tileIndex) this.tile.set(info);
+        }),
+      );
+    });
     // Refresh availability when the world or the context changes (throttled by the snapshot rate).
     effect(() => {
       const snap = this.game.snapshot();
@@ -71,6 +87,16 @@ export class CommandsService {
       if (s) return s.kind === 'HQ' ? this.portCard(s, world, catalog) : this.structureCard(s, world, catalog);
     }
     if (sel.kind === 'ROVER') return this.roverCard(sel.roverId, world);
+    if (sel.kind === 'SHIP') {
+      const ship = world.ships.find((s) => s.id === sel.shipId);
+      if (ship && ship.role !== 'MOTHERSHIP') return this.shipCard(ship, world);
+    }
+    if (sel.kind === 'TILE') {
+      const body = world.bodies.find((b) => b.id === sel.bodyId);
+      // after the scan stage (a site chosen, or a world that starts with a port like the PoC one)
+      const settled = world.colony.siteBodyId !== null || world.structures.some((s) => s.kind === 'HQ');
+      if (body?.surfaceGrid && body.revealed !== false && settled) return this.tileCard(sel.bodyId, sel.tileIndex, world, catalog);
+    }
     if (sel.kind === 'BODY' || sel.kind === 'TILE') {
       const body = world.bodies.find((b) => b.id === sel.bodyId);
       if (body && body.kind !== 'STAR' && world.scan.state === 'DONE') return this.scannerCard(sel.bodyId, world);
@@ -185,6 +211,68 @@ export class CommandsService {
     return { title: t.cmd.title, context: `Skaner · ${body.name}`, status: 'CC-02', slots };
   }
 
+  /**
+   * A surface tile (3D PoC tile panel + build bar): build its extractor or a landing pad here at once,
+   * open the catalog aimed at this tile, or send a rover. Reasons come from the server's check.
+   */
+  private tileCard(bodyId: BodyId, tileIndex: number, world: WorldState, catalog: CatalogView): CardModel {
+    const t = this.t;
+    const c = t.commands;
+    const info = this.tile();
+    const fresh = info && info.bodyId === bodyId && info.index === tileIndex ? info : null;
+    const hasPort = world.structures.some((s) => s.kind === 'HQ' && s.bodyId === bodyId);
+    const cost = (kind: string) => costText(catalog.buildings.find((b) => b.id === kind)?.levels[0]?.cost ?? {});
+    /** Builds `kind` on this tile in one press (1-tile kinds), or says why not. */
+    const quick = (id: string, kind: string, label: string, hotkey: string, icon: IconName, description: string): CommandSlot => {
+      if (!hasPort) return this.locked(id, label, hotkey, t.reject.NO_COLONY, icon);
+      const o = fresh?.options.find((x) => x.kind === kind);
+      if (!o) return this.locked(id, label, hotkey, t.selection.checking, icon);
+      if (!o.ok) return this.locked(id, label, hotkey, reasonText(t, o.reason, o.detail), icon);
+      return this.slot(id, label, hotkey, icon, { variant: 'primary', description, run: () => void this.place(bodyId, kind, tileIndex, 0) });
+    };
+    // the extractor for this tile's deposit: the first buildable kind that takes its material
+    const dep = fresh?.deposit;
+    const extractor = dep ? fresh!.options.find((o) => o.extracts === dep.material) : undefined;
+    const extractorName = extractor ? buildingName(catalog, extractor.kind) : '';
+    const idle = world.rovers.find((r) => r.bodyId === bodyId && r.state === 'IDLE' && !r.job);
+    const slots: Array<CommandSlot | null> = [
+      extractor
+        ? quick('extract', extractor.kind, c.extractHere.label(extractorName), 'Enter', 'harvest', c.extractHere.note(dep!.material, cost(extractor.kind)))
+        : null,
+      quick('pad', 'LAND', c.padHere.label, 'D', 'rally', c.padHere.note(cost('LAND'))),
+      hasPort
+        ? this.slot('buildHere', c.buildHere.label, 'B', 'build', { description: c.buildHere.note, run: () => this.ui.buildMenu.set(true) })
+        : this.locked('buildHere', c.buildHere.label, 'B', t.reject.NO_COLONY, 'build'),
+      idle
+        ? this.slot('sendRover', c.sendRover.label, 'J', 'move', { description: c.sendRover.note(idle.name), run: () => void this.game.command({ type: 'MOVE_ROVER', roverId: idle.id, tileIndex }) })
+        : this.locked('sendRover', c.sendRover.label, 'J', t.reject.NO_ROVER, 'move'),
+    ];
+    const kind = fresh ? t.selection.tileKind[fresh.kind] : '';
+    return { title: t.cmd.title, context: `${t.selection.tile(tileIndex)}${kind ? ' · ' + kind : ''}`, status: bodyId.toUpperCase(), slots };
+  }
+
+  /** A transport ship (3D PoC ship panel): fly where you point, back to the base to unload and refuel. */
+  private shipCard(ship: WorldState['ships'][number], world: WorldState): CardModel {
+    const t = this.t;
+    const c = t.commands;
+    const home = world.bodies.find((b) => b.isHomeBase) ?? world.bodies.find((b) => b.id === world.colony.siteBodyId);
+    const flying = ship.state === 'IN_TRANSIT';
+    const slots: Array<CommandSlot | null> = [
+      flying
+        ? this.locked('fly', c.flyTo.label, 'E', t.reject.IN_TRANSIT, 'move')
+        : this.slot('fly', c.flyTo.label, 'E', 'move', { description: c.flyTo.note, selected: this.ui.targeting(), run: () => this.ui.targeting.set(!this.ui.targeting()) }),
+      !home
+        ? this.locked('returnHome', c.returnHome.label, 'H', t.reject.NO_COLONY, 'rally')
+        : flying
+          ? this.locked('returnHome', c.returnHome.label, 'H', t.reject.IN_TRANSIT, 'rally')
+          : ship.currentBodyId === home.id
+            ? this.locked('returnHome', c.returnHome.label, 'H', t.reject.ALREADY_THERE, 'rally')
+            : this.slot('returnHome', c.returnHome.label, 'H', 'rally', { variant: 'primary', description: c.returnHome.note(home.name), run: () => void this.game.command({ type: 'MOVE_SHIP', shipId: ship.id, to: home.id }) }),
+      this.locked('stop', c.stop.label, 'S', t.cmd.notYet, 'stop'),
+    ];
+    return { title: t.cmd.title, context: ship.name, status: ship.id.toUpperCase(), slots };
+  }
+
   private placementCard(kind: string, world: WorldState, catalog: CatalogView): CardModel {
     const t = this.t;
     const c = t.commands;
@@ -202,7 +290,7 @@ export class CommandsService {
         ...(reason ? { disabledReason: reason } : {}),
         run: () => void this.confirmPlacement(world),
       }),
-      this.slot('rotate', c.rotate.label, 'R', 'repeat', { description: c.rotate.note, run: () => this.ui.rotate() }),
+      this.slot('rotate', c.rotate.label, 'R', 'repeat', { description: c.rotate.note, run: () => void this.rotatePlacement() }),
       this.slot('auto', c.autoPlace.label, 'A', 'rally', { description: c.autoPlace.note, run: () => void this.autoPlace(world) }),
       this.slot('cancel', c.cancel.label, 'Esc', 'cancel', { variant: 'danger', description: c.cancel.note, run: () => this.ui.placement.set(null) }),
     ];
@@ -270,9 +358,22 @@ export class CommandsService {
     const c = t.commands;
     const r = world.rovers.find((x) => x.id === roverId);
     if (!r) return { title: t.cmd.title, context: '—', status: '', slots: [] };
+    const port = world.structures.find((s) => s.kind === 'HQ' && s.bodyId === r.bodyId);
+    const portTile = port ? tileIndexFromId(port.tileId) : null;
     const slots: Array<CommandSlot | null> = [
       this.slot('build', c.build.label, 'B', 'build', { variant: 'primary', description: c.build.note, run: () => this.ui.buildMenu.set(true) }),
-      this.locked('moveTo', c.moveTo.label, 'J', t.cmd.notYet, 'move'),
+      r.job
+        ? this.locked('moveTo', c.moveTo.label, 'J', t.reject.ROVER_MOVING, 'move')
+        : this.slot('moveTo', c.moveTo.label, 'J', 'move', {
+            description: c.moveTo.note,
+            selected: this.ui.driveRover() === r.id,
+            run: () => this.ui.driveRover.set(this.ui.driveRover() === r.id ? null : r.id),
+          }),
+      portTile === null
+        ? this.locked('home', c.home.label, 'H', t.reject.NO_COLONY, 'rally')
+        : r.job
+          ? this.locked('home', c.home.label, 'H', t.reject.ROVER_MOVING, 'rally')
+          : this.slot('home', c.home.label, 'H', 'rally', { description: c.home.note, run: () => void this.game.command({ type: 'MOVE_ROVER', roverId: r.id, tileIndex: portTile }) }),
     ];
     return { title: t.cmd.title, context: r.name, status: r.id, slots };
   }
@@ -321,6 +422,34 @@ export class CommandsService {
     const res = await this.game.command({ type: 'CHOOSE_COLONY_SITE', bodyId });
     const ark = this.game.world()?.ships.find((s) => s.role === 'MOTHERSHIP');
     if (res.ok && ark && ark.currentBodyId !== bodyId) await this.game.command({ type: 'MOVE_SHIP', shipId: ark.id, to: bodyId });
+  }
+
+  /**
+   * Placement mode for `kind`. With a tile selected (the catalog opened from a tile), the ghost starts
+   * on that tile, so Enter builds there (3D PoC "Buduj tutaj"); the cursor can still move it.
+   */
+  startPlacement(kind: string): void {
+    const sel = this.ui.selection();
+    this.ui.startPlacement(kind);
+    if (sel.kind === 'TILE') void this.previewAt(sel.bodyId, sel.tileIndex);
+  }
+
+  /** Rotates the ghost and checks it again on the same tile. */
+  async rotatePlacement(): Promise<void> {
+    const at = this.ui.placement()?.preview?.tileIndex;
+    this.ui.rotate();
+    const body = this.game.world() ? this.placementBody(this.game.world()!) : null;
+    if (at !== undefined && body) await this.previewAt(body, at);
+  }
+
+  private async previewAt(bodyId: BodyId, tileIndex: number): Promise<void> {
+    const p = this.ui.placement();
+    if (!p) return;
+    const r = await this.game.previewBuild(bodyId, tileIndex, p.kind, p.rotation);
+    const cur = this.ui.placement();
+    if (cur && cur.kind === p.kind && cur.rotation === p.rotation && !cur.preview) {
+      this.ui.placement.set({ ...cur, preview: { kind: p.kind, tiles: r.tiles, valid: r.ok, tileIndex, ...(r.reason ? { reason: r.reason } : {}), ...(r.detail ? { detail: r.detail } : {}) } });
+    }
   }
 
   /** Places the current placement on its previewed tile, or the suggested one. */

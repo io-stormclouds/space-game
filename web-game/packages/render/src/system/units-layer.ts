@@ -27,6 +27,8 @@ export interface UnitContext {
   bodyWorld(id: BodyId): THREE.Vector3 | undefined;
   /** Docking point in the body's local frame. */
   docking(id: BodyId): Vec3;
+  /** Parking orbit in the body's local frame, ignoring landing pads (the mothership never lands). */
+  orbit(id: BodyId): Vec3;
   /** Ship whose flight path is drawn in the signal colour. */
   selectedShip: string | null;
 }
@@ -132,7 +134,7 @@ export class UnitsLayer {
           this.shipPos.delete(ship.id);
           continue;
         }
-        const off = ctx.docking(ship.currentBodyId);
+        const off = ship.role === 'MOTHERSHIP' ? ctx.orbit(ship.currentBodyId) : ctx.docking(ship.currentBodyId);
         this.a.set(off.x, off.y, off.z);
         const k = this.docked.get(ship.currentBodyId) ?? 0;
         this.docked.set(ship.currentBodyId, k + 1);

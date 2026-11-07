@@ -26,6 +26,11 @@ export function clockShort(minutes: number): string {
   return `${String(Math.floor((total % 1440) / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
 }
 
+/** Index of a tile id `${bodyId}:${index}` (the domain's tileIndexOf, without importing the domain). */
+export function tileIndexFromId(id: string): number {
+  return Number(id.slice(id.lastIndexOf(':') + 1));
+}
+
 export function bodyName(world: WorldState | null, id: string | null | undefined): string {
   if (!world || !id) return '—';
   const b = world.bodies.find((x) => x.id === id);

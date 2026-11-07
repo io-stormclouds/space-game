@@ -3,7 +3,7 @@ import { DomainEvent } from './models/domain-event.model';
 import { Tile, TileId } from './models/planet-grid.model';
 import { colonyObjectives } from './objectives';
 import { WorldState, storageOf } from './reducer';
-import { ARK_ID, TAU_CETI_ID, TAU_CETI_SCENARIO, TC_B, TC_BELT, TC_E } from './scenarios/tau-ceti';
+import { ARK_ID, TAU_CETI_ID, TAU_CETI_SCENARIO, TC_B, TC_BELT, TC_E, TC_F } from './scenarios/tau-ceti';
 import { Command, Simulation } from './simulation';
 import { tileIndexOf } from './systems/rover-system';
 
@@ -102,6 +102,21 @@ describe('Canvas flow on the unified domain (W06 A: Tau Ceti)', () => {
     const t0 = f.sim.time;
     f.runUntil(() => f.sim.time >= t0 + 5, 6);
     expect(ark()).toMatchObject({ state: 'DOCKED', currentBodyId: TC_E });
+  });
+
+  it('the mothership stays in its parking orbit when the colony builds a landing pad (D33)', () => {
+    const f = playFirstSession();
+    f.ok({ type: 'BUILD', bodyId: TC_E, tileId: f.plainTile(TC_E), kind: 'LAND' });
+    f.runUntil(() => f.world.structures.some((s) => s.kind === 'LAND' && s.state === 'ACTIVE'), 60);
+    const started = f.send({ type: 'MOVE_SHIP', shipId: ARK_ID, to: TC_F })[0]!;
+    expect(started.type).toBe('TRANSFER_STARTED');
+    const plan = (started as Extract<DomainEvent, { type: 'TRANSFER_STARTED' }>).plan;
+    const centre = f.sim.solver.worldPosition(TC_E, plan.startTime, { x: 0, y: 0, z: 0 });
+    const e = f.world.bodies.find((b) => b.id === TC_E)!;
+    // straight above the centre at 1.25 R, not on the pad tile
+    expect(plan.startPos.x - centre.x).toBeCloseTo(0, 6);
+    expect(plan.startPos.z - centre.z).toBeCloseTo(0, 6);
+    expect(plan.startPos.y - centre.y).toBeCloseTo(e.radius * e.orbitalAltitudeFactor, 6);
   });
 
   it('enforces the order of the flow: scan before choosing, the Ark in orbit before the port', () => {
