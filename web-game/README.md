@@ -14,7 +14,8 @@ npm run check        # typy, testy, build produkcyjny i e2e, w tej kolejności
 - Wejście w środek gry: `#/scenariusz-przybycie`, `#/scenariusz-skan`, `#/scenariusz-port`, `#/scenariusz-kolonia`, `#/scenariusz-planeta-matka` (świat 3D PoC), `#/scenariusz-fabryka` (kolonia z Fabryką atanorową L1).
 - Scenariusze obciążenia (F5): `#/scenariusz-obciazenie-s`, `-m`, `-l`.
 - Klawisze:
-  - `1`–`3`: widoki Planeta, Układ, Galaktyka. Atanor jest widokiem budynku: zaznacz Fabrykę atanorową i wybierz „Maszyna” (`A`); `Esc` wraca. Lekcje PoC i receptury bez budynku są w Piaskownicy (`F2` → Atanor);
+  - `1`–`3`: widoki Planeta, Układ, Galaktyka. Atanor jest widokiem budynku: zaznacz Fabrykę atanorową i wybierz „Maszyna” (`A`); `Esc` odkłada narzędzie, kończy próbę, a potem wraca. Lekcje PoC i receptury bez budynku są w Piaskownicy (`F2` → Atanor);
+  - w Atanorze: narzędzia `A` ramię (ponownie: dłuższe), `S` tłok, `D` łącznik/rozłącznik, `G` transmutacja, `H` szyna, `X` usuń, `R` obrót, PPM odkłada narzędzie, `T` próba, `Ctrl+Z` / `Ctrl+Y` cofnij/ponów; na osi czasu klawisze palety PoC (`Q W E R T Y U I O P X Del`), strzałki, `Insert`, `Shift+Delete`, `Ctrl+C` / `Ctrl+V`;
   - Spacja: pauza; `+` / `−`: tempo ×1, ×60, ×600;
   - `Esc`: anuluj;
   - `` ` ``: nakładka wydajności;

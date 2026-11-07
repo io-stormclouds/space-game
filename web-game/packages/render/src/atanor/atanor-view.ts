@@ -3,7 +3,8 @@ import type { Application, Container, Graphics, Text, TextStyle } from 'pixi.js'
 import { Atanor } from '@space-game/domain';
 import type { PickResult, RenderStats, View, ViewContext, ViewInput } from '../view';
 import type { AtanorControls } from './controls';
-import { boardHexes, boardRadius, fitHexLayout, hexCorners, hexStep, hexToScreen, resolveAtanorLevel, DEFAULT_ATANOR_LEVEL, type HexLayout, type Insets } from './layout';
+import type { AtanorGhost } from './editor';
+import { boardHexes, boardRadius, fitHexLayout, hexCorners, hexStep, hexToScreen, resolveAtanorLevel, screenToHex, DEFAULT_ATANOR_LEVEL, type HexLayout, type Insets } from './layout';
 import { interpolateMachine, type MachinePose } from './motion';
 import { POC_TICKS_PER_SECOND, clampTicksPerSecond, dueTicks, toReadout, type AtanorReadout, type TickClock } from './readout';
 import {
@@ -131,6 +132,12 @@ export class AtanorView implements View, AtanorControls {
   private layout: HexLayout = fitHexLayout(1, 1, 2);
 
   private level: Atanor.LevelConfig;
+  /** The machine shown (AT2 editor draft); null = the level's reference solution. */
+  private solution: Atanor.AtanorSolution | null = null;
+  /** Level ports + the shown machine (what the board draws). */
+  private composed: Atanor.LevelConfig;
+  private ghost: AtanorGhost | null = null;
+  private selectedId: string | null = null;
   private engine: Atanor.SimulationEngine;
   private metrics: Atanor.ThroughputMetrics | null = null;
   private readonly metricsCache = new Map<string, Atanor.ThroughputMetrics>();
@@ -155,6 +162,7 @@ export class AtanorView implements View, AtanorControls {
     this.tps = clampTicksPerSecond(opts.ticksPerSecond ?? POC_TICKS_PER_SECOND);
     const level = resolveAtanorLevel(opts.level ?? DEFAULT_ATANOR_LEVEL) ?? resolveAtanorLevel(DEFAULT_ATANOR_LEVEL)!;
     this.level = level;
+    this.composed = level;
     this.engine = Atanor.createAtanorSimulation(level);
     this.prev = this.curr = this.engine.getCurrentStepResult();
   }
@@ -213,7 +221,7 @@ export class AtanorView implements View, AtanorControls {
     this.jamText.visible = false;
     app.stage.addChild(this.board, this.staticLabels, this.dyn, armLayer, atomLayer, this.jamText);
 
-    this.metrics ??= this.measure(this.level);
+    this.metrics ??= this.measure(this.level, this.solution);
     this.relayout();
     if (this.autoplay && !this.playing) this.play();
     this.dirty = true;
@@ -235,6 +243,14 @@ export class AtanorView implements View, AtanorControls {
       this.siteLevel = site;
       this.relayout();
     }
+    const ed = input.atanor?.editor ?? null;
+    if ((ed?.solution ?? null) !== this.solution) this.showSolution(ed?.solution ?? null);
+    const ghost = ed?.ghost ?? null;
+    if (!sameGhost(ghost, this.ghost) || (ed?.selectedId ?? null) !== this.selectedId) {
+      this.ghost = ghost;
+      this.selectedId = ed?.selectedId ?? null;
+      this.dirty = true;
+    }
     this.advance(dtSeconds);
     if (!this.app || !this.dirty) return;
     this.draw();
@@ -245,8 +261,11 @@ export class AtanorView implements View, AtanorControls {
     this.dirty = this.playing || this.clock.phase < 1;
   }
 
-  pick(_x: number, _y: number, _input: ViewInput): PickResult {
-    return { kind: 'EMPTY' };
+  /** A hex of the board under the pointer (container pixels), for the editor (AT2). */
+  pick(x: number, y: number, _input: ViewInput): PickResult {
+    const h = screenToHex(x, y, this.layout);
+    if (Atanor.hexDistance(h, { q: 0, r: 0 }) > this.layout.radius) return { kind: 'EMPTY' };
+    return { kind: 'ATANOR_HEX', q: h.q, r: h.r };
   }
 
   resize(width: number, height: number): void {
@@ -322,8 +341,10 @@ export class AtanorView implements View, AtanorControls {
     if (!level) return false;
     const wasPlaying = this.playing;
     this.level = level;
+    this.solution = null;
+    this.composed = level;
     this.engine = Atanor.createAtanorSimulation(level);
-    this.metrics = this.measure(level);
+    this.metrics = this.measure(level, null);
     this.playing = false;
     this.resetEngine();
     this.relayout();
@@ -331,12 +352,23 @@ export class AtanorView implements View, AtanorControls {
     return true;
   }
 
+  /** Shows another machine on the same level: a change of the design resets the run (PoC). */
+  private showSolution(solution: Atanor.AtanorSolution | null): void {
+    this.solution = solution;
+    this.composed = solution ? Atanor.composeLevel(this.level, solution) : this.level;
+    this.engine = Atanor.createAtanorSimulation(this.level, solution ? { solution } : {});
+    this.metrics = this.measure(this.level, solution);
+    this.playing = false;
+    this.resetEngine();
+    this.relayout();
+  }
+
   setTicksPerSecond(n: number): void {
     this.tps = clampTicksPerSecond(n);
   }
 
   readout(): AtanorReadout {
-    this.metrics ??= this.measure(this.level);
+    this.metrics ??= this.measure(this.level, this.solution);
     return toReadout({
       level: this.level,
       snapshot: this.engine.getSnapshot(),
@@ -345,6 +377,7 @@ export class AtanorView implements View, AtanorControls {
       playing: this.playing,
       ticksPerSecond: this.tps,
       siteLevel: this.siteLevel,
+      jamColumn: this.engine.hasCrashed ? this.curr.cycle : null,
     });
   }
 
@@ -354,12 +387,14 @@ export class AtanorView implements View, AtanorControls {
 
   // -------------------------------------------------------------------------------------------
 
-  /** Throughput of the reference solution, measured once per level on a separate engine. */
-  private measure(level: Atanor.LevelConfig): Atanor.ThroughputMetrics {
-    let m = this.metricsCache.get(level.id);
+  /** Throughput of the shown machine, measured once per design on a separate engine. */
+  private measure(level: Atanor.LevelConfig, solution: Atanor.AtanorSolution | null): Atanor.ThroughputMetrics {
+    const key = `${level.id}|${solution ? Atanor.solutionKey(solution) : 'reference'}`;
+    let m = this.metricsCache.get(key);
     if (!m) {
-      m = Atanor.measureAtanorSolution(level);
-      this.metricsCache.set(level.id, m);
+      m = Atanor.measureAtanorSolution(level, solution ?? undefined);
+      if (this.metricsCache.size > 64) this.metricsCache.clear();
+      this.metricsCache.set(key, m);
     }
     return m;
   }
@@ -402,7 +437,7 @@ export class AtanorView implements View, AtanorControls {
   }
 
   private relayout(): void {
-    this.layout = fitHexLayout(this.width, this.height, boardRadius(this.level, this.siteLevel), this.insets);
+    this.layout = fitHexLayout(this.width, this.height, boardRadius(this.composed, this.siteLevel), this.insets);
     this.drawStatic();
     this.dirty = true;
   }
@@ -433,7 +468,7 @@ export class AtanorView implements View, AtanorControls {
       staticLabels.addChild(t);
     };
 
-    for (const t of this.level.tracks ?? []) {
+    for (const t of this.composed.tracks ?? []) {
       for (let i = 0; i + 1 < t.path.length; i++) {
         const a = hexToScreen(t.path[i]!, L);
         const b = hexToScreen(t.path[i + 1]!, L);
@@ -446,7 +481,7 @@ export class AtanorView implements View, AtanorControls {
       }
     }
 
-    for (const g of this.level.glyphs) {
+    for (const g of this.composed.glyphs) {
       const p = hexToScreen(g.pos, L);
       switch (g.type) {
         case 'BONDER':
@@ -510,13 +545,16 @@ export class AtanorView implements View, AtanorControls {
     }
 
     pose.arms.forEach((arm, i) => {
-      dyn.moveTo(arm.base.x, arm.base.y).lineTo(arm.gripper.x, arm.gripper.y).stroke({ ...c('metal'), width: Math.max(4, s * 0.16) });
-      dyn.moveTo(arm.base.x, arm.base.y).lineTo(arm.gripper.x, arm.gripper.y).stroke({ ...c('textDim'), width: 1 });
+      // one beam per gripper (multi-gripper arms of L4 have 2, 3 or 6)
+      arm.grippers.forEach((g, j) => {
+        dyn.moveTo(arm.base.x, arm.base.y).lineTo(g.x, g.y).stroke({ ...c('metal'), width: Math.max(4, s * 0.16) });
+        dyn.moveTo(arm.base.x, arm.base.y).lineTo(g.x, g.y).stroke({ ...c('textDim'), width: 1 });
+        const kg = s * 0.13;
+        if (arm.held[j]) dyn.rect(g.x - kg, g.y - kg, 2 * kg, 2 * kg).fill(c('text'));
+        else dyn.rect(g.x - kg, g.y - kg, 2 * kg, 2 * kg).stroke({ ...c('textDim'), width: 1.5 });
+      });
       const kb = s * 0.24;
       dyn.rect(arm.base.x - kb, arm.base.y - kb, 2 * kb, 2 * kb).fill(c('graphite')).stroke({ ...c('metal'), width: 1.5 });
-      const kg = s * 0.13;
-      if (arm.holding) dyn.rect(arm.gripper.x - kg, arm.gripper.y - kg, 2 * kg, 2 * kg).fill(c('text'));
-      else dyn.rect(arm.gripper.x - kg, arm.gripper.y - kg, 2 * kg, 2 * kg).stroke({ ...c('textDim'), width: 1.5 });
       armTexts.get(arm.id, arm.isPiston ? `P${i + 1}` : String(i + 1)).position.set(Math.round(arm.base.x), Math.round(arm.base.y));
     });
 
@@ -534,6 +572,8 @@ export class AtanorView implements View, AtanorControls {
       t.position.set(Math.round(a.x), Math.round(a.y));
       t.alpha = a.alpha;
     }
+    this.drawSelection(dyn, L);
+    this.drawGhost(dyn, L);
     atomTexts.end();
     armTexts.end();
 
@@ -541,6 +581,69 @@ export class AtanorView implements View, AtanorControls {
     if (this.jamText) {
       this.jamText.visible = jamState !== null;
       if (jamState) this.jamText.text = `${this.text.jam} · ${jamState.reason}`;
+    }
+  }
+
+  /** Frame around the selected arm base or glyph (editor, AT2). */
+  private drawSelection(g: Graphics, L: HexLayout): void {
+    const id = this.selectedId;
+    if (!id) return;
+    const s = L.size;
+    const sig = cssToPixi(this.palette.signal);
+    const arm = this.solution?.arms.find((a) => a.id === id);
+    const glyph = this.composed.glyphs.find((x) => x.id === id);
+    const cells = arm ? [arm.basePos] : glyph ? Atanor.glyphCells(glyph) : [];
+    for (const h of cells) {
+      const p = hexToScreen(h, L);
+      g.poly(hexCorners(p.x, p.y, s, 0.94)).stroke({ ...sig, width: 2 });
+    }
+  }
+
+  /** Ghost of the active tool on the hovered hex: signal when it fits, alert when it does not. */
+  private drawGhost(g: Graphics, L: HexLayout): void {
+    const gh = this.ghost;
+    if (!gh) return;
+    const s = L.size;
+    const tone = cssToPixi(gh.valid ? this.palette.signal : this.palette.alert);
+    const p = hexToScreen(gh.hex, L);
+    const stroke = { ...tone, width: 2, alpha: 0.9 };
+    switch (gh.tool) {
+      case 'ARM':
+      case 'PISTON':
+      case 'MULTI': {
+        const grippers = gh.tool === 'MULTI' ? 2 : 1;
+        for (let i = 0; i < grippers; i++) {
+          const dir = (gh.rotation + (i * 6) / grippers) % 6;
+          const q = hexToScreen(Atanor.hexAdd(gh.hex, Atanor.hexScale(Atanor.hexDirection(dir), gh.length)), L);
+          g.moveTo(p.x, p.y).lineTo(q.x, q.y).stroke({ ...stroke, width: Math.max(3, s * 0.12) });
+          const k = s * 0.13;
+          g.rect(q.x - k, q.y - k, 2 * k, 2 * k).stroke(stroke);
+        }
+        const kb = s * 0.24;
+        g.rect(p.x - kb, p.y - kb, 2 * kb, 2 * kb).stroke(stroke);
+        break;
+      }
+      case 'BONDER':
+      case 'UNBONDER': {
+        const q = hexToScreen(Atanor.hexNeighbor(gh.hex, gh.rotation), L);
+        g.poly(hexCorners(p.x, p.y, s, 0.8)).stroke(stroke);
+        g.poly(hexCorners(q.x, q.y, s, 0.8)).stroke(stroke);
+        g.moveTo(p.x, p.y).lineTo(q.x, q.y).stroke(stroke);
+        break;
+      }
+      case 'TRANSMUTE':
+        g.poly(hexCorners(p.x, p.y, s, 0.7)).stroke(stroke);
+        break;
+      case 'TRACK': {
+        const k = s * 0.16;
+        g.rect(p.x - k, p.y - k, 2 * k, 2 * k).stroke(stroke);
+        break;
+      }
+      case 'DELETE': {
+        const k = s * 0.4;
+        g.moveTo(p.x - k, p.y - k).lineTo(p.x + k, p.y + k).moveTo(p.x + k, p.y - k).lineTo(p.x - k, p.y + k).stroke(stroke);
+        break;
+      }
     }
   }
 
@@ -576,6 +679,12 @@ export class AtanorView implements View, AtanorControls {
   get canvas(): HTMLCanvasElement | null {
     return this.app?.canvas ?? null;
   }
+}
+
+function sameGhost(a: AtanorGhost | null, b: AtanorGhost | null): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return a.tool === b.tool && a.hex.q === b.hex.q && a.hex.r === b.hex.r && a.rotation === b.rotation && a.length === b.length && a.valid === b.valid;
 }
 
 /** Records WebGL contexts created until `stop()` (scoped wrap of HTMLCanvasElement.getContext). */

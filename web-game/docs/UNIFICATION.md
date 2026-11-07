@@ -211,6 +211,23 @@ Panel projektanta (`apps/game/src/app/designer/`) otwiera się klawiszem F2 albo
 | Odmowy | Jeden słownik: 13 kodów PoC + 17 nowych (`REJECT_CODES`). Usterki symulacji osobno (`FAULT_CODES`: JAM). Teksty są w słowniku UI (W16). | rejestr: Odmowy |
 | Kolonizacja | Skan systemu, wybór ciała z siatką, port z ładowni Arki przy Arce na orbicie, prom z ładowni do puli kolonii, łazik z portu (FER 20 · SIL 5 · 3 min). | kanwa |
 
+## 3e. Rozbudowa Atanora AT1–AT6 (FAKT)
+
+Plan i decyzje: `docs/atanor-expansion-design.md` (rozdz. 8), rozstrzygnięcia A15–A29 i D37.
+
+| Krok | Stan | Co działa |
+|---|---|---|
+| AT1 | zrobione | Scenariusz `#/scenariusz-fabryka` (kolonia na Tau Ceti e, HQ L3, Fabryka atanorowa L1 na 7 polach). Rozkaz „Maszyna” (A) na karcie fabryki otwiera maszynę tego budynku: receptura i poziom budynku wyznaczają planszę i limity. Esc wraca na planetę. Bez czwartej zakładki; lekcje PoC w Piaskownicy (F2). K4 naprawione (D37). |
+| AT2 | zrobione | Edytor: narzędzia na karcie (Ramię `A` z długością, Tłok `S`, Łącznik/Rozłącznik `D`, Transmutacja `G`, Szyna `H`, Usuń `X`), duch na planszy (zielony/czerwony), `R` obrót, PPM odkłada narzędzie, cofnij/ponów (`Ctrl+Z` / `Ctrl+Y`), zablokowane narzędzia z powodem (poziom budynku, receptura). Oś czasu: wiersz na ramię, długość programu, paleta i klawisze PoC, wpisywanie z przesuwem kursora, PPM czyści, wstaw/usuń kolumnę, kopiuj/wklej zakres, głowica i JAM w kolumnie, rozkazy niewykonalne przekreślone. Tryby Projekt (takt 0) i Próba (własne tempo 0,5–4×). Start projektu według A21. Szkice per budynek i receptura (w sesji). |
+| AT3 | zrobione | Pasek metryk nad osią czasu. Panel „Maszyna”: czas na sztukę (cykle × takt poziomu), sztuki/h, moc (§8.1), koszt sztuki z modelu ekonomii przy liczbach tej maszyny wobec wartości bazowej (marża), porównanie ze wzorcem §8.3, wejścia na ciele (zużycie, dostawy z `nominalFlows`, zapas, na ile godzin, wąskie gardło), materiały maszyny w kr, tabela wariantów (A24). Panel „Produkcja” zwykłych budynków przetwórczych (A15). |
+| AT4 | w toku | — |
+| AT5 | silnik zrobiony | Kolizje w ruchu, obszar z drogi, JAM poza planszą, ramiona wielochwytowe, receptury A_MET, A_KAP, A_PRO (A26–A29); widok rysuje każdy chwytak i atomy JAM ze szczegółów silnika. |
+| AT6 | — | — |
+
+- **Domena:** operacje edytora w `packages/domain/src/atanor/editor/` (czyste, z testami; serwer sprawdzi je ponownie przy wdrożeniu). Reguły zajętości wzięte z rozwiązań wzorcowych: łączniki mogą dzielić pole i leżeć na porcie wejścia (A_NAD), szyna może biec pod portem (L4).
+- **Render:** `AtanorEditor` (narzędzie, duch, zaznaczenie, historia) nad operacjami domeny; widok przyjmuje szkic (`ViewInput.atanor.editor`), wskazuje heksy (`ATANOR_HEX`), a zmiana szkicu zeruje przebieg jak w PoC.
+- **Testy:** domena 6 (edytor), render 5 (stan edytora), mock 2 (scenariusz), e2e `atanor.spec.ts`: wejście z budynku i Esc; maszyna A_NAD zbudowana ze wskazówki na planszy i osi czasu daje 12 cykli, panel „Maszyna”, wariant, próba z produktami, szkic zostaje po wyjściu.
+
 ## 4. Zmiany wyników względem PoC
 
 | Test lub obszar | W PoC | W web-game | Powód | Decyzja |

@@ -6,34 +6,22 @@ import { bodyName, buildingName, costText } from '../game/format';
 import { GameService } from '../game/game.service';
 import { UiState } from '../game/ui-state';
 import { TEXT } from '../i18n/pl';
+import { AtanorTimeline } from './atanor-timeline';
 
 const round1 = (n: number) => (Math.round(n * 10) / 10).toLocaleString('pl-PL');
 
 /** "Zaznaczenie" (canvas boards 3–6): what is selected and what it does; the build catalog. */
 @Component({
   selector: 'wg-selection-panel',
-  imports: [HudFrame, RtsButton],
+  imports: [HudFrame, RtsButton, AtanorTimeline],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { '(window:keydown)': 'onKey($event)' },
   template: `
-    <section hudFrame class="panel sel" [label]="ui.buildMenu() ? t.catalog.tab : t.selection.tab" [serial]="serial()">
+    <section hudFrame class="panel sel" [label]="ui.view() === 'atanor' ? t.atanor.timeline.tab : ui.buildMenu() ? t.catalog.tab : t.selection.tab" [serial]="serial()">
       <div class="scroll">
       @if (ui.view() === 'atanor') {
-        @if (ui.atanorReadout(); as a) {
-          <div class="head">
-            <h2 class="hud-title sg">{{ a.levelName }}</h2>
-            <span class="hud-micro" data-atanor="where">{{ a.recipeId ?? '' }} · {{ a.siteLevel ? t.atanor.building(a.siteLevel) : t.atanor.sandbox }}</span>
-            <span class="tag" [class.tag--al]="!!a.jam" [class.tag--sg]="a.playing && !a.jam">{{ a.jam ? t.atanor.jam : a.playing ? t.atanor.running : t.atanor.stopped }}</span>
-          </div>
-          <dl class="kv">
-            <div><dt>{{ t.atanor.ticks }}</dt><dd data-atanor="ticks">{{ a.ticks }}</dd></div>
-            <div><dt>{{ t.atanor.delivered }}</dt><dd data-atanor="delivered">{{ a.delivered }} / {{ a.target }}</dd></div>
-            <div><dt>{{ t.atanor.cycles }}</dt><dd>{{ a.cyclesPerOutput ?? t.atanor.unmeasured }}</dd></div>
-            <div><dt>{{ t.atanor.area }}</dt><dd>{{ a.area }}</dd></div>
-          </dl>
-          @if (a.jam) {
-            <span class="al">{{ a.jam.reason }}: {{ a.jam.message }}</span>
-          }
+        @if (ui.atanorReadout()) {
+          <wg-atanor-timeline />
         } @else {
           <span class="dim">{{ t.world.loading }}</span>
         }
@@ -176,6 +164,17 @@ const round1 = (n: number) => (Math.round(n * 10) / 10).toLocaleString('pl-PL');
             @if (x.s.kind === 'LAND') {
               <p class="note dim">{{ t.selection.padNote }}</p>
             }
+            @if (x.production; as p) {
+              <div class="stack" data-production>
+                <span class="hud-micro">{{ t.selection.production }} · {{ p.out }}</span>
+                <div class="tagline">
+                  @for (i of p.inputs; track i.code) {
+                    <span class="tag" [class.tag--al]="i.short" [attr.data-input]="i.code">{{ i.code }} {{ i.perHour }}/h · {{ t.selection.stockOf(i.stock) }}</span>
+                  }
+                </div>
+                @if (waitsFor(p.inputs); as w) {<span class="al">{{ t.selection.waitsFor(w) }}</span>}
+              </div>
+            }
             @if (x.next) {
               <span class="hud-micro">{{ x.next.title }}</span>
               <div class="tagline">@for (c of x.next.cost; track c.code) {<span class="tag" [class.tag--al]="c.missing" [class.tag--ok]="!c.missing">{{ c.code }} {{ c.amount }}</span>}</div>
@@ -275,6 +274,7 @@ export class SelectionPanel {
           output: s.state === 'ACTIVE' ? deposit : '',
           recipe: s.recipe ? `${s.recipe}${s.batch ? ` · ${this.pct(s.batch.progress)}%` : ''}` : '',
           storage: Object.entries(lvl.storage).map(([cls, q]) => `${cls} ${Math.round(q)} j.`).join(' · '),
+          production: this.production(s, lvl.outputFactor, store),
           next: next ? { title: this.t.selection.nextLevel(next.level, this.t.units.min(next.buildTime)), cost: Object.entries(next.cost).map(([code, amount]) => ({ code, amount, missing: (store[code] ?? 0) < amount })) } : null,
         },
       };
@@ -287,6 +287,26 @@ export class SelectionPanel {
     }
     return empty;
   });
+
+  /**
+   * "Produkcja" of a processing building (A15): output and input rates of its recipe at full power
+   * (batch size / time × level factor) and the stock of each input; an input short of one batch is
+   * what the building waits for.
+   */
+  private production(s: Structure, factor: number, store: Readonly<Record<string, number>>): { out: string; inputs: Array<{ code: string; perHour: string; stock: number; short: boolean }> } | null {
+    const r = s.recipe ? this.game.catalog()?.recipes.find((x) => x.id === s.recipe) : null;
+    // extractors show their deposit rate instead; the Fabryka atanorowa has its machine panel
+    if (!r || s.kind === 'ATN' || Object.keys(r.inp).length === 0) return null;
+    const perHour = (q: number) => round1((q * 60 * factor) / r.time);
+    return {
+      out: Object.entries(r.out).map(([code, q]) => `${perHour(q)} ${code}/h`).join(' · '),
+      inputs: Object.entries(r.inp).map(([code, q]) => ({ code, perHour: perHour(q), stock: Math.floor(store[code] ?? 0), short: (store[code] ?? 0) < q })),
+    };
+  }
+
+  protected waitsFor(inputs: ReadonlyArray<{ code: string; short: boolean }>): string {
+    return inputs.filter((i) => i.short).map((i) => i.code).join(', ');
+  }
 
   /** What can stand on the selected tile now (server check), extractors of its deposit first. */
   protected readonly fits = computed(() => {

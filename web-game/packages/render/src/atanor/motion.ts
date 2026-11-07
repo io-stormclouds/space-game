@@ -18,10 +18,15 @@ export interface Point {
 export interface ArmPose {
   id: string;
   base: Point;
+  /** The main gripper (index 0). */
   gripper: Point;
-  /** Screen angle [rad]. */
+  /** Every gripper, in gripper order (multi-gripper arms, Fabryka atanorowa L4). */
+  grippers: Point[];
+  /** Screen angle of the main gripper [rad]. */
   angle: number;
   holding: boolean;
+  /** Whether each gripper holds an atom. */
+  held: boolean[];
   isPiston: boolean;
 }
 
@@ -74,18 +79,27 @@ function rotate(p: Point, a: number): Point {
   return { x: p.x * c - p.y * s, y: p.x * s + p.y * c };
 }
 
+/** Angle offset of gripper `i` from the main gripper [rad] (grippers spaced evenly, engine arm.ts). */
+function gripperOffset(arm: ArmState, i: number): number {
+  return (i * 2 * Math.PI) / Atanor.gripperCount(arm);
+}
+
 export function armPose(prev: ArmState, curr: ArmState, t: number, layout: HexLayout): ArmPose {
   const b0 = hexToScreen(prev.basePos, layout);
   const b1 = hexToScreen(curr.basePos, layout);
   const base = { x: lerp(b0.x, b1.x, t), y: lerp(b0.y, b1.y, t) };
   const angle = armAngle(prev.rotation) + rotationDelta(prev.rotation, curr.rotation) * (Math.PI / 3) * t;
   const len = lerp(prev.length, curr.length, t) * hexStep(layout);
+  const grippers = Array.from({ length: Atanor.gripperCount(curr) }, (_, i) => ({ x: base.x + len * Math.cos(angle + gripperOffset(curr, i)), y: base.y + len * Math.sin(angle + gripperOffset(curr, i)) }));
+  const heldIds = Atanor.getHeldAtomIds(t < 0.5 ? prev : curr);
   return {
     id: curr.id,
     base,
-    gripper: { x: base.x + len * Math.cos(angle), y: base.y + len * Math.sin(angle) },
+    gripper: grippers[0]!,
+    grippers,
     angle,
     holding: t < 0.5 ? prev.isHolding : curr.isHolding,
+    held: heldIds.map((h) => h !== null),
     isPiston: curr.isPiston,
   };
 }
@@ -127,14 +141,17 @@ export function interpolateMachine(prev: StepResult, curr: StepResult, t: number
   const prevArms = new Map(prev.arms.map((a) => [a.id, a]));
   const arms = curr.arms.map((a) => armPose(prevArms.get(a.id) ?? a, a, tt, layout));
 
-  // Rigid carriers: arms that held something before the tick and moved during it.
+  // Rigid carriers: grippers that held something before the tick while their arm moved.
   const molecules = moleculeIndex(prev.atoms, prev.bonds);
-  const carrierOf = new Map<string, { prev: ArmState; curr: ArmState; cmd: Atanor.ArmCommand }>();
+  const carrierOf = new Map<string, { prev: ArmState; curr: ArmState; cmd: Atanor.ArmCommand; gripper: number }>();
   for (const pa of prev.arms) {
     const cmd = curr.commandsExecuted[pa.id];
     const ca = curr.arms.find((a) => a.id === pa.id);
-    if (!pa.isHolding || !pa.heldAtomId || !cmd || !MOTION.has(cmd) || !ca) continue;
-    for (const id of molecules.get(pa.heldAtomId) ?? []) if (!carrierOf.has(id)) carrierOf.set(id, { prev: pa, curr: ca, cmd });
+    if (!pa.isHolding || !cmd || !MOTION.has(cmd) || !ca) continue;
+    Atanor.getHeldAtomIds(pa).forEach((held, gripper) => {
+      if (!held) return;
+      for (const id of molecules.get(held) ?? []) if (!carrierOf.has(id)) carrierOf.set(id, { prev: pa, curr: ca, cmd, gripper });
+    });
   }
 
   const currAtoms = new Map(curr.atoms.map((a) => [a.id, a]));
@@ -149,10 +166,12 @@ export function interpolateMachine(prev: StepResult, curr: StepResult, t: number
       const rigid = (k: number): Point => {
         const start = armPose(carrier.prev, carrier.curr, 0, layout);
         const now = armPose(carrier.prev, carrier.curr, k, layout);
+        const g0 = start.grippers[carrier.gripper] ?? start.gripper;
+        const g1 = now.grippers[carrier.gripper] ?? now.gripper;
         const pivot = carrier.cmd === 'PIVOT_CW' ? (Math.PI / 3) * k : carrier.cmd === 'PIVOT_CCW' ? -(Math.PI / 3) * k : 0;
-        const rel = rotate({ x: p0.x - start.gripper.x, y: p0.y - start.gripper.y }, -start.angle);
+        const rel = rotate({ x: p0.x - g0.x, y: p0.y - g0.y }, -start.angle);
         const r = rotate(rel, now.angle + pivot);
-        return { x: now.gripper.x + r.x, y: now.gripper.y + r.y };
+        return { x: g1.x + r.x, y: g1.y + r.y };
       };
       const end = rigid(1);
       const agrees = !p1 || Math.hypot(end.x - p1.x, end.y - p1.y) < 0.5;
@@ -183,9 +202,10 @@ export function interpolateMachine(prev: StepResult, curr: StepResult, t: number
   for (const b of curr.bonds) pushBond(b, prevBonds.has(bondKey(b)) || tt >= REACTION_T ? 1 : 0);
   for (const b of prev.bonds) if (!currBonds.has(bondKey(b))) pushBond(b, tt < REACTION_T ? 1 : 0);
 
-  // Jam marks: atoms sharing a hex, else the molecules held by several arms.
-  const jamAtoms: string[] = [];
-  if (curr.collisionDetected) {
+  // Jam marks: the atoms the engine names (trajectory, arm and off-board jams, AT5), else atoms
+  // sharing a hex, else the molecules held by several arms.
+  const jamAtoms: string[] = [...(curr.collisionDetected ? (curr.jamDetail?.atomIds ?? []) : [])];
+  if (curr.collisionDetected && jamAtoms.length === 0) {
     const byHex = new Map<string, string[]>();
     for (const a of curr.atoms) {
       const k = `${a.pos.q},${a.pos.r}`;

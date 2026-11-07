@@ -9,6 +9,8 @@ export { isAtanorControls, type AtanorControls } from './controls';
 export type { AtanorReadout } from './readout';
 export { ATANOR_TEXT_PL, type AtanorText } from './style';
 export { DEFAULT_ATANOR_LEVEL, resolveAtanorLevel } from './layout';
+export { AtanorEditor, createAtanorEditor, initialDraft } from './editor';
+export type { AtanorCommand, AtanorEditIssue, AtanorEditorView, AtanorGhost, AtanorSolution, AtanorTool } from './editor';
 
 /** Loads PixiJS and creates the Atanor view (use as the host's 'atanor' factory). */
 export async function loadAtanorView(opts: AtanorViewOptions = {}): Promise<View> {

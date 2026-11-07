@@ -1,7 +1,9 @@
 import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
 import type { Availability, BodyId, CatalogView, Structure, TileInfo, WorldState } from '@space-game/api';
+import type { AtanorTool } from '@space-game/render';
 import type { CommandSlot, IconName } from '@space-game/ui';
 import { TEXT } from '../i18n/pl';
+import { AtanorSession } from './atanor-session';
 import { buildingName, costText, reasonText, tileIndexFromId } from './format';
 import { GameService } from './game.service';
 import { UiState } from './ui-state';
@@ -34,6 +36,7 @@ export class CommandsService {
   private readonly t = inject(TEXT);
   private readonly game = inject(GameService);
   private readonly ui = inject(UiState);
+  private readonly atanorSession = inject(AtanorSession);
   /** Availability answers from the server, by kind (and "KIND@L" for upgrades). */
   readonly availability = signal<Record<string, Availability>>({});
   /** The selected surface tile as the server sees it (tile panel and card), refreshed with the snapshots. */
@@ -117,45 +120,84 @@ export class CommandsService {
   }
 
   /**
-   * Atanor view (W08 A, AT1): run, step, reset, speed, back. The machine of a building follows the
-   * building's recipe; only the sandbox (designer F2) switches levels.
+   * Atanor view (W08 A, AT1, AT2). Design: tools of the building level (§8.1), trial, back.
+   * Trial: run, step, reset, tempo (PoC 0.5–4×), end of the trial. The machine of a building
+   * follows the building's recipe; only the sandbox (designer F2) switches levels.
    */
   private atanorCard(): CardModel {
     const t = this.t;
     const c = t.commands;
+    const ta = t.atanor;
     const a = this.ui.atanor();
     const r = this.ui.atanorReadout();
+    const ed = this.atanorSession.state();
+    const trial = this.atanorSession.trial();
     const site = this.ui.atanorBuilding();
     const world = this.game.world();
     const where = this.ui.planetAvailable() ? t.hud.views.planet : t.hud.views.system;
-    const back = this.slot('back', c.atanorBack.label, 'Esc', 'cancel', { description: c.atanorBack.note(where), run: () => this.ui.closeAtanor() });
-    const context = site && world ? t.atanor.site(this.bodyLabelOf(world, site.bodyId), Math.max(1, site.level)) : `${t.atanor.sandbox}${r ? ' · ' + r.levelName : ''}`;
-    if (!a) return { title: t.cmd.title, context, status: '', slots: [back] };
-    const tps = r?.ticksPerSecond ?? 1.67;
-    const slots: Array<CommandSlot | null> = [
-      r?.playing
-        ? this.slot('pause', c.atanorPause.label, 'P', 'stop', { description: c.atanorPause.note, selected: true, run: () => a.pause() })
-        : this.slot('play', c.atanorPlay.label, 'P', 'produce', { variant: 'primary', description: c.atanorPlay.note, run: () => a.play() }),
-      this.slot('step', c.atanorStep.label, 'K', 'move', { description: c.atanorStep.note, run: () => a.step() }),
-      this.slot('reset', c.atanorReset.label, 'R', 'repeat', { description: c.atanorReset.note, run: () => a.reset() }),
-      this.slot('faster', c.atanorFaster.label, 'F', 'upgrade', { description: c.atanorFaster.note(Math.round(tps * 10) / 10), run: () => a.setTicksPerSecond(tps >= 30 ? 1.67 : tps * 3) }),
-    ];
-    if (!site) {
+    // Esc drops the tool first, then ends the trial, then leaves the view
+    const back = this.slot('back', c.atanorBack.label, 'Esc', 'cancel', { description: c.atanorBack.note(where), run: () => this.atanorSession.escape() });
+    const place = site && world ? ta.site(this.bodyLabelOf(world, site.bodyId), Math.max(1, site.level)) : `${ta.sandbox}${r ? ' · ' + r.levelName : ''}`;
+    const context = `${place} · ${trial ? ta.mode.trial : ta.mode.design}`;
+    if (!a || !ed) return { title: t.cmd.title, context, status: '', slots: [back] };
+
+    const levelSlot = (): CommandSlot | null => {
+      if (site) return null;
       const levels = a.levels();
       const i = Math.max(0, levels.findIndex((l) => l.id === r?.levelId));
       const next = levels[(i + 1) % levels.length]!;
-      slots.push(
-        this.slot('level', c.atanorLevel.label, 'L', 'research', {
-          description: c.atanorLevel.note(r?.levelName ?? '—'),
-          run: () => {
-            a.setLevel(next.recipeId ?? next.id);
-            this.ui.atanorLevel.set(next.recipeId ?? next.id);
-          },
-        }),
-      );
+      return this.slot('level', c.atanorLevel.label, 'L', 'research', {
+        description: c.atanorLevel.note(r?.levelName ?? '—'),
+        run: () => {
+          this.atanorSession.stopTrial();
+          this.ui.atanorLevel.set(next.recipeId ?? next.id);
+        },
+      });
+    };
+
+    if (trial) {
+      const speeds = [0.5, 1, 2, 4];
+      const base = 1000 / 600; // PoC 1× = 600 ms per tick
+      const speed = speeds.reduce((best, s) => (Math.abs(s * base - (r?.ticksPerSecond ?? base)) < Math.abs(best * base - (r?.ticksPerSecond ?? base)) ? s : best), 1);
+      const next = speeds[(speeds.indexOf(speed) + 1) % speeds.length]!;
+      const slots: Array<CommandSlot | null> = [
+        r?.playing
+          ? this.slot('pause', c.atanorPause.label, 'P', 'stop', { description: c.atanorPause.note, selected: true, run: () => a.pause() })
+          : this.slot('play', c.atanorPlay.label, 'P', 'produce', { variant: 'primary', description: c.atanorPlay.note, run: () => a.play() }),
+        this.slot('step', c.atanorStep.label, 'K', 'move', { description: c.atanorStep.note, run: () => a.step() }),
+        this.slot('reset', c.atanorReset.label, 'R', 'repeat', { description: c.atanorReset.note, run: () => a.reset() }),
+        this.slot('speed', `${ta.speed.label} ×${speed}`, 'F', 'upgrade', { description: ta.speed.note(next), run: () => a.setTicksPerSecond(next * base) }),
+        this.slot('endTrial', ta.endTrial.label, 'T', 'cancel', { selected: true, description: ta.endTrial.note, run: () => this.atanorSession.stopTrial() }),
+        null,
+        levelSlot(),
+        back,
+      ];
+      return { title: t.cmd.title, context, status: 'ATN', slots };
     }
-    slots.push(back);
-    return { title: t.cmd.title, context, status: 'ATN', slots };
+
+    const tool = (id: AtanorTool, key: string, icon: IconName, label: string, note: string): CommandSlot => {
+      const lock = ed.locks[id];
+      if (lock) return this.locked(id, label, key, 'level' in lock ? ta.lockLevel(lock.level) : ta.lockRecipe, icon);
+      return this.slot(id, label, key, icon, { selected: ed.tool === id, description: note, run: () => this.atanorSession.setTool(id) });
+    };
+    const bond = ed.tool === 'UNBONDER' ? 'UNBONDER' : 'BONDER';
+    const transmute = this.transmutation(r);
+    const slots: Array<CommandSlot | null> = [
+      tool('ARM', 'A', 'build', ed.tool === 'ARM' ? `${ta.tools['ARM']} L${ed.armLength}` : ta.tools['ARM']!, ta.toolNote.ARM(ed.armLength, ed.maxArmLength)),
+      tool('PISTON', 'S', 'upgrade', ta.tools['PISTON']!, ta.toolNote.PISTON),
+      tool(bond, 'D', 'rally', ta.tools[bond]!, bond === 'BONDER' ? ta.toolNote.BONDER : ta.toolNote.UNBONDER),
+      tool('TRANSMUTE', 'G', 'research', ta.tools['TRANSMUTE']!, ta.toolNote.TRANSMUTE(transmute.from, transmute.to)),
+      tool('TRACK', 'H', 'move', ta.tools['TRACK']!, ta.toolNote.TRACK),
+      this.slot('DELETE', ta.tools['DELETE']!, 'X', 'cancel', { variant: 'danger', selected: ed.tool === 'DELETE', description: ta.toolNote.DELETE, run: () => this.atanorSession.setTool('DELETE') }),
+      this.slot('trial', ta.trial.label, 'T', 'produce', { variant: 'primary', description: ta.trial.note, run: () => this.atanorSession.startTrial() }),
+      levelSlot() ?? back,
+    ];
+    return { title: t.cmd.title, context, status: ed.issue ? ta.issues[ed.issue] ?? ed.issue : 'ATN', slots };
+  }
+
+  /** The recipe's transmutation for the tool note (e.g. PLA → PLA*). */
+  private transmutation(r: { recipeId: string | null } | null): { from: string; to: string } {
+    return r?.recipeId === 'A_KAT' ? { from: 'PLA', to: 'PLA*' } : r?.recipeId === 'A_PRO' ? { from: 'KWA', to: 'KWA*' } : { from: '—', to: '—' };
   }
 
   private bodyLabelOf(world: WorldState, bodyId: BodyId): string {

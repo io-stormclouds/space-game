@@ -69,9 +69,14 @@ Testy: `npx vitest run packages/render/src/atanor`, 19 testów. Obejmują wybór
 
 Harness: `npx vite packages/render/harness/atanor --port 4432` (`?level=A_KAT`). Ma przyciski, odczyt i `window.harness.switchCycles(n)`.
 
+## Edytor (AT2)
+
+- `editor.ts`: `AtanorEditor` — narzędzie, obrót i długość ducha, zaznaczenie, historia (100 kroków) nad czystymi operacjami domeny (`Atanor.placeArm`, `placeGlyph`, `extendTrack`, `removeAt`, `rotateAt`, `setCommand`, `insertColumn`…). `initialDraft()` według A21.
+- Widok: `ViewInput.atanor.editor` (szkic, duch, zaznaczenie). Nowy szkic przebudowuje maszynę i zeruje przebieg (jak w PoC). `pick` zwraca `ATANOR_HEX`. Przepustowość mierzona dla każdego szkicu (pamięć podręczna po `solutionKey`).
+- Ramiona wielochwytowe (AT5): `motion.ts` niesie cząsteczkę każdego chwytaka, widok rysuje każdy chwytak; atomy JAM z `jamDetail` silnika.
+
 ## Braki
 
-- **Edytor:** brak stawiania ramion i glifów oraz edycji osi czasu (A6, A9). PoC miał narzędzia budowy i podgląd.
 - **Plansza:** brak przesuwania i przybliżania (PoC: przeciąganie i kółko).
 - **Wejścia:** są nieograniczone. Bufory z magazynu kolonii (`supply`) nie są podłączone.
 - **Ekonomia:** produkt nie trafia do gry.

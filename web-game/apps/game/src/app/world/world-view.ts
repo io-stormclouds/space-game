@@ -15,6 +15,7 @@ import {
 import type { RoverId } from '@space-game/api';
 import { RenderHost, isAtanorControls, type PickResult, type ViewInput } from '@space-game/render';
 import { VIEW_FACTORIES } from './view-factories.token';
+import { AtanorSession } from '../game/atanor-session';
 import { CommandsService } from '../game/commands';
 import { GameService } from '../game/game.service';
 import { PerfService } from '../game/perf';
@@ -44,6 +45,8 @@ type DevWindow = Window & {
     frontTiles(bodyId: string): Array<Point & { index: number }>;
     /** Buildings of a kind: id, body and tile indices (for clicking them in e2e tests). */
     structures(kind: string): Array<{ id: string; bodyId: string; tiles: number[] }>;
+    /** Centre of an Atanor board hex on the page (while the Atanor view is shown). */
+    atanorHex(q: number, r: number): Point | null;
   };
 };
 
@@ -59,11 +62,12 @@ type DevWindow = Window & {
     <div
       #host
       class="host"
-      [class.is-placing]="!!ui.placement()"
+      [class.is-placing]="!!ui.placement() || atanorTool()"
       (pointerdown)="down($event)"
       (pointerup)="up($event)"
       (pointermove)="move($event)"
-      (pointerleave)="ui.hover.set(null)"
+      (pointerleave)="ui.hover.set(null); atanorSession.hover(null)"
+      (contextmenu)="$event.preventDefault()"
     ></div>
     @if (!hasScene()) {
       <div class="fallback">
@@ -84,6 +88,9 @@ export class WorldView {
   private readonly game = inject(GameService);
   protected readonly ui = inject(UiState);
   private readonly commands = inject(CommandsService);
+  protected readonly atanorSession = inject(AtanorSession);
+  /** An Atanor tool is active (the board shows its ghost). */
+  protected readonly atanorTool = computed(() => this.ui.view() === 'atanor' && (this.atanorSession.state()?.tool ?? 'SELECT') !== 'SELECT');
   private readonly perf = inject(PerfService);
   private readonly factories = inject(VIEW_FACTORIES);
   private readonly hostEl = viewChild.required<ElementRef<HTMLDivElement>>('host');
@@ -113,6 +120,13 @@ export class WorldView {
             (this.game.world()?.structures ?? [])
               .filter((s) => s.kind === kind)
               .map((s) => ({ id: s.id, bodyId: s.bodyId, tiles: s.tiles.map((t) => Number(t.slice(t.lastIndexOf(':') + 1))) })),
+          atanorHex: (q, r) => {
+            const layout = (this.render?.currentView as { hexLayout?: { size: number; origin: { x: number; y: number } } } | null)?.hexLayout;
+            if (this.ui.view() !== 'atanor' || !layout) return null;
+            const box = this.hostEl().nativeElement.getBoundingClientRect();
+            // pointy-top axial hexes (domain grid/hex.ts hexToPixel)
+            return { x: box.left + layout.origin.x + layout.size * Math.sqrt(3) * (q + r / 2), y: box.top + layout.origin.y + layout.size * 1.5 * r };
+          },
         };
       }
       const loop = (now: number) => {
@@ -156,7 +170,7 @@ export class WorldView {
       selection: this.ui.selection(),
       hover: this.ui.hover(),
       placement: p?.preview ? { kind: p.kind, tiles: p.preview.tiles, valid: p.preview.valid } : null,
-      atanor: this.ui.atanorInput(),
+      atanor: this.atanorSession.viewInput(),
     };
   }
 
@@ -191,6 +205,10 @@ export class WorldView {
     if (performance.now() - this.lastHover < 33) return; // ~30 Hz like the PoC
     this.lastHover = performance.now();
     const pick = this.pickAt(e);
+    if (this.ui.view() === 'atanor') {
+      this.atanorSession.hover(pick?.kind === 'ATANOR_HEX' ? { q: pick.q, r: pick.r } : null);
+      return;
+    }
     this.ui.hover.set(pick);
     const p = this.ui.placement();
     const world = this.game.world();
@@ -238,6 +256,12 @@ export class WorldView {
   }
 
   private async onPick(pick: PickResult, secondary: boolean): Promise<void> {
+    // Atanor editor (AT2): LMB uses the tool on the hex (or selects), RMB puts the tool away
+    if (this.ui.view() === 'atanor') {
+      if (secondary) this.atanorSession.setTool('SELECT');
+      else if (pick.kind === 'ATANOR_HEX') this.atanorSession.apply({ q: pick.q, r: pick.r });
+      return;
+    }
     const world = this.game.world();
     if (!world) return;
     const placement = this.ui.placement();

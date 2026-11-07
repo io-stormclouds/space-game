@@ -1,5 +1,6 @@
 import type { BodyId, FrameData, GameSnapshot } from '@space-game/api';
 import type { WebGLRenderer } from 'three';
+import type { AtanorEditorView } from './atanor/editor';
 
 // Contract between the app and the scenes (F4). The app owns the animation loop and calls
 // `RenderHost.update` every frame with the latest snapshot; scenes keep no game state.
@@ -13,7 +14,9 @@ export type PickResult =
   | { kind: 'STRUCTURE'; bodyId: BodyId; structureId: string; tileIndex: number }
   | { kind: 'SHIP'; shipId: string }
   | { kind: 'ROVER'; roverId: string; bodyId: BodyId }
-  | { kind: 'STAR'; starName: string };
+  | { kind: 'STAR'; starName: string }
+  /** A hex of the Atanor board (axial q, r). */
+  | { kind: 'ATANOR_HEX'; q: number; r: number };
 
 /** Ghost of a building being placed (canvas "duch na polu"). */
 export interface Placement {
@@ -52,6 +55,8 @@ export interface AtanorViewInput {
   level: string;
   /** Level of the building the machine stands in: board and limits (§8.1). Null in the sandbox. */
   buildingLevel: number | null;
+  /** The machine being designed (AT2): solution, ghost of the tool, selection. Null = reference. */
+  editor?: AtanorEditorView | null;
 }
 
 export interface RenderStats {

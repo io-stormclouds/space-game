@@ -242,7 +242,7 @@ export class MockServer {
       const levels: CatalogLevel[] = [];
       for (let L = 1; L <= b.maxL; L++) {
         const s = rules.spec(b.id, L);
-        levels.push({ level: L, cost: s.cost, buildTime: s.buildTime, power: s.power, crew: s.crew, storage: s.storage });
+        levels.push({ level: L, cost: s.cost, buildTime: s.buildTime, power: s.power, crew: s.crew, storage: s.storage, outputFactor: s.outputFactor });
       }
       return {
         id: b.id,

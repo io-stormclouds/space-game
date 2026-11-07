@@ -4,10 +4,12 @@ import type { ViewKind } from '@space-game/render';
 import { CommandCard, HudFrame } from '@space-game/ui';
 import { Designer } from '../designer/designer';
 import { DesignerPanel } from '../designer/designer-panel';
+import { AtanorSession } from '../game/atanor-session';
 import { CommandsService } from '../game/commands';
 import { GameService } from '../game/game.service';
 import { isPreset, runPreset } from '../game/presets';
 import { UiState } from '../game/ui-state';
+import { AtanorMachine } from '../hud/atanor-machine';
 import { LogPanel, MissionPanel, ScanPanel, StatusBanner } from '../hud/float-panels';
 import { PerfOverlay } from '../hud/perf-overlay';
 import { SelectionPanel } from '../hud/selection-panel';
@@ -23,7 +25,7 @@ const TEMPOS = TEMPO_PRESETS.filter((t) => t !== 10);
 /** The game screen: shared HUD of the canvas (top bar 48 px, dock 240 px) over the world view. */
 @Component({
   selector: 'wg-game-page',
-  imports: [TopBar, WorldView, MissionPanel, StatusBanner, ScanPanel, LogPanel, SystemMap, SelectionPanel, CommandCard, HudFrame, PerfOverlay, DesignerPanel],
+  imports: [TopBar, WorldView, MissionPanel, StatusBanner, ScanPanel, LogPanel, SystemMap, SelectionPanel, CommandCard, HudFrame, PerfOverlay, DesignerPanel, AtanorMachine],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { '(window:keydown)': 'onKey($event)' },
   template: `
@@ -37,6 +39,8 @@ const TEMPOS = TEMPO_PRESETS.filter((t) => t !== 10);
         <wg-status-banner />
         @if (designer.open()) {
           <wg-designer-panel />
+        } @else if (ui.view() === 'atanor') {
+          <wg-atanor-machine />
         } @else if (showScan()) {
           <wg-scan-panel />
         } @else {
@@ -69,6 +73,7 @@ export class GamePage {
   protected readonly game = inject(GameService);
   protected readonly ui = inject(UiState);
   private readonly commands = inject(CommandsService);
+  private readonly atanor = inject(AtanorSession);
   /** Created with the game screen, so its telemetry collects from the first step (F6). */
   protected readonly designer = inject(Designer);
   /** Route parameter of `#/scenariusz-<preset>` (W15 C). */
@@ -108,8 +113,9 @@ export class GamePage {
 
   /** Global keys (P1). Command and build-catalog keys are handled by their components. */
   protected onKey(e: KeyboardEvent): void {
-    if (e.ctrlKey || e.altKey || e.metaKey) return;
     if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+    if (this.ui.view() === 'atanor' && !e.defaultPrevented && this.atanorKey(e)) return;
+    if (e.ctrlKey || e.altKey || e.metaKey) return;
     const view = VIEW_KEYS[e.key];
     if (view) {
       if (view === 'planet' && !this.ui.planetAvailable()) return;
@@ -137,11 +143,13 @@ export class GamePage {
         this.designer.toggle();
         return;
       case 'Escape':
+        // The Atanor card always has "Wróć" (Esc): one handler, or Esc would act twice (the
+        // microtask below runs between window listeners, before the card's).
+        if (this.ui.view() === 'atanor') return;
         // after the command card: it cancels placement itself when it has an Esc command
         queueMicrotask(() => {
           if (e.defaultPrevented) return;
-          if (this.ui.view() === 'atanor') this.ui.closeAtanor();
-          else if (this.ui.placement()) this.ui.placement.set(null);
+          if (this.ui.placement()) this.ui.placement.set(null);
           else if (this.ui.targeting()) this.ui.targeting.set(false);
           else if (this.ui.driveRover()) this.ui.driveRover.set(null);
           else if (this.ui.buildMenu()) this.ui.buildMenu.set(false);
@@ -149,6 +157,23 @@ export class GamePage {
         });
         return;
     }
+  }
+
+  /** Keys of the Atanor editor (AT2): undo / redo, R turns the ghost or the selection. */
+  private atanorKey(e: KeyboardEvent): boolean {
+    const k = e.key.toLowerCase();
+    if ((e.ctrlKey || e.metaKey) && !e.altKey && (k === 'z' || k === 'y')) {
+      e.preventDefault();
+      if (k === 'y' || e.shiftKey) this.atanor.redo();
+      else this.atanor.undo();
+      return true;
+    }
+    if (!e.ctrlKey && !e.altKey && !e.metaKey && k === 'r' && !this.atanor.trial()) {
+      e.preventDefault();
+      this.atanor.rotate();
+      return true;
+    }
+    return false;
   }
 
   private shiftTempo(dir: 1 | -1): void {

@@ -139,6 +139,8 @@ export interface CatalogLevel {
   /** Crew needed (positive) or living space (negative). */
   crew: number;
   storage: Readonly<Record<string, number>>;
+  /** Speed of production at this level relative to L1 (×1,6 per level, doc §5.2 E). */
+  outputFactor: number;
 }
 
 export interface CatalogBuilding {

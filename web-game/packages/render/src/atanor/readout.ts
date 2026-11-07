@@ -22,6 +22,9 @@ export interface AtanorReadout {
   completed: boolean;
   completedAtTick: number | null;
   jam: { reason: Atanor.JamReason; message: string } | null;
+  /** Timeline column of the tick that jammed, and the arms involved (timeline marker, AT2). */
+  jamColumn: number | null;
+  jamArms: string[];
   starved: boolean;
   /** Steady-state ticks per product of the running solution (A13: may be fractional). */
   cyclesPerOutput: number | null;
@@ -57,6 +60,7 @@ export interface ReadoutSource {
   playing: boolean;
   ticksPerSecond: number;
   siteLevel?: number | null;
+  jamColumn?: number | null;
 }
 
 export function toReadout(src: ReadoutSource): AtanorReadout {
@@ -78,6 +82,8 @@ export function toReadout(src: ReadoutSource): AtanorReadout {
     completed: s.completed,
     completedAtTick: s.completedAtTick,
     jam: s.jam ? { reason: s.jam.reason, message: s.jam.message } : null,
+    jamColumn: s.jam ? (src.jamColumn ?? null) : null,
+    jamArms: s.jam?.detail ? [...s.jam.detail.armIds] : [],
     starved: s.starved,
     cyclesPerOutput: m?.cyclesPerOutput ?? null,
     periodTicks: m?.periodTicks ?? null,

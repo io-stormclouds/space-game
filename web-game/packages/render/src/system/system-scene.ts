@@ -959,6 +959,8 @@ export function samePick(a: PickResult | null, b: PickResult | null): boolean {
       return a.roverId === (b as typeof a).roverId;
     case 'STAR':
       return a.starName === (b as typeof a).starName;
+    case 'ATANOR_HEX':
+      return a.q === (b as typeof a).q && a.r === (b as typeof a).r;
   }
 }
 
