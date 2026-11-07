@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<title>Mapa znanych światów</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#FFB000}
+.hud,.hud *{box-sizing:border-box;border-radius:0;box-shadow:none;transition:none}
+.hud{font-family:'JetBrains Mono','IBM Plex Mono',Consolas,monospace;font-variant-numeric:tabular-nums slashed-zero;color:#C5C6C7;background:#0B0C10;font-size:12px;line-height:1.3}
+.hud :focus-visible{outline:2px solid #FFB000;outline-offset:2px}
+.gb{background-color:#0B0C10;background-image:linear-gradient(rgba(112,128,146,.10) 1px,transparent 1px),linear-gradient(90deg,rgba(112,128,146,.10) 1px,transparent 1px);background-size:32px 32px}
+.mi{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#8A939D;line-height:1.1}
+.tt{margin:0;font-size:16px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;line-height:1.1}
+.sg{color:#FFB000}.al{color:#FF5A4A}
+.fr{position:relative;background:#111419;border:1px solid rgba(112,128,146,.24)}
+.tk{position:absolute;width:8px;height:8px;border:0 solid #FFB000;pointer-events:none}
+.tk.a{top:-1px;left:-1px;border-top-width:1px;border-left-width:1px}.tk.b{top:-1px;right:-1px;border-top-width:1px;border-right-width:1px}
+.tk.c{bottom:-1px;left:-1px;border-bottom-width:1px;border-left-width:1px}.tk.d{bottom:-1px;right:-1px;border-bottom-width:1px;border-right-width:1px}
+.tab{position:absolute;top:0;left:16px;transform:translateY(-50%);padding:0 4px;background:#0B0C10;font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#FFB000;line-height:1;white-space:nowrap}
+.ser{position:absolute;right:6px;bottom:3px;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#58616B;line-height:1}
+.rb{position:absolute;left:0;top:0;right:0;height:48px;display:flex;align-items:stretch;background:#111419;border-top:1px solid #FFB000;border-bottom:1px solid rgba(112,128,146,.24)}
+.rb-id{display:flex;flex-direction:column;justify-content:center;gap:4px;padding:0 16px;border-right:1px solid rgba(112,128,146,.24);white-space:nowrap}
+.rb-nm{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;line-height:1.1}
+.rs{display:flex;flex-direction:column;justify-content:center;gap:4px;padding:0 12px;border-right:1px solid rgba(112,128,146,.24);white-space:nowrap}
+.rs dt{display:flex;align-items:center;gap:6px;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#8A939D;line-height:1}
+.rs dd{display:flex;align-items:center;gap:8px;margin:0;font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;line-height:1}
+.rs-c{font-weight:700;color:#C5C6C7}
+.led{width:6px;height:6px;border:1px solid #58616B}
+.led.on{background:#FFB000;border-color:#FFB000}
+.rb-sp{flex:1}
+.rb-cl{display:flex;align-items:center;gap:8px;padding:0 12px;border-left:1px solid rgba(112,128,146,.24)}
+.vs{display:flex;border:1px solid rgba(112,128,146,.24);background:#0B0C10}
+.vs>*{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 10px;border:0;border-right:1px solid rgba(112,128,146,.24);background:transparent;font:inherit;font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#8A939D;text-decoration:none;cursor:pointer;white-space:nowrap}
+.vs>*:last-child{border-right:0}
+.vs>a:hover,.vs>button:hover{color:#FFB000;background:#2A3644}
+.vs>a:active,.vs>button:active{color:#0B0C10;background:#FFB000}
+.vs>.cur{color:#FFB000;background:#3E3B2C;border-bottom:2px solid #FFB000;cursor:default}
+.bt{--e:#3B4756;--f:#1F2833;--i:#C5C6C7;--x:#8A939D;--c:6px;position:relative;display:inline-flex;min-height:44px;margin:0;padding:1px;border:0;background:var(--e);color:var(--i);font:inherit;text-align:left;text-decoration:none;cursor:pointer;user-select:none;clip-path:polygon(var(--c) 0,100% 0,100% calc(100% - var(--c)),calc(100% - var(--c)) 100%,0 100%,0 var(--c))}
+.fc{--ci:calc(var(--c) - .6px);position:relative;flex:1;display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:8px;padding:6px 12px;background:var(--f);clip-path:polygon(var(--ci) 0,100% 0,100% calc(100% - var(--ci)),calc(100% - var(--ci)) 100%,0 100%,0 var(--ci))}
+.ic{display:inline-flex;color:var(--x)}
+.ky{justify-self:end;display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 3px;border:1px solid currentColor;font-size:10px;font-weight:700;line-height:1;color:var(--x)}
+.bt.p{--e:#FFB000;--x:#FFB000}
+.bt:hover{--e:#FFB000;--f:#2A3644;--x:#FFB000}
+.bt:active{--e:#FFB000;--f:#FFB000;--i:#0B0C10;--x:#0B0C10}
+.bt:focus-visible{outline:none;--e:#FFB000}
+.bt:focus-visible>.fc::before{content:'';position:absolute;inset:3px;border:1px dashed #FFB000;pointer-events:none}
+.bt.x{--e:rgba(112,128,146,.24);--f:#111419;--i:#8A939D;--x:#58616B;cursor:not-allowed}
+.bt.x>.fc{background-image:repeating-linear-gradient(135deg,transparent 0 5px,rgba(112,128,146,.10) 5px 6px)}
+.bt.cl{--c:4px;--e:#1F2833;width:100%;height:100%;min-height:72px}
+.bt.cl>.fc{grid-template-columns:minmax(0,1fr) auto;grid-template-rows:auto minmax(0,1fr);align-items:start;gap:4px;padding:6px 6px 6px 8px}
+.bt.cl .ic{grid-column:1;grid-row:1}.bt.cl .ky{grid-column:2;grid-row:1}
+.cb{grid-column:1/-1;grid-row:2;align-self:end;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;line-height:1.15;color:var(--i)}
+.bt.cl.p,.bt.cl:hover,.bt.cl:active,.bt.cl:focus-visible{--e:#FFB000}
+.bt.cl.x{--e:#111419}
+.bt.x:hover,.bt.x:active{--e:#FF5A4A;--f:#111419;--i:#8A939D;--x:#58616B}
+.cc{display:flex;flex-direction:column;padding-top:8px}
+.cc-h{display:flex;justify-content:space-between;align-items:baseline;gap:12px;height:28px;padding:6px 10px 0}
+.cc-t{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#FFB000;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cg{display:grid;grid-template-columns:repeat(4,96px);grid-auto-rows:72px;gap:1px;background:rgba(112,128,146,.24);border-top:1px solid rgba(112,128,146,.24);border-bottom:1px solid rgba(112,128,146,.24)}
+.ce{display:flex;min-width:0;background:#1F2833}
+.ce.em{position:relative;background-color:#111419;background-image:radial-gradient(rgba(112,128,146,.24) 1px,transparent 1px);background-size:6px 6px}
+.sn{position:absolute;top:4px;right:6px;font-size:10px;letter-spacing:.14em;color:#58616B}
+.ip,.ip0{position:absolute;left:0;right:0;bottom:0;height:55px;padding:6px 10px;flex-direction:column;gap:3px;background:#111419}
+.ip0{display:flex}
+.ip{display:none;z-index:1}
+.ce:hover>.ip,.ce:focus-within>.ip{display:flex}
+.ip-h{display:flex;justify-content:space-between;align-items:baseline;gap:10px;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+.ip-n{font-size:11px;color:#8A939D}
+.ip-r{font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#FF5A4A}
+.dr{display:flex;justify-content:space-between;align-items:center;gap:12px;min-height:26px;padding:4px 0;border-bottom:1px solid rgba(112,128,146,.10)}
+.dr>:first-child{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#8A939D;white-space:nowrap}
+.dr>:last-child{display:inline-flex;align-items:center;gap:8px;font-weight:700;text-align:right}
+.tg{display:inline-flex;align-items:center;gap:6px;height:18px;padding:0 6px;border:1px solid currentColor;font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;line-height:1;white-space:nowrap;color:#8A939D;background:#0B0C10}
+.tg.ok{color:#C5C6C7}.tg.sg{color:#FFB000}
+.brk{position:absolute;inset:-6px;pointer-events:none;background:linear-gradient(#FFB000,#FFB000) left top/8px 1px no-repeat,linear-gradient(#FFB000,#FFB000) left top/1px 8px no-repeat,linear-gradient(#FFB000,#FFB000) right top/8px 1px no-repeat,linear-gradient(#FFB000,#FFB000) right top/1px 8px no-repeat,linear-gradient(#FFB000,#FFB000) left bottom/8px 1px no-repeat,linear-gradient(#FFB000,#FFB000) left bottom/1px 8px no-repeat,linear-gradient(#FFB000,#FFB000) right bottom/8px 1px no-repeat,linear-gradient(#FFB000,#FFB000) right bottom/1px 8px no-repeat}
+.st{position:absolute;width:28px;height:28px;padding:0;border:0;background:transparent;font:inherit;cursor:pointer}
+.st-l{position:absolute;display:flex;flex-direction:column;gap:3px;white-space:nowrap;pointer-events:none}
+.st-n{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#C5C6C7}
+.st:hover .st-n{color:#FFB000}
+.st:active .st-n{color:#0B0C10;background:#FFB000}
+.st.on .st-n{color:#FFB000}
+.row{display:flex;justify-content:space-between;align-items:center;gap:8px;width:100%;min-height:32px;padding:0 8px 0 6px;border:0;border-left:2px solid transparent;border-bottom:1px solid rgba(112,128,146,.10);background:transparent;color:#C5C6C7;font:inherit;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;text-align:left;cursor:pointer}
+.row:hover{background:#2A3644;color:#FFB000}
+.row:active{background:#FFB000;color:#0B0C10}
+.row.on{background:#3E3B2C;border-left-color:#FFB000;color:#FFB000}
+.chk{appearance:none;flex:none;width:16px;height:16px;margin:0;border:1px solid #8A939D;background:#0B0C10;display:inline-grid;place-items:center;cursor:pointer}
+.chk:hover{border-color:#FFB000}
+.chk:checked{border-color:#FFB000;background:#FFB000}
+.chk:checked::after{content:'';width:6px;height:6px;background:#0B0C10}
+.lay{display:flex;align-items:center;gap:10px;min-height:32px;border-bottom:1px solid rgba(112,128,146,.10);font-size:11px;letter-spacing:.06em;text-transform:uppercase;cursor:pointer}
+</style>
+</helmet>
+<div class="hud gb" style="width: 1440px; height: 900px; position: relative; overflow: hidden">
+
+  <sc-for list="{{rings}}" as="r" hint-placeholder-count="2">
+    <div aria-hidden="true" style="position: absolute; left: {{r.left}}px; top: {{r.top}}px; width: {{r.size}}px; height: {{r.size}}px; border-radius: 50%; border: 1px dashed {{r.edge}}"></div>
+    <div aria-hidden="true" style="position: absolute; left: {{r.lx}}px; top: {{r.ly}}px; padding: 1px 4px; background: #0B0C10; font-size: 10px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: {{r.color}}">{{r.label}}</div>
+  </sc-for>
+  <div aria-hidden="true" style="position: absolute; left: 0; right: 0; top: 434px; height: 1px; background: rgba(112,128,146,0.18)"></div>
+  <div aria-hidden="true" style="position: absolute; top: 48px; bottom: 0; left: 654px; width: 1px; background: rgba(112,128,146,0.18)"></div>
+
+  <sc-for list="{{stars}}" as="s" hint-placeholder-count="16">
+    <button type="button" class="{{s.cls}}" onClick="{{s.pick}}" aria-label="{{s.aria}}" aria-pressed="{{s.pressed}}" style="left: {{s.bx}}px; top: {{s.by}}px">
+      <span aria-hidden="true" style="position: absolute; left: {{s.off}}px; top: {{s.off}}px; width: {{s.size}}px; height: {{s.size}}px; border-radius: 50%; background: {{s.color}}; border: 1px solid {{s.edge}}"></span>
+      <sc-if value="{{s.here}}" hint-placeholder-val="{{false}}"><span aria-hidden="true" style="position: absolute; left: 2px; top: 2px; width: 24px; height: 24px; border: 1px solid #FFB000"></span></sc-if>
+      <sc-if value="{{s.selected}}" hint-placeholder-val="{{false}}"><span class="brk" aria-hidden="true"></span></sc-if>
+      <span class="st-l" style="{{s.lblPos}}">
+        <span class="st-n">{{s.name}}</span>
+        <sc-if value="{{s.tag}}" hint-placeholder-val="{{false}}"><span class="{{s.tagCls}}">{{s.tag}}</span></sc-if>
+      </span>
+    </button>
+  </sc-for>
+
+  <header class="rb">
+    <div class="rb-id"><span class="mi">Dzień 3 · 08:15 · rzut przybliżony</span><span class="rb-nm">Znane światy</span></div>
+    <dl style="display: flex; margin: 0">
+      <div class="rs"><dt><span class="led on" aria-hidden="true"></span><span class="rs-c">KOL</span><span>Twoja kolonia</span></dt><dd class="sg">Tau Ceti e</dd></div>
+      <div class="rs"><dt><span class="led" aria-hidden="true"></span><span class="rs-c">GWL</span><span>Gwiazdolot</span></dt><dd>Brak · Dok gwiezdny od E4</dd></div>
+      <div class="rs"><dt><span class="led" aria-hidden="true"></span><span class="rs-c">HUB</span><span>Huby rynku</span></dt><dd>2 · Słońce, Syriusz</dd></div>
+    </dl>
+    <div class="rb-sp"></div>
+    <nav class="rb-cl" aria-label="Przełącznik widoku">
+      <div class="vs">
+        <a href="Colony.dc.html">Planeta</a>
+        <a href="System.dc.html">Układ</a>
+        <span class="cur" aria-current="page">Galaktyka</span>
+      </div>
+    </nav>
+  </header>
+
+  <aside class="fr" aria-label="Filtry mapy" style="position: absolute; left: 16px; top: 76px; width: 280px; padding: 18px 12px 24px; display: flex; flex-direction: column; gap: 12px">
+    <span class="tk a"></span><span class="tk b"></span><span class="tk c"></span><span class="tk d"></span>
+    <span class="tab" aria-hidden="true">[ WARSTWY MAPY ]</span>
+    <div style="display: flex; flex-direction: column; border-top: 1px solid rgba(112,128,146,0.24)">
+      <sc-for list="{{layers}}" as="l" hint-placeholder-count="4">
+        <label for="{{l.id}}" class="lay">
+          <input id="{{l.id}}" class="chk" type="checkbox" defaultChecked="{{l.on}}">
+          {{l.label}}
+        </label>
+      </sc-for>
+    </div>
+    <div style="display: flex; flex-direction: column">
+      <span class="mi" style="padding-bottom: 6px">W zasięgu Mk I · 5 ly od Tau Ceti</span>
+      <div style="border-top: 1px solid rgba(112,128,146,0.24)">
+        <sc-for list="{{near}}" as="n" hint-placeholder-count="3">
+          <button type="button" class="{{n.cls}}" onClick="{{n.pick}}"><span>{{n.name}}</span><span>{{n.ly}}</span></button>
+        </sc-for>
+      </div>
+    </div>
+    <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px">
+      <sc-for list="{{legend}}" as="g" hint-placeholder-count="5">
+        <span class="mi" style="display: inline-flex; align-items: center; gap: 6px"><span aria-hidden="true" style="width: {{g.s}}px; height: {{g.s}}px; border-radius: 50%; background: {{g.c}}; border: 1px solid {{g.e}}"></span>{{g.label}}</span>
+      </sc-for>
+    </div>
+    <span class="ser" aria-hidden="true">MAP · 16 / 20</span>
+  </aside>
+
+  <section class="fr" aria-label="Zaznaczenie" style="position: absolute; left: 16px; top: 644px; width: 1003px; height: 240px; padding: 18px 16px 16px; display: flex; flex-direction: column; gap: 10px">
+    <span class="tk a"></span><span class="tk b"></span><span class="tk c"></span><span class="tk d"></span>
+    <span class="tab" aria-hidden="true">[ ZAZNACZENIE ]</span>
+    <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px">
+      <div style="display: flex; align-items: baseline; gap: 12px">
+        <h2 class="tt sg">{{sel.name}}</h2>
+        <span class="mi">{{sel.cls}} · {{sel.type}}</span>
+      </div>
+      <span class="{{sel.stateCls}}">{{sel.state}}</span>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); column-gap: 24px">
+      <sc-for list="{{sel.stats}}" as="s" hint-placeholder-count="6">
+        <div class="dr"><span>{{s.k}}</span><span>{{s.v}}</span></div>
+      </sc-for>
+    </div>
+    <span style="font-size: 11px; line-height: 1.5; color: #8A939D">{{sel.note}}</span>
+    <span class="ser" aria-hidden="true">STAR · {{sel.code}}</span>
+  </section>
+
+  <section class="fr cc" aria-label="Rozkazy" style="position: absolute; right: 16px; top: 644px; width: 389px; height: 240px">
+    <span class="tk a"></span><span class="tk b"></span><span class="tk c"></span><span class="tk d"></span>
+    <span class="tab" aria-hidden="true">[ CMD ]</span>
+    <div class="cc-h"><span class="cc-t">{{sel.name}}</span><span class="mi">{{sel.cc}}</span></div>
+    <div class="cg" role="group" aria-label="Rozkazy">
+      <sc-for list="{{cmds}}" as="c" hint-placeholder-count="8">
+        <sc-if value="{{c.link}}" hint-placeholder-val="{{false}}">
+          <div class="ce">
+            <a class="{{c.cls}}" href="{{c.href}}" aria-keyshortcuts="{{c.key}}"><span class="fc"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="{{c.icon}}" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="square" stroke-linejoin="miter"></path></svg><span class="ky" aria-hidden="true">{{c.key}}</span><span class="cb">{{c.label}}</span></span></a>
+            <div class="ip"><div class="ip-h"><span>{{c.label}}</span><span class="mi">Klawisz · {{c.key}}</span></div><span class="ip-n">{{c.note}}</span></div>
+          </div>
+        </sc-if>
+        <sc-if value="{{c.btn}}" hint-placeholder-val="{{true}}">
+          <div class="ce">
+            <button type="button" class="{{c.cls}}" aria-disabled="{{c.ad}}" aria-describedby="{{c.rid}}" aria-keyshortcuts="{{c.key}}"><span class="fc"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="{{c.icon}}" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="square" stroke-linejoin="miter"></path></svg><span class="ky" aria-hidden="true">{{c.key}}</span><span class="cb">{{c.label}}</span></span></button>
+            <div class="ip"><div class="ip-h"><span>{{c.label}}</span><span class="mi">Klawisz · {{c.key}}</span></div><span class="ip-n">{{c.note}}</span><span class="ip-r" id="{{c.rid}}">{{c.reason}}</span></div>
+          </div>
+        </sc-if>
+        <sc-if value="{{c.empty}}" hint-placeholder-val="{{false}}">
+          <div class="ce em" aria-hidden="true"><span class="sn">{{c.no}}</span></div>
+        </sc-if>
+      </sc-for>
+    </div>
+    <div class="ip0"><span class="mi">Wskaż rozkaz: skutek, koszt, powód blokady</span><span class="ip-n">{{sel.hint}}</span></div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = { sel: 'eri' }; }
+  renderVals() {
+    var self = this;
+    var TYPES = { M: 'czerwony karzeł', K: 'pomarańczowy karzeł', G: 'żółty karzeł', A: 'gorąca gwiazda A/F', BD: 'brązowy karzeł' };
+    var LOOK = { A: [10, '#C5C6C7', '#C5C6C7'], G: [9, '#C5C6C7', '#C5C6C7'], K: [7, '#C5C6C7', '#C5C6C7'], M: [5, '#8A939D', '#8A939D'], BD: [6, 'transparent', '#8A939D'] };
+    var T0 = { x: -2.821, y: -1.041, z: -3.213 };
+    var S = [
+      { id: 'tau', name: 'Tau Ceti', x: -2.821, y: -1.041, z: -3.213, d: 0, cls: 'G8.5V', t: 'G', pl: 5, sun: '×0,52', here: true, side: 'L', tag: 'twoja kolonia', tagC: 'good' },
+      { id: 'lac', name: 'Lacaille 9352', x: -2.956, y: -0.21, z: -2.818, d: 3.03, cls: 'M1.5Ve', t: 'M', pl: 0, sun: '×0,05', side: 'B' },
+      { id: 'eri', name: 'Epsilon Eridani', x: -2.012, y: -0.62, z: -3.003, d: 3.05, cls: 'K2V', t: 'K', pl: 1, sun: '×0,34' },
+      { id: 'yz', name: 'YZ Ceti', x: -3.35, y: -1.1, z: -2.2, d: 3.73, cls: 'M4.5V', t: 'M', pl: 3, sun: '×0,05', side: 'L' },
+      { id: 'blc', name: 'BL Ceti', x: -2.1, y: -0.5, z: -1.95, d: 5.06, cls: 'M5.5V', t: 'M', pl: 0, sun: '×0,05', side: 'B' },
+      { id: 'sir', name: 'Syriusz A/B', x: -1.339, y: -1.809, z: -2.466, d: 5.97, cls: 'A1V + DA2', t: 'A', pl: 0, sun: '×8,00', tag: 'hub rynku', tagC: 'info' },
+      { id: 'kap', name: 'Gwiazda Kapteyna', x: -0.984, y: -1.412, z: -3.801, d: 6.41, cls: 'M1.5V', t: 'M', pl: 2, sun: '×0,05' },
+      { id: 'ez', name: 'EZ Aquarii', x: -3.3, y: 0.05, z: -1.58, d: 6.59, cls: 'M5Ve', t: 'M', pl: 0, sun: '×0,05' },
+      { id: 'gj', name: 'GJ 1061', x: -1.8, y: -2.8, z: -2.7, d: 6.84, cls: 'M5.5V', t: 'M', pl: 3, sun: '×0,05' },
+      { id: 'proc', name: 'Procyon A', x: -0.004, y: 0.003, z: -3.501, d: 9.84, cls: 'F5IV-V', t: 'A', pl: 0, sun: '×6,93', tag: 'kolonia gracza', tagC: 'other' },
+      { id: 'acen', name: 'Alpha Centauri', x: -1.634, y: 0.006, z: -0.491, d: 10.27, cls: 'G2V + K1V', t: 'G', pl: 0, sun: '×1,52', tag: 'kolonia gracza', tagC: 'other' },
+      { id: 'sol', name: 'Słońce', x: 0, y: 0, z: 0, d: 11.91, cls: 'G2V', t: 'G', pl: 8, sun: '×1,00', tag: 'układ macierzysty · hub', tagC: 'info' },
+      { id: 'prox', name: 'Proxima Centauri', x: -1.295, y: 0.102, z: -0.03, d: 12.1, cls: 'M5.5Ve', t: 'M', pl: 2, sun: '×0,05' },
+      { id: 'wolf', name: 'Wolf 359', x: -2.31, y: 0.15, z: 0.31, d: 12.24, cls: 'M6Ve', t: 'M', pl: 0, sun: '×0,05' },
+      { id: 'luh', name: 'Luhman 16', x: -1.5, y: -1.2, z: 0.4, d: 12.56, cls: 'L7.5/T0.5', t: 'BD', pl: 0, sun: '×0,05' },
+      { id: 'barn', name: 'Gwiazda Barnarda', x: 0.058, y: 1.825, z: -0.046, d: 16.8, cls: 'M4Ve', t: 'M', pl: 1, sun: '×0,05' }
+    ];
+    var CX = 654, CY = 434;
+    function mk(d) { return d === 0 ? '—' : d <= 5 ? 'Mk I' : d <= 9 ? 'Mk II' : d <= 12.5 ? 'Mk III' : 'Mk IV'; }
+    function fmt(d) { return String(d).replace('.', ',') + ' ly'; }
+    var TAGC = { good: 'tg sg', info: 'tg ok', other: 'tg' };
+    var stars = S.map(function (s) {
+      var sx = CX + ((s.x - T0.x) * 130 + (s.y - T0.y) * 60);
+      var sy = CY + (-(s.z - T0.z) * 80 + (s.y - T0.y) * 45);
+      var L = LOOK[s.t];
+      var selected = self.state.sel === s.id;
+      return {
+        name: s.name, aria: s.name + (s.d ? ', ' + fmt(s.d) + ' od Tau Ceti' : ', twoja kolonia'),
+        bx: Math.round(sx - 14), by: Math.round(sy - 14), off: 14 - L[0] / 2, size: L[0],
+        color: s.here ? '#FFB000' : L[1], edge: s.here ? '#FFB000' : L[2],
+        selected: selected, here: !!s.here, pressed: selected ? 'true' : 'false', cls: 'st' + (selected ? ' on' : ''),
+        lblPos: s.side === 'L' ? 'right: 34px; top: 7px; align-items: flex-end' : s.side === 'B' ? 'left: -6px; top: 34px; align-items: flex-start' : 'left: 34px; top: 7px; align-items: flex-start',
+        tag: s.tag || false, tagCls: s.tagC ? TAGC[s.tagC] : 'tg',
+        pick: function () { self.setState({ sel: s.id }); }
+      };
+    });
+    var c = S.filter(function (s) { return s.id === self.state.sel; })[0];
+    var P = {
+      probe: 'M4 20l7-7 M11 13l3-9 7 7-9 3z', flag: 'M6 4h12v17l-6-4-6 4z', route: 'M4 20c4-8 12-8 16-16', market: 'M4 20V10 M10 20V4 M16 20v-7 M22 20H2',
+      back: 'M10 6l-6 6 6 6 M4 12h11a5 5 0 0 1 5 5', info: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z M12 10v6 M12 7v.5'
+    };
+    var n = 0;
+    function cmd(label, key, icon, note, o) {
+      o = o || {};
+      var blocked = !!o.locked;
+      return { label: label, key: key, icon: P[icon], note: blocked ? '' : (note || ''), reason: blocked ? note : '',
+        cls: 'bt cl' + (o.primary ? ' p' : '') + (blocked ? ' x' : ''), ad: blocked ? 'true' : 'false', rid: 'gal-r' + (n++),
+        href: o.href || false, link: !!o.href, btn: !o.href, empty: false };
+    }
+    var isHub = c.tagC === 'info', isHere = !!c.here;
+    var cmdList = isHere
+      ? [cmd('Widok układu', 'F2', 'back', 'Tau Ceti · orbity i statki', { primary: true, href: 'System.dc.html' }), cmd('Raport kolonii', 'R', 'info', 'Produkcja, zużycie, magazyny'), cmd('Rynek', 'H', 'market', 'Najbliższy hub: Syriusz · 5,97 ly')]
+      : [cmd('Wyślij sondę', 'W', 'probe', 'Wymaga Stoczni orbitalnej L4', { locked: true }), cmd('Oznacz jako cel', 'M', 'flag', 'Trafi do planu gwiazdolotu', { primary: true }),
+         cmd('Pokaż trasę', 'R', 'route', mk(c.d) + (c.d ? ' · ' + Math.ceil(c.d * 40) + ' kapsuł' : '')),
+         cmd('Rynek huba', 'H', 'market', isHub ? 'Notowania i zlecenia' : 'To nie jest hub rynku', { locked: !isHub }), cmd('Karta gwiazdy', 'I', 'info', 'Dane katalogowe'),
+         cmd('Wróć do układu', 'Esc', 'back', 'Tau Ceti', { href: 'System.dc.html' })];
+    var cmds = cmdList.slice();
+    while (cmds.length < 8) cmds.push({ empty: true, btn: false, link: false, no: String(cmds.length + 1).padStart(2, '0') });
+    var locked = cmdList.filter(function (x) { return x.ad === 'true'; }).length;
+    var sel = {
+      name: c.name, cls: c.cls, type: TYPES[c.t], code: c.id.toUpperCase(),
+      state: isHere ? 'twoja kolonia' : c.tag ? c.tag : 'niezbadana', stateCls: isHere ? 'tg sg' : c.tag ? 'tg ok' : 'tg',
+      cc: 'CC-08 · ' + cmdList.length + ' / 8', hint: locked ? 'Zablokowane: ' + locked + ' · skróty działają na mapie' : 'Wszystkie rozkazy dostępne',
+      stats: [
+        { k: 'Od Tau Ceti', v: c.d ? fmt(c.d) : '0 ly' }, { k: 'Wymagany napęd', v: mk(c.d) }, { k: 'Kapsuły fuzyjne', v: c.d ? String(Math.ceil(c.d * 40)) : '—' },
+        { k: 'Znane planety', v: String(c.pl) }, { k: 'Mnożnik paneli', v: c.sun }, { k: 'Profil', v: isHere ? 'zeskanowany' : 'nieznany' }
+      ],
+      note: isHere ? 'Twój aktualny układ. Przejdź do widoku układu lub planety przełącznikiem u góry.'
+        : isHub ? 'Hub rynku galaktycznego: zlecenia kupna i sprzedaży, dostawy z opóźnieniem zależnym od odległości.'
+        : 'Sonda międzygwiezdna odsłoni liczbę ciał, profil złóż i komety, zanim wybierzesz cel gwiazdolotu.'
+    };
+    var rings = [[5, '#FFB000', 'Mk I · 5 ly'], [9, '#3B4756', 'Mk II · 9 ly']].map(function (r) {
+      var px = Math.round(r[0] / 3.2616 * 130);
+      return { left: CX - px, top: CY - px, size: px * 2, edge: r[1], color: r[1] === '#3B4756' ? '#8A939D' : r[1], label: r[2], lx: CX + 8, ly: CY - px - 18 };
+    });
+    var near = S.filter(function (s) { return s.d > 0 && s.d <= 5; }).map(function (s) {
+      return { name: s.name, ly: fmt(s.d), cls: 'row' + (self.state.sel === s.id ? ' on' : ''), pick: function () { self.setState({ sel: s.id }); } };
+    });
+    return {
+      stars: stars, sel: sel, rings: rings, near: near, cmds: cmds,
+      layers: [
+        { id: 'lay-range', label: 'Zasięg napędów', on: true }, { id: 'lay-hubs', label: 'Huby rynku', on: true },
+        { id: 'lay-players', label: 'Kolonie innych graczy', on: true }, { id: 'lay-unknown', label: 'Tylko niezbadane', on: false }
+      ],
+      legend: [
+        { s: 10, c: '#C5C6C7', e: '#C5C6C7', label: 'A/F' }, { s: 9, c: '#C5C6C7', e: '#C5C6C7', label: 'G' }, { s: 7, c: '#C5C6C7', e: '#C5C6C7', label: 'K' },
+        { s: 5, c: '#8A939D', e: '#8A939D', label: 'M' }, { s: 6, c: 'transparent', e: '#8A939D', label: 'brązowe' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

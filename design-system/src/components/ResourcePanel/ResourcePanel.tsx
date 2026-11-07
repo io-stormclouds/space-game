@@ -1,30 +1,16 @@
 import type { ReactNode } from 'react';
+import {
+  RESOURCE_METER_SEGMENTS,
+  resourceRatio,
+  resourceState,
+  type ResourceReadout,
+  type ResourceState,
+} from '../../core/resources';
 import { cx } from '../../utils/cx';
 import { formatLoad, formatQty, formatRate } from '../../utils/format';
 import './ResourcePanel.css';
 
-export type ResourceState = 'nominal' | 'low' | 'critical';
-
-export interface ResourceReadout {
-  id: string;
-  /** Three-letter tactical code shown in the micro label, e.g. "MET". */
-  code: string;
-  /** Full name, e.g. "Metal". */
-  label: string;
-  value: number;
-  /**
-   * `stock`: an amount in storage (`max` = capacity, optional).
-   * `load`: usage against a limit — energy drawn / produced, population / cap.
-   */
-  kind?: 'stock' | 'load';
-  max?: number;
-  unit?: string;
-  /** Change per minute; shown signed in the label row. */
-  rate?: number;
-  /** `stock` only: thresholds for the low and critical states. */
-  lowBelow?: number;
-  criticalBelow?: number;
-}
+export { resourceState, type ResourceReadout, type ResourceState };
 
 export interface ResourcePanelProps {
   readouts: readonly ResourceReadout[];
@@ -39,20 +25,7 @@ export interface ResourcePanelProps {
   className?: string;
 }
 
-const SEGMENTS = 10;
-
-/** Derives the readout state: loads go critical at the limit, stocks below their thresholds. */
-export function resourceState(r: ResourceReadout): ResourceState {
-  if (r.kind === 'load' && r.max) {
-    const ratio = r.value / r.max;
-    if (ratio >= 1) return 'critical';
-    if (ratio >= 0.9) return 'low';
-    return 'nominal';
-  }
-  if (r.criticalBelow !== undefined && r.value <= r.criticalBelow) return 'critical';
-  if (r.lowBelow !== undefined && r.value <= r.lowBelow) return 'low';
-  return 'nominal';
-}
+const SEGMENTS = RESOURCE_METER_SEGMENTS;
 
 const STATE_TEXT: Record<ResourceState, string> = {
   nominal: '',
@@ -73,7 +46,7 @@ export function ResourcePanel({ readouts, designation, subline, serial, trailing
       <dl className="hud-resbar__list">
         {readouts.map((r) => {
           const state = resourceState(r);
-          const ratio = r.max ? Math.min(1, r.value / r.max) : undefined;
+          const ratio = resourceRatio(r);
           const lit = ratio === undefined ? 0 : Math.round(ratio * SEGMENTS);
           const isLoad = r.kind === 'load';
           return (

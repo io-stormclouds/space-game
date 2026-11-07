@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<title>Komponenty HUD</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#FFB000}
+.hud,.hud *{box-sizing:border-box;border-radius:0;box-shadow:none;transition:none}
+.hud{font-family:'JetBrains Mono','IBM Plex Mono',Consolas,monospace;font-variant-numeric:tabular-nums slashed-zero;color:#C5C6C7;background:#0B0C10;font-size:12px;line-height:1.3}
+.hud :focus-visible{outline:2px solid #FFB000;outline-offset:2px}
+.vh{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+.gb{background-color:#0B0C10;background-image:linear-gradient(rgba(112,128,146,.10) 1px,transparent 1px),linear-gradient(90deg,rgba(112,128,146,.10) 1px,transparent 1px);background-size:32px 32px}
+.mi{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#8A939D;line-height:1.1}
+.tt{margin:0;font-size:16px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;line-height:1.1}
+.sg{color:#FFB000}.al{color:#FF5A4A}
+.fr{position:absolute;background:#111419;border:1px solid rgba(112,128,146,.24)}
+.tk{position:absolute;width:8px;height:8px;border:0 solid #FFB000;pointer-events:none}
+.tk.a{top:-1px;left:-1px;border-top-width:1px;border-left-width:1px}.tk.b{top:-1px;right:-1px;border-top-width:1px;border-right-width:1px}
+.tk.c{bottom:-1px;left:-1px;border-bottom-width:1px;border-left-width:1px}.tk.d{bottom:-1px;right:-1px;border-bottom-width:1px;border-right-width:1px}
+.tab{position:absolute;top:0;left:16px;transform:translateY(-50%);padding:0 4px;background:#0B0C10;font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#FFB000;line-height:1;white-space:nowrap}
+.ser{position:absolute;right:6px;bottom:3px;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#58616B;line-height:1}
+.rb{display:flex;align-items:stretch;height:48px;background:#111419;border-top:1px solid #FFB000}
+.rb-id{display:flex;flex-direction:column;justify-content:center;gap:4px;padding:0 16px;border-right:1px solid rgba(112,128,146,.24);white-space:nowrap}
+.rb-nm{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;line-height:1.1}
+.rb-dl{display:flex;margin:0}
+.rs{display:flex;flex-direction:column;justify-content:center;gap:4px;padding:0 12px;border-right:1px solid rgba(112,128,146,.24);white-space:nowrap}
+.rs dt{display:flex;align-items:center;gap:6px;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#8A939D;line-height:1}
+.rs dd{display:flex;align-items:center;gap:8px;margin:0}
+.rs-c{font-weight:700;color:#C5C6C7}
+.rs-r{margin-left:auto;padding-left:6px;letter-spacing:.02em}
+.rs-r.ng{color:#FFB000}
+.rs-v{display:inline-flex;align-items:baseline;gap:2px;font-size:14px;font-weight:700;letter-spacing:.02em;line-height:1;color:#C5C6C7}
+.rs-x{font-weight:400;color:#8A939D}
+.rs-u{margin-left:4px;font-size:10px;font-weight:400;letter-spacing:.14em;color:#8A939D}
+.led{width:6px;height:6px;border:1px solid #58616B}
+.mt{position:relative;display:inline-block;flex:none;width:49px;height:8px;background:repeating-linear-gradient(90deg,rgba(112,128,146,.24) 0 4px,transparent 4px 5px)}
+.mt>span{position:absolute;left:0;top:0;bottom:0;background:repeating-linear-gradient(90deg,#8A939D 0 4px,transparent 4px 5px)}
+.rs.lo .rs-c,.rs.lo .rs-v{color:#FFB000}
+.rs.lo .led{background:#FFB000;border-color:#FFB000}
+.rs.lo .mt>span{background:repeating-linear-gradient(90deg,#FFB000 0 4px,transparent 4px 5px)}
+.rs.cr .rs-c,.rs.cr .rs-v{color:#FF5A4A}
+.rs.cr .led{background:#FF5A4A;border-color:#FF5A4A;animation:hb 1s steps(1,end) infinite}
+.rs.cr .mt>span{background:repeating-linear-gradient(90deg,#FF5A4A 0 4px,transparent 4px 5px)}
+@keyframes hb{50%{opacity:0}}
+@media (prefers-reduced-motion:reduce){.rs.cr .led{animation:none}}
+.vs{display:inline-flex;border:1px solid rgba(112,128,146,.24);background:#0B0C10}
+.vs>*{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 10px;border:0;border-right:1px solid rgba(112,128,146,.24);background:transparent;font:inherit;font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#8A939D;text-decoration:none;cursor:pointer;white-space:nowrap}
+.vs>*:last-child{border-right:0}
+.vs>a:hover,.vs>button:hover{color:#FFB000;background:#2A3644}
+.vs>a:active,.vs>button:active{color:#0B0C10;background:#FFB000}
+.vs>.cur{color:#FFB000;background:#3E3B2C;border-bottom:2px solid #FFB000;cursor:default}
+.vs>.off{color:#58616B;cursor:not-allowed;background-image:repeating-linear-gradient(135deg,transparent 0 5px,rgba(112,128,146,.10) 5px 6px)}
+.vk{font-size:10px;color:#58616B}
+.fr>.bt{flex:none}
+.bt{--e:#3B4756;--f:#1F2833;--i:#C5C6C7;--x:#8A939D;--c:6px;position:relative;display:inline-flex;min-height:44px;margin:0;padding:1px;border:0;background:var(--e);color:var(--i);font:inherit;text-align:left;text-decoration:none;cursor:pointer;user-select:none;clip-path:polygon(var(--c) 0,100% 0,100% calc(100% - var(--c)),calc(100% - var(--c)) 100%,0 100%,0 var(--c))}
+.fc{--ci:calc(var(--c) - .6px);position:relative;flex:1;display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:8px;padding:6px 12px;background:var(--f);clip-path:polygon(var(--ci) 0,100% 0,100% calc(100% - var(--ci)),calc(100% - var(--ci)) 100%,0 100%,0 var(--ci))}
+.bl{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;line-height:1.1;color:var(--i)}
+.ic{display:inline-flex;color:var(--x)}
+.ky{justify-self:end;display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 3px;border:1px solid currentColor;font-size:10px;font-weight:700;line-height:1;color:var(--x)}
+.bd{display:block;margin-top:3px;font-size:11px;letter-spacing:.02em;color:var(--x)}
+.rsn{display:block;margin-top:3px;font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#FF5A4A}
+.pg{position:absolute;left:0;right:0;bottom:0;height:2px;background:rgba(112,128,146,.24)}
+.pg>span{display:block;height:100%;background:#FFB000}
+.bt.p{--e:#FFB000;--x:#FFB000}
+.bt.on{--e:#FFB000;--f:#3E3B2C;--x:#FFB000}
+.bt:hover{--e:#FFB000;--f:#2A3644;--x:#FFB000}
+.bt.dg:hover{--e:#FF5A4A;--x:#FF5A4A}
+.bt:active{--e:#FFB000;--f:#FFB000;--i:#0B0C10;--x:#0B0C10}
+.bt.dg:active{--e:#FF5A4A;--f:#FF5A4A}
+.bt:focus-visible{outline:none;--e:#FFB000}
+.bt:focus-visible>.fc::before{content:'';position:absolute;inset:3px;border:1px dashed #FFB000;pointer-events:none}
+.bt.x{--e:rgba(112,128,146,.24);--f:#111419;--i:#8A939D;--x:#58616B;cursor:not-allowed}
+.bt.x>.fc{background-image:repeating-linear-gradient(135deg,transparent 0 5px,rgba(112,128,146,.10) 5px 6px)}
+.bt.cl{--c:4px;--e:#1F2833;width:100%;height:100%;min-height:72px}
+.bt.cl>.fc{grid-template-columns:minmax(0,1fr) auto;grid-template-rows:auto minmax(0,1fr);align-items:start;gap:4px;padding:6px 6px 6px 8px}
+.bt.cl .ic{grid-column:1;grid-row:1}.bt.cl .ky{grid-column:2;grid-row:1}
+.cb{grid-column:1/-1;grid-row:2;align-self:end;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;line-height:1.15;color:var(--i)}
+.bt.cl.p,.bt.cl.on,.bt.cl:hover,.bt.cl:active,.bt.cl:focus-visible{--e:#FFB000}
+.bt.cl.dg:hover,.bt.cl.dg:active{--e:#FF5A4A}
+.bt.cl.x{--e:#111419}
+.bt.x:hover,.bt.x:active{--e:#FF5A4A;--f:#111419;--i:#8A939D;--x:#58616B}
+.cg{display:grid;grid-template-columns:repeat(4,96px);grid-auto-rows:72px;gap:1px;background:rgba(112,128,146,.24);border-top:1px solid rgba(112,128,146,.24);border-bottom:1px solid rgba(112,128,146,.24)}
+.ce{display:flex;min-width:0;background:#1F2833}
+.ce.em{position:relative;background-color:#111419;background-image:radial-gradient(rgba(112,128,146,.24) 1px,transparent 1px);background-size:6px 6px}
+.sn{position:absolute;top:4px;right:6px;font-size:10px;letter-spacing:.14em;color:#58616B}
+.ip,.ip0{position:absolute;left:0;right:0;bottom:0;height:55px;padding:6px 10px;flex-direction:column;gap:3px;background:#111419}
+.ip0{display:flex}
+.ip{display:none;z-index:1}
+.ce:hover>.ip,.ce:focus-within>.ip{display:flex}
+.ip-h{display:flex;justify-content:space-between;align-items:baseline;gap:10px;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+.ip-n{font-size:11px;color:#8A939D}
+.ip-r{font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#FF5A4A}
+.cc-h{display:flex;justify-content:space-between;align-items:baseline;gap:12px;height:28px;padding:6px 10px 0}
+.cc-t{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#FFB000}
+.ts{--t:#C5C6C7;display:grid;grid-template-columns:8px minmax(0,1fr) auto;gap:10px;align-items:start;padding:8px 10px;border:1px solid rgba(112,128,146,.24);border-left:2px solid var(--t);background:#0B0C10}
+.ts.sg{--t:#FFB000}.ts.al{--t:#FF5A4A}
+.ts-l{width:8px;height:8px;margin-top:2px;background:var(--t)}
+.ts-t{display:block;font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--t)}
+.ts-x{display:block;margin-top:3px;font-size:11px;color:#8A939D}
+.mk{position:relative;display:inline-flex;width:32px;height:32px;border:1px solid #3B4756;background:#111419}
+.mk.on{border-color:#FFB000;background:#3E3B2C}
+.mk.on::after{content:'';position:absolute;inset:-6px;background:linear-gradient(#FFB000,#FFB000) left top/8px 1px no-repeat,linear-gradient(#FFB000,#FFB000) left top/1px 8px no-repeat,linear-gradient(#FFB000,#FFB000) right top/8px 1px no-repeat,linear-gradient(#FFB000,#FFB000) right top/1px 8px no-repeat,linear-gradient(#FFB000,#FFB000) left bottom/8px 1px no-repeat,linear-gradient(#FFB000,#FFB000) left bottom/1px 8px no-repeat,linear-gradient(#FFB000,#FFB000) right bottom/8px 1px no-repeat,linear-gradient(#FFB000,#FFB000) right bottom/1px 8px no-repeat}
+.mk.bld{border-style:dashed;border-color:#8A939D;background-image:repeating-linear-gradient(135deg,transparent 0 5px,rgba(112,128,146,.18) 5px 6px)}
+.hex{display:inline-block;width:30px;height:34px;clip-path:polygon(50% 0,100% 25%,100% 75%,50% 100%,0 75%,0 25%)}
+.dr{display:flex;justify-content:space-between;align-items:center;gap:12px;min-height:24px;padding:3px 0;border-bottom:1px solid rgba(112,128,146,.10)}
+.dr>:first-child{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#8A939D;white-space:nowrap}
+.dr>:last-child{display:inline-flex;align-items:center;gap:8px;font-weight:700;text-align:right}
+.rl{display:grid;grid-template-columns:44px minmax(0,1fr);gap:8px;align-items:center;min-height:24px;border-bottom:1px solid rgba(112,128,146,.10);font-size:11px;letter-spacing:.04em}
+.rl>b{display:inline-grid;place-items:center;height:16px;border:1px solid currentColor;font-size:10px;letter-spacing:.1em}
+</style>
+</helmet>
+<div class="hud gb" style="width: 1440px; height: 900px; position: relative; overflow: hidden">
+
+  <header style="position: absolute; left: 24px; right: 24px; top: 20px; display: flex; justify-content: space-between; align-items: flex-end; gap: 24px; padding-bottom: 10px; border-bottom: 1px solid rgba(112,128,146,0.24)">
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <span class="mi sg">Design system · design-system/ · tokeny --hud-*</span>
+      <h1 style="margin: 0; font-size: 22px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; line-height: 1.1">Komponenty HUD</h1>
+    </div>
+    <span class="mi">Stany elementów z plansz 3–8 · najedź i wciśnij, żeby zobaczyć interakcje</span>
+  </header>
+
+  <section class="fr" aria-label="ResourcePanel" style="left: 24px; right: 24px; top: 96px; padding: 0">
+    <span class="tk a"></span><span class="tk b"></span><span class="tk c"></span><span class="tk d"></span>
+    <span class="tab" aria-hidden="true">[ RESOURCEPANEL · STANY ]</span>
+    <div class="rb">
+      <div class="rb-id"><span class="mi">Dzień 1 · 19:40 · tempo/min</span><span class="rb-nm">Kol · Tau Ceti e</span></div>
+      <dl class="rb-dl" aria-label="Przykładowe odczyty">
+        <sc-for list="{{res}}" as="r" hint-placeholder-count="6">
+          <div class="{{r.cls}}">
+            <dt><span class="led" aria-hidden="true"></span><span class="rs-c">{{r.code}}</span><span>{{r.label}}</span><span class="{{r.rcls}}">{{r.rate}}</span></dt>
+            <dd><span class="rs-v">{{r.v}}<span class="rs-x">{{r.max}}</span><span class="rs-u">{{r.unit}}</span></span><sc-if value="{{r.meter}}" hint-placeholder-val="{{false}}"><span class="mt" aria-hidden="true"><span style="width: {{r.mw}}px"></span></span></sc-if></dd>
+          </div>
+        </sc-for>
+      </dl>
+    </div>
+  </section>
+
+  <section class="fr" aria-label="RTSButton" style="left: 24px; top: 176px; width: 420px; height: 404px; padding: 20px 14px 16px; display: flex; flex-direction: column; gap: 8px">
+    <span class="tk a"></span><span class="tk b"></span><span class="tk c"></span><span class="tk d"></span>
+    <span class="tab" aria-hidden="true">[ RTSBUTTON · WIDE ]</span>
+    <button type="button" class="bt"><span class="fc"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14 M5 12h14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="square"></path></svg><span><span class="bl">Produkuj łazik</span><span class="bd">FER 20 · SIL 5 · 3 min</span></span><span class="ky" aria-hidden="true">Q</span></span></button>
+    <button type="button" class="bt p"><span class="fc"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12 L18 6 M12 3a9 9 0 1 0 9 9 M12 7.5a4.5 4.5 0 1 0 4.5 4.5" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="square"></path></svg><span><span class="bl">Skanuj układ</span><span class="bd">Primary · cel misji</span></span><span class="ky" aria-hidden="true">Q</span></span></button>
+    <button type="button" class="bt on" aria-pressed="true"><span class="fc"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 6l4 4 M3 21l9-9 M12 12l2-2 4 4-2 2z" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="square"></path></svg><span><span class="bl">Tryb stawiania</span><span class="bd">Zaznaczony · aria-pressed</span></span><span class="ky" aria-hidden="true">B</span></span></button>
+    <button type="button" class="bt"><span class="fc"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 15h18v3H3z M7 15l2-5h6l2 5" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="square"></path></svg><span><span class="bl">Produkcja w toku</span><span class="bd">Łazik R-3 · 42% · 1:44</span></span><span class="ky" aria-hidden="true">Q</span><span class="pg" aria-hidden="true"><span style="width: 42%"></span></span></span></button>
+    <button type="button" class="bt x" aria-disabled="true" aria-describedby="kit-why"><span class="fc"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V6 M6 11l6-6 6 6 M6 20h12" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="square"></path></svg><span><span class="bl">Rozbuduj port do L3</span><span class="bd">FER 2400 · <span class="al">SIL 1200</span></span><span class="rsn" id="kit-why">Brak: SIL −1012</span></span><span class="ky" aria-hidden="true">U</span></span></button>
+    <button type="button" class="bt dg"><span class="fc"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12 M18 6L6 18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="square"></path></svg><span><span class="bl">Rozbierz budowlę</span><span class="bd">Danger · zwrot 50% materiałów</span></span><span class="ky" aria-hidden="true">X</span></span></button>
+    <span class="mi" style="line-height: 1.5; margin-top: 2px">Najedź: krawędź sygnałowa · wciśnij: inwersja<br>Zablokowany: kreskowanie, powód, czerwona krawędź</span>
+  </section>
+
+  <section class="fr" aria-label="CommandCard" style="left: 460px; top: 176px; width: 389px; height: 240px; padding-top: 8px; display: flex; flex-direction: column">
+    <span class="tk a"></span><span class="tk b"></span><span class="tk c"></span><span class="tk d"></span>
+    <span class="tab" aria-hidden="true">[ COMMANDCARD · 4×2 ]</span>
+    <div class="cc-h"><span class="cc-t">Port kosmiczny</span><span class="mi">CC-00 · 6 / 8</span></div>
+    <div class="cg" role="group" aria-label="Przykładowe rozkazy">
+      <sc-for list="{{cmds}}" as="c" hint-placeholder-count="8">
+        <sc-if value="{{c.btn}}" hint-placeholder-val="{{true}}">
+          <div class="ce">
+            <button type="button" class="{{c.cls}}" aria-disabled="{{c.ad}}" aria-describedby="{{c.rid}}" aria-keyshortcuts="{{c.key}}"><span class="fc"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="{{c.icon}}" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="square" stroke-linejoin="miter"></path></svg><span class="ky" aria-hidden="true">{{c.key}}</span><span class="cb">{{c.label}}</span></span></button>
+            <div class="ip"><div class="ip-h"><span>{{c.label}}</span><span class="mi">{{c.kind}}</span></div><span class="ip-n">{{c.note}}</span><span class="ip-r" id="{{c.rid}}">{{c.reason}}</span></div>
+          </div>
+        </sc-if>
+        <sc-if value="{{c.empty}}" hint-placeholder-val="{{false}}">
+          <div class="ce em" aria-hidden="true"><span class="sn">{{c.no}}</span></div>
+        </sc-if>
+      </sc-for>
+    </div>
+    <div class="ip0"><span class="mi">Inspektor: najechany lub wybrany rozkaz</span><span class="ip-n">Puste sloty: matryca kropek z numerem</span></div>
+  </section>
+
+  <section class="fr" aria-label="Przełącznik widoku" style="left: 460px; top: 440px; width: 389px; height: 140px; padding: 20px 14px 16px; display: flex; flex-direction: column; gap: 10px">
+    <span class="tk a"></span><span class="tk b"></span><span class="tk c"></span><span class="tk d"></span>
+    <span class="tab" aria-hidden="true">[ PRZEŁĄCZNIK WIDOKU ]</span>
+    <div class="vs">
+      <span class="off" aria-disabled="true" title="Najpierw wybierz planetę startową"><span class="vk">F1</span>Planeta</span>
+      <span class="cur" aria-current="page"><span class="vk" style="color: #FFB000">F2</span>Układ</span>
+      <a href="#"><span class="vk">F3</span>Galaktyka</a>
+    </div>
+    <span style="font-size: 11px; line-height: 1.5; color: #8A939D">Trzy skale gry: planeta (kafelki, budowa), układ (orbity, statki), galaktyka (znane światy). Niedostępny widok: kreskowanie i podpowiedź z powodem.</span>
+  </section>
+
+  <section class="fr" aria-label="Komunikaty" style="left: 865px; top: 176px; right: 24px; height: 240px; padding: 20px 14px 16px; display: flex; flex-direction: column; gap: 8px">
+    <span class="tk a"></span><span class="tk b"></span><span class="tk c"></span><span class="tk d"></span>
+    <span class="tab" aria-hidden="true">[ KOMUNIKATY · ODRZUCENIA Z POC ]</span>
+    <sc-for list="{{toasts}}" as="t" hint-placeholder-count="4">
+      <div class="{{t.cls}}" role="status">
+        <span class="ts-l" aria-hidden="true"></span>
+        <span><span class="ts-t">{{t.title}}</span><span class="ts-x">{{t.text}}</span></span>
+        <span class="mi" style="color: #58616B">{{t.code}}</span>
+      </div>
+    </sc-for>
+  </section>
+
+  <section class="fr" aria-label="Znaczniki w widoku" style="left: 865px; top: 440px; right: 24px; height: 140px; padding: 20px 14px 16px; display: flex; flex-direction: column; gap: 12px">
+    <span class="tk a"></span><span class="tk b"></span><span class="tk c"></span><span class="tk d"></span>
+    <span class="tab" aria-hidden="true">[ ZNACZNIKI W WIDOKU ]</span>
+    <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px">
+      <div style="display: flex; flex-direction: column; align-items: center; gap: 10px; width: 74px"><span class="mk" aria-hidden="true"></span><span class="mi" style="text-align: center">Budynek</span></div>
+      <div style="display: flex; flex-direction: column; align-items: center; gap: 10px; width: 74px"><span class="mk on" aria-hidden="true"></span><span class="mi sg" style="text-align: center">Zaznaczony</span></div>
+      <div style="display: flex; flex-direction: column; align-items: center; gap: 10px; width: 74px"><span class="mk bld" aria-hidden="true"></span><span class="mi" style="text-align: center">W budowie</span></div>
+      <div style="display: flex; flex-direction: column; align-items: center; gap: 10px; width: 74px"><span class="mk" aria-hidden="true" style="border-radius: 50%"></span><span class="mi" style="text-align: center">Jednostka</span></div>
+      <div style="display: flex; flex-direction: column; align-items: center; gap: 8px; width: 74px"><span class="hex" aria-hidden="true" style="background: rgba(255,176,0,0.35)"></span><span class="mi" style="text-align: center">Podgląd: można</span></div>
+      <div style="display: flex; flex-direction: column; align-items: center; gap: 8px; width: 74px"><span class="hex" aria-hidden="true" style="background: rgba(255,90,74,0.35)"></span><span class="mi al" style="text-align: center">Podgląd: nie można</span></div>
+    </div>
+  </section>
+
+  <section class="fr" aria-label="Tokeny" style="left: 24px; top: 604px; width: 825px; height: 272px; padding: 20px 16px 16px; display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 24px">
+    <span class="tk a"></span><span class="tk b"></span><span class="tk c"></span><span class="tk d"></span>
+    <span class="tab" aria-hidden="true">[ TOKENY · design-tokens.ts ]</span>
+    <dl style="margin: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 20px; align-content: start">
+      <sc-for list="{{colors}}" as="c" hint-placeholder-count="12">
+        <div class="dr"><dt style="display: inline-flex; align-items: center; gap: 8px"><span aria-hidden="true" style="width: 12px; height: 12px; border: 1px solid rgba(112,128,146,0.24); background: {{c.hex}}"></span>{{c.name}}</dt><dd style="margin: 0; font-size: 11px">{{c.hex}}</dd></div>
+      </sc-for>
+    </dl>
+    <div style="display: flex; flex-direction: column; gap: 6px; border-left: 1px solid rgba(112,128,146,0.24); padding-left: 20px">
+      <span class="mi" style="padding-bottom: 4px">Skala · JetBrains Mono</span>
+      <sc-for list="{{scale}}" as="s" hint-placeholder-count="6">
+        <div style="display: grid; grid-template-columns: 112px minmax(0, 1fr); align-items: baseline; gap: 8px">
+          <span class="mi">{{s.name}} · {{s.px}}</span>
+          <span style="font-size: {{s.px}}; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; white-space: nowrap">FER 1240</span>
+        </div>
+      </sc-for>
+      <span class="mi" style="padding-top: 6px; line-height: 1.5">Ruch: 0 ms · błysk 70 ms<br>Miganie 1 s, skokowo</span>
+    </div>
+  </section>
+
+  <section class="fr" aria-label="Reguły stylu" style="left: 865px; top: 604px; right: 24px; height: 272px; padding: 20px 14px 16px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px">
+    <span class="tk a"></span><span class="tk b"></span><span class="tk c"></span><span class="tk d"></span>
+    <span class="tab" aria-hidden="true">[ REGUŁY ]</span>
+    <div style="display: flex; flex-direction: column">
+      <span class="mi sg" style="padding-bottom: 6px">Obowiązuje</span>
+      <sc-for list="{{rulesDo}}" as="r" hint-placeholder-count="6">
+        <div class="rl"><b style="color: #C5C6C7">TAK</b><span>{{r}}</span></div>
+      </sc-for>
+    </div>
+    <div style="display: flex; flex-direction: column">
+      <span class="mi al" style="padding-bottom: 6px">Zakazane</span>
+      <sc-for list="{{rulesNo}}" as="r" hint-placeholder-count="6">
+        <div class="rl"><b class="al">NIE</b><span style="color: #8A939D">{{r}}</span></div>
+      </sc-for>
+    </div>
+    <span class="ser" aria-hidden="true">RUL · v1</span>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    var I = {
+      plus: 'M12 5v14 M5 12h14', up: 'M12 19V6 M6 11l6-6 6 6 M6 20h12', pause: 'M8 6v12 M16 6v12', bolt: 'M13 3L5 14h6l-1 7 8-11h-6z',
+      belt: 'M3 15h18 M3 19h18 M7 15v4 M12 15v4 M17 15v4 M12 4v7 M9 8l3 3 3-3', x: 'M6 6l12 12 M18 6L6 18'
+    };
+    var n = 0;
+    function cmd(label, key, icon, kind, note, o) {
+      o = o || {};
+      var blocked = !!o.locked;
+      return { label: label, key: key, icon: I[icon], kind: kind, note: blocked ? '' : note, reason: blocked ? note : '',
+        cls: 'bt cl' + (o.primary ? ' p' : '') + (o.on ? ' on' : '') + (o.danger ? ' dg' : '') + (blocked ? ' x' : ''),
+        ad: blocked ? 'true' : 'false', rid: 'kit-r' + (n++), btn: true, empty: false };
+    }
+    var cmds = [
+      cmd('Produkuj łazik', 'Q', 'plus', 'Primary', 'FER 20 · SIL 5 · 3 min', { primary: true }),
+      cmd('Rozbuduj do L3', 'U', 'up', 'Zablokowany', 'Brak: FER 2088 · SIL 1012', { locked: true }),
+      cmd('Wstrzymaj', 'P', 'pause', 'Spoczynek', 'Zwolni 8 MW'),
+      cmd('Priorytet mocy', 'O', 'bolt', 'Przełącznik · wł.', 'Moc najpierw dla portu', { on: true }),
+      cmd('Podłącz taśmę', 'B', 'belt', 'Spoczynek', 'Wyjście: magazyn portu'),
+      cmd('Rozbierz', 'X', 'x', 'Danger', 'Zwrot 50% materiałów', { danger: true })
+    ];
+    while (cmds.length < 8) cmds.push({ empty: true, btn: false, no: String(cmds.length + 1).padStart(2, '0') });
+    function rs(code, label, v, o) {
+      o = o || {};
+      var pct = o.pct === undefined ? null : Math.max(0, Math.min(1, o.pct));
+      return { code: code, label: label, v: v, max: o.max ? '/' + o.max : '', unit: o.unit || '', rate: o.rate || '',
+        cls: 'rs' + (o.st ? ' ' + o.st : ''), rcls: 'rs-r' + (o.rate && o.rate.charAt(0) === '−' ? ' ng' : ''),
+        meter: pct !== null, mw: pct === null ? 0 : Math.max(0, Math.round(pct * 10) * 5 - 1) };
+    }
+    return {
+      cmds: cmds,
+      res: [
+        rs('FER', 'nominalny', '312', { rate: '+6,4' }),
+        rs('KAR', 'niski', '46', { rate: '−0,5', st: 'lo' }),
+        rs('STA', 'krytyczny', '0', { rate: '−2,0', st: 'cr' }),
+        rs('ENE', 'w normie', '21,5', { max: '28', unit: 'MW', pct: 21.5 / 28 }),
+        rs('ENE', 'blisko limitu', '27', { max: '28', unit: 'MW', pct: 27 / 28, st: 'lo' }),
+        rs('ENE', 'deficyt · 87%', '32', { max: '28', unit: 'MW', pct: 1, st: 'cr' })
+      ],
+      toasts: [
+        { title: 'Kopalnia Ferrytu L2 gotowa', text: 'Wydobycie 3,2 FER/min', code: 'BUILD_DONE', cls: 'ts' },
+        { title: 'Brak rezerwy paliwa na powrót', text: 'Po locie zostanie 18 u, rezerwa na powrót 31 u', code: 'NO_RETURN_RESERVE', cls: 'ts sg' },
+        { title: 'Pole jest już zajęte', text: 'Wybierz wolny kafelek', code: 'TILE_OCCUPIED', cls: 'ts sg' },
+        { title: 'Deficyt mocy na Tau Ceti e', text: 'Produkcja pracuje na 87%', code: 'NO_POWER', cls: 'ts al' }
+      ],
+      colors: [
+        { name: 'void', hex: '#0B0C10' }, { name: 'hull', hex: '#111419' }, { name: 'graphite', hex: '#1F2833' }, { name: 'graphiteHi', hex: '#2A3644' },
+        { name: 'metal', hex: '#3B4756' }, { name: 'text', hex: '#C5C6C7' }, { name: 'textDim', hex: '#8A939D' }, { name: 'textFaint', hex: '#58616B' },
+        { name: 'signal', hex: '#FFB000' }, { name: 'signalTint', hex: '#3E3B2C' }, { name: 'signal · cyan', hex: '#4FFFB0' }, { name: 'alert', hex: '#FF5A4A' }
+      ],
+      scale: [
+        { name: 'micro', px: '10px' }, { name: 'label', px: '11px' }, { name: 'body', px: '12px' },
+        { name: 'value', px: '14px' }, { name: 'title', px: '16px' }, { name: 'display', px: '22px' }
+      ],
+      rulesDo: ['JetBrains Mono, wersaliki', 'Jeden sygnał #FFB000', 'Czerwień = stan krytyczny', 'Promień 0, ścięcia 6/4 px', 'Linie 1 px, narożniki', 'Zmiana stanu 0 ms'],
+      rulesNo: ['Inter i kroje „SaaS”', 'Gradienty i poświaty', 'box-shadow jako głębia', 'Promień > 4 px', 'Rzędy po 3 karty', 'Hero z 2 przyciskami']
+    };
+  }
+}
+</script>
+</body>
+</html>

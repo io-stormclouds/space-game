@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<title>Logowanie dowódcy</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#FFB000}a:hover{color:#FFD060}
+.hud,.hud *{box-sizing:border-box;border-radius:0;box-shadow:none;transition:none}
+.hud{font-family:'JetBrains Mono','IBM Plex Mono',Consolas,monospace;font-variant-numeric:tabular-nums slashed-zero;color:#C5C6C7;background:#0B0C10;font-size:12px;line-height:1.3}
+.hud :focus-visible{outline:2px solid #FFB000;outline-offset:2px}
+.gb{background-color:#0B0C10;background-image:linear-gradient(rgba(112,128,146,.10) 1px,transparent 1px),linear-gradient(90deg,rgba(112,128,146,.10) 1px,transparent 1px);background-size:32px 32px}
+.mi{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#8A939D;line-height:1.1}
+.tt{font-size:16px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;line-height:1.1}
+.fr{position:relative;background:#111419;border:1px solid rgba(112,128,146,.24)}
+.tk{position:absolute;width:8px;height:8px;border:0 solid #FFB000;pointer-events:none}
+.tk.a{top:-1px;left:-1px;border-top-width:1px;border-left-width:1px}.tk.b{top:-1px;right:-1px;border-top-width:1px;border-right-width:1px}
+.tk.c{bottom:-1px;left:-1px;border-bottom-width:1px;border-left-width:1px}.tk.d{bottom:-1px;right:-1px;border-bottom-width:1px;border-right-width:1px}
+.tab{position:absolute;top:0;left:16px;transform:translateY(-50%);padding:0 4px;background:#0B0C10;font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#FFB000;line-height:1}
+.ser{position:absolute;right:6px;bottom:3px;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#58616B;line-height:1}
+.bt{--e:#3B4756;--f:#1F2833;--i:#C5C6C7;--x:#8A939D;--c:6px;position:relative;display:inline-flex;min-height:44px;margin:0;padding:1px;border:0;background:var(--e);color:var(--i);font:inherit;text-align:left;text-decoration:none;cursor:pointer;user-select:none;clip-path:polygon(var(--c) 0,100% 0,100% calc(100% - var(--c)),calc(100% - var(--c)) 100%,0 100%,0 var(--c))}
+.fc{--ci:calc(var(--c) - .6px);position:relative;flex:1;display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:8px;padding:6px 12px;background:var(--f);clip-path:polygon(var(--ci) 0,100% 0,100% calc(100% - var(--ci)),calc(100% - var(--ci)) 100%,0 100%,0 var(--ci))}
+.bl{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;line-height:1.1;color:var(--i)}
+.ky{justify-self:end;display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 3px;border:1px solid currentColor;font-size:10px;font-weight:700;line-height:1;color:var(--x)}
+.bt.p{--e:#FFB000;--x:#FFB000}
+.bt:hover{--e:#FFB000;--f:#2A3644;--x:#FFB000}
+.bt:active{--e:#FFB000;--f:#FFB000;--i:#0B0C10;--x:#0B0C10}
+.bt:focus-visible{outline:none;--e:#FFB000}
+.bt:focus-visible>.fc::before{content:'';position:absolute;inset:3px;border:1px dashed #FFB000;pointer-events:none}
+.dr{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:6px 0;border-bottom:1px solid rgba(112,128,146,.10)}
+.dr>:first-child{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#8A939D}
+.dr>:last-child{font-weight:700;text-align:right}
+.fld{height:44px;width:100%;padding:0 12px;border:1px solid #3B4756;background:#0B0C10;color:#C5C6C7;font:inherit;font-size:13px;letter-spacing:.04em}
+.fld:hover{border-color:#8A939D}
+.fld:focus{outline:none;border-color:#FFB000;background:#111419}
+.chk{appearance:none;width:16px;height:16px;margin:0;border:1px solid #8A939D;background:#0B0C10;display:inline-grid;place-items:center;cursor:pointer}
+.chk:checked{border-color:#FFB000;background:#FFB000}
+.chk:checked::after{content:'';width:6px;height:6px;background:#0B0C10}
+.cmdl{color:#FFB000;text-decoration:none;font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;display:inline-flex;align-items:center;min-height:44px}
+.cmdl:hover{color:#0B0C10;background:#FFB000}
+</style>
+</helmet>
+<div class="hud gb" style="width: 1440px; height: 900px; position: relative; overflow: hidden">
+
+  <div aria-hidden="true" style="position: absolute; left: 0; right: 0; top: 342px; height: 1px; background: rgba(112,128,146,0.18)"></div>
+  <div aria-hidden="true" style="position: absolute; top: 48px; bottom: 0; left: 1080px; width: 1px; background: rgba(112,128,146,0.18)"></div>
+  <div aria-hidden="true" style="position: absolute; left: 1075px; top: 337px; width: 10px; height: 10px; border-radius: 50%; background: #FFB000"></div>
+  <div aria-hidden="true" style="position: absolute; left: 1060px; top: 322px; width: 40px; height: 40px; border: 1px solid #FFB000"></div>
+  <div aria-hidden="true" class="mi" style="position: absolute; left: 1108px; top: 318px; color: #FFB000">TAU CETI · CEL</div>
+  <div aria-hidden="true" class="mi" style="position: absolute; left: 1108px; top: 334px; color: #58616B">−2,82 / −1,04 / −3,21 PC</div>
+
+  <header style="position: absolute; left: 0; top: 0; right: 0; height: 48px; display: flex; align-items: stretch; background: #111419; border-top: 1px solid #FFB000; border-bottom: 1px solid rgba(112,128,146,0.24)">
+    <a href="Main.dc.html" style="display: flex; flex-direction: column; justify-content: center; gap: 4px; padding: 0 16px; border-right: 1px solid rgba(112,128,146,0.24); color: #C5C6C7; text-decoration: none">
+      <span class="mi">Katalog znanych światów · v0.3</span>
+      <span style="font-size: 14px; font-weight: 700; letter-spacing: 0.1em">[NAZWA GRY]</span>
+    </a>
+    <div style="flex: 1"></div>
+    <a class="cmdl" href="Main.dc.html" style="padding: 0 16px; border-left: 1px solid rgba(112,128,146,0.24)">&lt; Wróć do katalogu</a>
+  </header>
+
+  <main class="fr" style="position: absolute; left: 160px; top: 140px; width: 480px; padding: 26px 28px 30px; display: flex; flex-direction: column; gap: 22px">
+    <span class="tk a"></span><span class="tk b"></span><span class="tk c"></span><span class="tk d"></span>
+    <span class="tab" aria-hidden="true">[ AUTH ]</span>
+    <div style="display: flex; flex-direction: column; gap: 8px">
+      <span class="mi" style="color: #FFB000">Centrum dowodzenia · kanał szyfrowany</span>
+      <h1 style="margin: 0; font-size: 22px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; line-height: 1.1">Identyfikacja dowódcy</h1>
+      <p style="margin: 0; font-size: 11px; color: #8A939D">Po zalogowaniu przejmiesz statek-matkę w układzie docelowym.</p>
+    </div>
+    <form style="display: flex; flex-direction: column; gap: 16px">
+      <div style="display: flex; flex-direction: column; gap: 6px">
+        <label for="login-email" class="mi">Identyfikator · e-mail lub nazwa</label>
+        <input id="login-email" class="fld" type="text" value="dowodca@ekspedycja.test">
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 6px">
+        <div style="display: flex; justify-content: space-between">
+          <label for="login-pass" class="mi">Kod dostępu</label>
+          <a href="#" class="mi" style="color: #FFB000">Reset kodu</a>
+        </div>
+        <input id="login-pass" class="fld" type="password" value="xxxxxxxxxx">
+      </div>
+      <label for="login-remember" style="display: flex; align-items: center; gap: 10px; min-height: 44px; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: #8A939D">
+        <input id="login-remember" class="chk" type="checkbox" checked>
+        Zapamiętaj terminal
+      </label>
+      <a class="bt p" href="Arrival.dc.html"><span class="fc"><span class="bl">Zaloguj i przejmij statek</span><span class="ky" aria-hidden="true">Enter</span></span></a>
+      <a class="cmdl" href="Arrival.dc.html">&gt; Tryb demo · dane mock</a>
+    </form>
+    <span class="ser" aria-hidden="true">AUTH-02 · TLS</span>
+  </main>
+
+  <aside class="fr" aria-label="Odprawa ekspedycji" style="position: absolute; left: 900px; top: 440px; width: 400px; padding: 22px 18px 26px; display: flex; flex-direction: column; gap: 12px">
+    <span class="tk a"></span><span class="tk b"></span><span class="tk c"></span><span class="tk d"></span>
+    <span class="tab" aria-hidden="true">[ ODPRAWA ]</span>
+    <h2 class="tt" style="margin: 0">Arka-1 · przybycie do Tau Ceti</h2>
+    <p style="margin: 0; font-size: 11px; line-height: 1.5; color: #8A939D">Zadanie: zeskanować układ, wybrać planetę startową i postawić port kosmiczny. Ładownia Arki wystarczy na pierwsze budowle.</p>
+    <div style="display: flex; flex-direction: column">
+      <sc-for list="{{brief}}" as="b" hint-placeholder-count="5">
+        <div class="dr"><span>{{b.k}}</span><span>{{b.v}}</span></div>
+      </sc-for>
+    </div>
+    <span class="ser" aria-hidden="true">BRF · EXP-001</span>
+  </aside>
+
+  <section class="fr" aria-label="Łącze" style="position: absolute; left: 160px; top: 690px; width: 480px; padding: 16px 16px 22px; display: flex; flex-direction: column; gap: 4px">
+    <span class="tab" aria-hidden="true">[ ŁĄCZE ]</span>
+    <sc-for list="{{link}}" as="l" hint-placeholder-count="4">
+      <span style="font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: {{l.c}}">{{l.t}}</span>
+    </sc-for>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      brief: [
+        { k: 'Statek', v: 'Arka-1 · klasa międzygwiezdna' },
+        { k: 'Koloniści', v: '200 · hibernacja' },
+        { k: 'Ładownia startowa', v: '2000 j.' },
+        { k: 'Cel', v: 'Tau Ceti · G8.5V' },
+        { k: 'Odległość od Sol', v: '11,91 ly' },
+        { k: 'Planety do zbadania', v: '5 + pas pyłowy' }
+      ],
+      link: [
+        { t: '> Łącze z Arką-1 ............ OK', c: '#8A939D' },
+        { t: '> Telemetria napędu .......... wygaszony', c: '#8A939D' },
+        { t: '> Hibernacja kolonistów ...... 200 / 200', c: '#8A939D' },
+        { t: '> Oczekiwanie na dowódcę _', c: '#FFB000' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

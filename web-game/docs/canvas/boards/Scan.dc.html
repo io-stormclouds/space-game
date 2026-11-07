@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<title>Skanowanie układu</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#FFB000}
+.hud,.hud *{box-sizing:border-box;border-radius:0;box-shadow:none;transition:none}
+.hud{font-family:'JetBrains Mono','IBM Plex Mono',Consolas,monospace;font-variant-numeric:tabular-nums slashed-zero;color:#C5C6C7;background:#0B0C10;font-size:12px;line-height:1.3}
+.hud :focus-visible{outline:2px solid #FFB000;outline-offset:2px}
+.vh{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+.gb{background-color:#0B0C10;background-image:linear-gradient(rgba(112,128,146,.10) 1px,transparent 1px),linear-gradient(90deg,rgba(112,128,146,.10) 1px,transparent 1px);background-size:32px 32px}
+.mi{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#8A939D;line-height:1.1}
+.tt{margin:0;font-size:16px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;line-height:1.1}
+.sg{color:#FFB000}.al{color:#FF5A4A}
+.fr{position:relative;background:#111419;border:1px solid rgba(112,128,146,.24)}
+.tk{position:absolute;width:8px;height:8px;border:0 solid #FFB000;pointer-events:none}
+.tk.a{top:-1px;left:-1px;border-top-width:1px;border-left-width:1px}.tk.b{top:-1px;right:-1px;border-top-width:1px;border-right-width:1px}
+.tk.c{bottom:-1px;left:-1px;border-bottom-width:1px;border-left-width:1px}.tk.d{bottom:-1px;right:-1px;border-bottom-width:1px;border-right-width:1px}
+.tab{position:absolute;top:0;left:16px;transform:translateY(-50%);padding:0 4px;background:#0B0C10;font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#FFB000;line-height:1;white-space:nowrap}
+.ser{position:absolute;right:6px;bottom:3px;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#58616B;line-height:1}
+.rb{position:absolute;left:0;top:0;right:0;height:48px;display:flex;align-items:stretch;background:#111419;border-top:1px solid #FFB000;border-bottom:1px solid rgba(112,128,146,.24)}
+.rb-id{display:flex;flex-direction:column;justify-content:center;gap:4px;padding:0 16px;border-right:1px solid rgba(112,128,146,.24);white-space:nowrap}
+.rb-nm{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;line-height:1.1}
+.rs{display:flex;flex-direction:column;justify-content:center;gap:4px;padding:0 10px;border-right:1px solid rgba(112,128,146,.24);white-space:nowrap}
+.rs dt{display:flex;align-items:center;gap:6px;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#8A939D;line-height:1}
+.rs dd{display:flex;align-items:center;gap:8px;margin:0}
+.rs-c{font-weight:700;color:#C5C6C7}
+.rs-v{display:inline-flex;align-items:baseline;gap:2px;font-size:14px;font-weight:700;letter-spacing:.02em;line-height:1;color:#C5C6C7}
+.led{width:6px;height:6px;border:1px solid #58616B}
+.led.on{background:#FFB000;border-color:#FFB000}
+.mt{position:relative;display:inline-block;flex:none;width:49px;height:8px;background:repeating-linear-gradient(90deg,rgba(112,128,146,.24) 0 4px,transparent 4px 5px)}
+.mt>span{position:absolute;left:0;top:0;bottom:0;background:repeating-linear-gradient(90deg,#8A939D 0 4px,transparent 4px 5px)}
+.mt.lo>span{background:repeating-linear-gradient(90deg,#FFB000 0 4px,transparent 4px 5px)}
+.rb-sp{flex:1}
+.rb-cl{display:flex;align-items:center;gap:8px;padding:0 12px;border-left:1px solid rgba(112,128,146,.24)}
+.vs{display:flex;border:1px solid rgba(112,128,146,.24);background:#0B0C10}
+.vs>*{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 10px;border:0;border-right:1px solid rgba(112,128,146,.24);background:transparent;font:inherit;font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#8A939D;text-decoration:none;cursor:pointer;white-space:nowrap}
+.vs>*:last-child{border-right:0}
+.vs>a:hover,.vs>button:hover{color:#FFB000;background:#2A3644}
+.vs>a:active,.vs>button:active{color:#0B0C10;background:#FFB000}
+.vs>.cur{color:#FFB000;background:#3E3B2C;border-bottom:2px solid #FFB000;cursor:default}
+.vs>.off{color:#58616B;cursor:not-allowed;background-image:repeating-linear-gradient(135deg,transparent 0 5px,rgba(112,128,146,.10) 5px 6px)}
+.bt{--e:#3B4756;--f:#1F2833;--i:#C5C6C7;--x:#8A939D;--c:6px;position:relative;display:inline-flex;min-height:44px;margin:0;padding:1px;border:0;background:var(--e);color:var(--i);font:inherit;text-align:left;text-decoration:none;cursor:pointer;user-select:none;clip-path:polygon(var(--c) 0,100% 0,100% calc(100% - var(--c)),calc(100% - var(--c)) 100%,0 100%,0 var(--c))}
+.fc{--ci:calc(var(--c) - .6px);position:relative;flex:1;display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:8px;padding:6px 12px;background:var(--f);clip-path:polygon(var(--ci) 0,100% 0,100% calc(100% - var(--ci)),calc(100% - var(--ci)) 100%,0 100%,0 var(--ci))}
+.bl{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;line-height:1.1;color:var(--i)}
+.ic{display:inline-flex;color:var(--x)}
+.ky{justify-self:end;display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 3px;border:1px solid currentColor;font-size:10px;font-weight:700;line-height:1;color:var(--x)}
+.bd{display:block;margin-top:3px;font-size:11px;letter-spacing:.02em;color:var(--x)}
+.rsn{display:block;margin-top:3px;font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#FF5A4A}
+.bt.p{--e:#FFB000;--x:#FFB000}
+.bt.on{--e:#FFB000;--f:#3E3B2C;--x:#FFB000}
+.bt:hover{--e:#FFB000;--f:#2A3644;--x:#FFB000}
+.bt:active{--e:#FFB000;--f:#FFB000;--i:#0B0C10;--x:#0B0C10}
+.bt:focus-visible{outline:none;--e:#FFB000}
+.bt:focus-visible>.fc::before{content:'';position:absolute;inset:3px;border:1px dashed #FFB000;pointer-events:none}
+.bt.x{--e:rgba(112,128,146,.24);--f:#111419;--i:#8A939D;--x:#58616B;cursor:not-allowed}
+.bt.x>.fc{background-image:repeating-linear-gradient(135deg,transparent 0 5px,rgba(112,128,146,.10) 5px 6px)}
+.bt.cl{--c:4px;--e:#1F2833;width:100%;height:100%;min-height:72px}
+.bt.cl>.fc{grid-template-columns:minmax(0,1fr) auto;grid-template-rows:auto minmax(0,1fr);align-items:start;gap:4px;padding:6px 6px 6px 8px}
+.bt.cl .ic{grid-column:1;grid-row:1}.bt.cl .ky{grid-column:2;grid-row:1}
+.cb{grid-column:1/-1;grid-row:2;align-self:end;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;line-height:1.15;color:var(--i)}
+.bt.cl.p,.bt.cl.on,.bt.cl:hover,.bt.cl:active,.bt.cl:focus-visible{--e:#FFB000}
+.bt.cl.x{--e:#111419}
+.bt.x:hover,.bt.x:active{--e:#FF5A4A;--f:#111419;--i:#8A939D;--x:#58616B}
+.cc{display:flex;flex-direction:column;padding-top:8px}
+.cc-h{display:flex;justify-content:space-between;align-items:baseline;gap:12px;height:28px;padding:6px 10px 0}
+.cc-t{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#FFB000;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cg{display:grid;grid-template-columns:repeat(4,96px);grid-auto-rows:72px;gap:1px;background:rgba(112,128,146,.24);border-top:1px solid rgba(112,128,146,.24);border-bottom:1px solid rgba(112,128,146,.24)}
+.ce{display:flex;min-width:0;background:#1F2833}
+.ce.em{position:relative;background-color:#111419;background-image:radial-gradient(rgba(112,128,146,.24) 1px,transparent 1px);background-size:6px 6px}
+.sn{position:absolute;top:4px;right:6px;font-size:10px;letter-spacing:.14em;color:#58616B}
+.ip,.ip0{position:absolute;left:0;right:0;bottom:0;height:55px;padding:6px 10px;flex-direction:column;gap:3px;background:#111419}
+.ip0{display:flex}
+.ip{display:none;z-index:1}
+.ce:hover>.ip,.ce:focus-within>.ip{display:flex}
+.ip-h{display:flex;justify-content:space-between;align-items:baseline;gap:10px;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+.ip-n{font-size:11px;color:#8A939D}
+.ip-r{font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#FF5A4A}
+.dr{display:flex;justify-content:space-between;align-items:center;gap:12px;min-height:26px;padding:4px 0;border-bottom:1px solid rgba(112,128,146,.10)}
+.dr>:first-child{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#8A939D;white-space:nowrap}
+.dr>:last-child{display:inline-flex;align-items:center;gap:8px;font-weight:700;text-align:right}
+.tg{display:inline-flex;align-items:center;gap:6px;height:18px;padding:0 6px;border:1px solid currentColor;font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;line-height:1;white-space:nowrap;color:#8A939D}
+.tg.sg{color:#FFB000}
+.gl{margin:0;padding:0;list-style:none;display:flex;flex-direction:column}
+.gl>li{display:grid;grid-template-columns:28px minmax(0,1fr);gap:8px;align-items:center;min-height:30px;border-bottom:1px solid rgba(112,128,146,.10);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#8A939D}
+.gl-n{display:inline-grid;place-items:center;width:24px;height:18px;border:1px solid currentColor;font-size:10px;font-weight:700}
+.gl>li.cur{color:#FFB000;font-weight:700}
+.gl>li.dn>span:last-child{text-decoration:line-through}
+.brk{position:absolute;inset:-2px;pointer-events:none;background:linear-gradient(#FFB000,#FFB000) left top/8px 1px no-repeat,linear-gradient(#FFB000,#FFB000) left top/1px 8px no-repeat,linear-gradient(#FFB000,#FFB000) right top/8px 1px no-repeat,linear-gradient(#FFB000,#FFB000) right top/1px 8px no-repeat,linear-gradient(#FFB000,#FFB000) left bottom/8px 1px no-repeat,linear-gradient(#FFB000,#FFB000) left bottom/1px 8px no-repeat,linear-gradient(#FFB000,#FFB000) right bottom/8px 1px no-repeat,linear-gradient(#FFB000,#FFB000) right bottom/1px 8px no-repeat}
+.pl{position:absolute;height:32px;padding:0 6px 0 0;border:0;background:transparent;color:#C5C6C7;display:flex;align-items:center;gap:6px;font:inherit;cursor:pointer}
+.pl-d{position:relative;width:32px;height:32px;display:inline-flex;align-items:center;justify-content:center}
+.pl-l{font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#8A939D}
+.pl:hover .pl-l,.pl.on .pl-l{color:#FFB000}
+.pl:active .pl-l{color:#0B0C10;background:#FFB000}
+.row{display:grid;grid-template-columns:26px minmax(0,1fr) 44px 78px;align-items:center;gap:8px;width:100%;min-height:40px;padding:4px 8px 4px 6px;border:0;border-left:2px solid transparent;border-bottom:1px solid rgba(112,128,146,.10);background:transparent;color:#C5C6C7;font:inherit;text-align:left;cursor:pointer}
+.row:hover{background:#2A3644}
+.row:hover .row-n{color:#FFB000}
+.row.on{background:#3E3B2C;border-left-color:#FFB000}
+.row.on .row-n,.row.on .row-c{color:#FFB000}
+.row:active{background:#FFB000}
+.row:active .row-n,.row:active .row-c,.row:active .mi,.row:active .tg{color:#0B0C10}
+.row-c{font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#8A939D}
+.row-n{display:block;font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+.dp{display:grid;grid-template-columns:34px minmax(0,1fr) 49px 96px;align-items:center;gap:8px;min-height:24px;border-bottom:1px solid rgba(112,128,146,.10);font-size:11px}
+</style>
+</helmet>
+<div class="hud gb" style="width: 1440px; height: 900px; position: relative; overflow: hidden">
+
+  <svg width="1440" height="900" viewBox="0 0 1440 900" style="position: absolute; left: 0; top: 0" aria-hidden="true">
+    <g fill="none" stroke="#2A3644">
+      <ellipse cx="720" cy="380" rx="120" ry="46"></ellipse>
+      <ellipse cx="720" cy="380" rx="190" ry="72"></ellipse>
+      <ellipse cx="720" cy="380" rx="270" ry="103"></ellipse>
+      <ellipse cx="720" cy="380" rx="360" ry="137" stroke="#3B4756"></ellipse>
+      <ellipse cx="720" cy="380" rx="470" ry="179"></ellipse>
+    </g>
+    <ellipse cx="720" cy="380" rx="580" ry="221" fill="none" stroke="#3B4756" stroke-width="8" stroke-dasharray="1 5"></ellipse>
+    <ellipse cx="720" cy="380" rx="420" ry="160" fill="none" stroke="#FFB000" stroke-dasharray="2 6" opacity="0.5"></ellipse>
+    <circle cx="720" cy="380" r="17" fill="none" stroke="#58616B"></circle>
+    <circle cx="720" cy="380" r="9" fill="#C5C6C7"></circle>
+    <path d="M684 380h16 M740 380h16 M720 344v16 M720 400v16" stroke="#58616B"></path>
+    <rect x="985" y="195" width="10" height="10" fill="#FFB000"></rect>
+    <path d="M990 205 L 990 232" stroke="#FFB000" stroke-dasharray="2 3"></path>
+  </svg>
+  <div style="position: absolute; left: 790px; top: 184px; width: 186px; display: flex; flex-direction: column; align-items: flex-end; gap: 4px">
+    <span style="font-size: 12px; font-weight: 700; letter-spacing: 0.08em; color: #FFB000">ARKA-1</span>
+    <span class="mi">Skaner aktywny</span>
+  </div>
+  <div class="mi" style="position: absolute; left: 560px; top: 404px; width: 140px; text-align: right; color: #C5C6C7">Tau Ceti · G8.5V</div>
+
+  <sc-for list="{{planets}}" as="p" hint-placeholder-count="6">
+    <button type="button" class="{{p.cls}}" onClick="{{p.pick}}" aria-label="{{p.name}}" aria-pressed="{{p.pressed}}" style="left: {{p.bx}}px; top: {{p.by}}px">
+      <span class="pl-d" aria-hidden="true">
+        <span style="width: {{p.size}}px; height: {{p.size}}px; border-radius: 50%; background: {{p.dot}}"></span>
+        <sc-if value="{{p.selected}}" hint-placeholder-val="{{false}}"><span class="brk"></span></sc-if>
+      </span>
+      <span class="pl-l">{{p.short}}</span>
+    </button>
+  </sc-for>
+
+  <header class="rb">
+    <div class="rb-id"><span class="mi">Dzień 1 · 00:21</span><span class="rb-nm">Układ Tau Ceti</span></div>
+    <dl style="display: flex; margin: 0">
+      <div class="rs">
+        <dt><span class="led on" aria-hidden="true"></span><span class="rs-c">SKN</span><span>Skan pasywny</span></dt>
+        <dd><span class="rs-v">100%</span><span class="mt" aria-hidden="true"><span style="width: 49px"></span></span></dd>
+      </div>
+      <div class="rs">
+        <dt><span class="rs-c">WYN</span><span>Wynik</span></dt>
+        <dd><span class="rs-v" style="font-size: 12px">5 planet + pas pyłowy</span></dd>
+      </div>
+      <div class="rs">
+        <dt><span class="rs-c">REK</span><span>Rekomendacja</span></dt>
+        <dd><span class="rs-v sg" style="font-size: 12px; color: #FFB000">Tau Ceti e</span></dd>
+      </div>
+    </dl>
+    <div class="rb-sp"></div>
+    <nav class="rb-cl" aria-label="Przełącznik widoku">
+      <div class="vs">
+        <span class="off" aria-disabled="true" title="Najpierw wybierz planetę startową">Planeta</span>
+        <span class="cur" aria-current="page">Układ</span>
+        <a href="Galaxy.dc.html">Galaktyka</a>
+      </div>
+    </nav>
+  </header>
+
+  <aside class="fr" aria-label="Rozkaz misji" style="position: absolute; left: 16px; top: 76px; width: 300px; padding: 18px 14px 18px; display: flex; flex-direction: column; gap: 10px">
+    <span class="tk a"></span><span class="tk b"></span><span class="tk c"></span><span class="tk d"></span>
+    <span class="tab" aria-hidden="true">[ ROZKAZ MISJI ]</span>
+    <h1 class="tt">Kolonizacja Tau Ceti</h1>
+    <ol class="gl">
+      <li class="dn"><span class="gl-n" aria-hidden="true">OK</span><span>Zeskanuj układ</span></li>
+      <li class="cur"><span class="gl-n" aria-hidden="true">02</span><span>Wybierz planetę startową</span></li>
+      <li><span class="gl-n" aria-hidden="true">03</span><span>Wyląduj i postaw port kosmiczny</span></li>
+      <li><span class="gl-n" aria-hidden="true">04</span><span>Uruchom wydobycie</span></li>
+    </ol>
+    <span class="ser" aria-hidden="true">MSN · EXP-001</span>
+  </aside>
+
+  <aside class="fr" aria-label="Wyniki skanowania" style="position: absolute; right: 16px; top: 76px; width: 380px; padding: 18px 12px 16px; display: flex; flex-direction: column; gap: 10px">
+    <span class="tk a"></span><span class="tk b"></span><span class="tk c"></span><span class="tk d"></span>
+    <span class="tab" aria-hidden="true">[ WYNIKI SKANU ]</span>
+    <div style="display: flex; justify-content: space-between; align-items: baseline; padding: 0 2px">
+      <h2 class="tt">Ciała układu</h2>
+      <span class="mi">Nasłon. · ocena</span>
+    </div>
+    <div style="display: flex; flex-direction: column; border-top: 1px solid rgba(112,128,146,0.24)">
+      <sc-for list="{{planets}}" as="p" hint-placeholder-count="6">
+        <button type="button" class="{{p.rowCls}}" onClick="{{p.pick}}" aria-pressed="{{p.pressed}}">
+          <span class="row-c">{{p.short}}</span>
+          <span style="min-width: 0"><span class="row-n">{{p.name}}</span><span class="mi">{{p.type}}</span></span>
+          <span style="font-size: 11px; font-weight: 700; text-align: right">{{p.sun}}</span>
+          <span class="{{p.tagCls}}" style="justify-self: end">{{p.rate}}</span>
+        </button>
+      </sc-for>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 4px; padding: 4px 2px 0">
+      <span class="mi" style="padding-bottom: 4px">Złoża wykryte · {{sel.name}}</span>
+      <sc-for list="{{sel.deposits}}" as="dp" hint-placeholder-count="4">
+        <div class="dp">
+          <span style="font-weight: 700">{{dp.code}}</span>
+          <span style="color: #8A939D; text-transform: uppercase; letter-spacing: 0.06em">{{dp.name}}</span>
+          <span class="mt" aria-hidden="true"><span style="width: {{dp.mw}}px"></span></span>
+          <span style="text-align: right; font-weight: 700; text-transform: uppercase; font-size: 10px; letter-spacing: 0.1em">{{dp.level}}</span>
+        </div>
+      </sc-for>
+    </div>
+    <span class="ser" aria-hidden="true">SCN · 5+1 OBJ</span>
+  </aside>
+
+  <section class="fr" aria-label="Minimapa układu" style="position: absolute; left: 16px; top: 644px; width: 220px; height: 240px; display: flex; align-items: center; justify-content: center">
+    <span class="tk a"></span><span class="tk b"></span><span class="tk c"></span><span class="tk d"></span>
+    <span class="tab" aria-hidden="true">[ MAPA ]</span>
+    <div style="position: relative; width: 218px; height: 170px">
+      <svg width="218" height="170" viewBox="0 0 218 170" aria-hidden="true" style="position: absolute; left: 0; top: 0">
+        <g fill="none" stroke="#2A3644"><ellipse cx="109" cy="85" rx="22" ry="9"></ellipse><ellipse cx="109" cy="85" rx="40" ry="16"></ellipse><ellipse cx="109" cy="85" rx="58" ry="23"></ellipse><ellipse cx="109" cy="85" rx="76" ry="30"></ellipse><ellipse cx="109" cy="85" rx="96" ry="38"></ellipse></g>
+        <circle cx="109" cy="85" r="3" fill="#C5C6C7"></circle>
+        <rect x="58.5" y="44.5" width="102" height="72" fill="none" stroke="#8A939D" stroke-dasharray="3 3"></rect>
+      </svg>
+      <sc-for list="{{mini}}" as="m" hint-placeholder-count="6">
+        <span aria-hidden="true" style="position: absolute; left: {{m.x}}px; top: {{m.y}}px; width: {{m.s}}px; height: {{m.s}}px; background: {{m.c}}"></span>
+      </sc-for>
+    </div>
+    <span class="ser" aria-hidden="true">MAP · 1:40</span>
+  </section>
+
+  <section class="fr" aria-label="Zaznaczenie" style="position: absolute; left: 252px; top: 644px; width: 767px; height: 240px; padding: 18px 16px 16px; display: flex; flex-direction: column; gap: 10px">
+    <span class="tk a"></span><span class="tk b"></span><span class="tk c"></span><span class="tk d"></span>
+    <span class="tab" aria-hidden="true">[ ZAZNACZENIE ]</span>
+    <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px">
+      <div style="display: flex; align-items: baseline; gap: 12px">
+        <h2 class="tt sg">{{sel.name}}</h2>
+        <span class="mi">{{sel.type}}</span>
+      </div>
+      <span class="{{sel.tagCls}}">Ocena · {{sel.rate}}</span>
+    </div>
+    <div style="display: grid; grid-template-columns: minmax(0, 1fr) 248px; gap: 20px; align-items: start">
+      <div style="display: flex; flex-direction: column; gap: 8px">
+        <div style="display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 20px">
+          <sc-for list="{{sel.facts}}" as="f" hint-placeholder-count="6">
+            <div class="dr"><span>{{f.k}}</span><span>{{f.v}}</span></div>
+          </sc-for>
+        </div>
+        <span style="font-size: 11px; line-height: 1.5; color: #8A939D">{{sel.note}}</span>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 8px">
+        <sc-if value="{{sel.canPick}}" hint-placeholder-val="{{true}}">
+          <a class="bt p" href="Spaceport.dc.html" aria-keyshortcuts="Enter"><span class="fc"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 21V4 M6 4h11l-2 4 2 4H6" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="square" stroke-linejoin="miter"></path></svg><span><span class="bl">Wybierz na start</span><span class="bd">Lądowanie promem · {{sel.fuel}}</span></span><span class="ky" aria-hidden="true">Enter</span></span></a>
+        </sc-if>
+        <sc-if value="{{sel.cannotPick}}" hint-placeholder-val="{{false}}">
+          <button type="button" class="bt x" aria-disabled="true" aria-describedby="scan-why"><span class="fc"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 21V4 M6 4h11l-2 4 2 4H6" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="square" stroke-linejoin="miter"></path></svg><span><span class="bl">Wybierz na start</span><span class="rsn" id="scan-why">Brak powierzchni do zabudowy</span><span class="bd">Dostępne wyprawy górnicze · wymaga Stoczni</span></span><span class="ky" aria-hidden="true">Enter</span></span></button>
+        </sc-if>
+        <span class="mi">Wybór jest ostateczny dla Arki-1</span>
+      </div>
+    </div>
+    <span class="ser" aria-hidden="true">SEL · {{sel.code}}</span>
+  </section>
+
+  <section class="fr cc" aria-label="Rozkazy: skaner" style="position: absolute; right: 16px; top: 644px; width: 389px; height: 240px">
+    <span class="tk a"></span><span class="tk b"></span><span class="tk c"></span><span class="tk d"></span>
+    <span class="tab" aria-hidden="true">[ CMD ]</span>
+    <div class="cc-h"><span class="cc-t">Skaner · {{sel.short}}</span><span class="mi">CC-02 · 4 / 8</span></div>
+    <div class="cg" role="group" aria-label="Rozkazy">
+      <sc-for list="{{cmds}}" as="c" hint-placeholder-count="8">
+        <sc-if value="{{c.btn}}" hint-placeholder-val="{{true}}">
+          <div class="ce">
+            <button type="button" class="{{c.cls}}" aria-disabled="{{c.ad}}" aria-describedby="{{c.rid}}" aria-keyshortcuts="{{c.key}}"><span class="fc"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="{{c.icon}}" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="square" stroke-linejoin="miter"></path></svg><span class="ky" aria-hidden="true">{{c.key}}</span><span class="cb">{{c.label}}</span></span></button>
+            <div class="ip"><div class="ip-h"><span>{{c.label}}</span><span class="mi">Klawisz · {{c.key}}</span></div><span class="ip-n">{{c.note}}</span><span class="ip-r" id="{{c.rid}}">{{c.reason}}</span></div>
+          </div>
+        </sc-if>
+        <sc-if value="{{c.empty}}" hint-placeholder-val="{{false}}">
+          <div class="ce em" aria-hidden="true"><span class="sn">{{c.no}}</span></div>
+        </sc-if>
+      </sc-for>
+    </div>
+    <div class="ip0"><span class="mi">Kliknij ciało w widoku lub na liście</span><span class="ip-n">Wyboru planety dokonujesz w panelu zaznaczenia</span></div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = { sel: 'e' }; }
+  renderVals() {
+    var self = this;
+    function dep(code, name, pct, level) { return { code: code, name: name, level: level, mw: Math.max(0, Math.round(pct / 10) * 5 - 1) }; }
+    var P = [
+      { id: 'b', short: 'b', name: 'Tau Ceti b', type: 'gorąca planeta skalista', x: 833, y: 396, size: 9, sun: '×2,1', rate: 'trudny', rc: '', grid: true, fuel: '4 u paliwa',
+        facts: [['Siatka', '252 kafelki'], ['Atmosfera', 'brak'], ['Start promu', '4 u paliwa'], ['Nasłonecznienie', '×2,1'], ['Temperatura', 'wysoka'], ['Woda', 'brak']],
+        note: 'Bogata w metale, ale bez lodu i węgla: woda i paliwo musiałyby przylatywać z innych ciał.',
+        deposits: [dep('KUP', 'Kupryt', 80, 'wysoko'), dep('TYT', 'Tytanit', 55, 'średnio'), dep('URA', 'Uranit', 25, 'nisko')] },
+      { id: 'c', short: 'c', name: 'Tau Ceti c', type: 'skalista, śladowa atmosfera', x: 542, y: 355, size: 10, sun: '×1,4', rate: 'średni', rc: '', grid: true, fuel: '5 u paliwa',
+        facts: [['Siatka', '252 kafelki'], ['Atmosfera', 'śladowa'], ['Start promu', '5 u paliwa'], ['Nasłonecznienie', '×1,4'], ['Temperatura', 'umiarkowana'], ['Woda', 'brak']],
+        note: 'Dobre metale i słońce, brak lodu. Lepsza jako druga kolonia przemysłowa.',
+        deposits: [dep('TYT', 'Tytanit', 70, 'wysoko'), dep('FER', 'Ferryt', 50, 'średnio'), dep('KUP', 'Kupryt', 35, 'nisko')] },
+      { id: 'd', short: 'd', name: 'Tau Ceti d', type: 'skalista bez atmosfery', x: 855, y: 291, size: 10, sun: '×0,9', rate: 'średni', rc: '', grid: true, fuel: '6 u paliwa',
+        facts: [['Siatka', '362 kafelki'], ['Atmosfera', 'brak'], ['Start promu', '6 u paliwa'], ['Nasłonecznienie', '×0,9'], ['Temperatura', 'chłodna'], ['Woda', 'śladowo']],
+        note: 'Ferryt i Silicyt, mało wody. Niska grawitacja nadaje się na wyrzutnię masy.',
+        deposits: [dep('FER', 'Ferryt', 65, 'wysoko'), dep('SIL', 'Silicyt', 60, 'wysoko'), dep('REG', 'Regolit', 90, 'wszędzie')] },
+      { id: 'e', short: 'e', name: 'Tau Ceti e', type: 'superziemia z atmosferą', x: 425, y: 459, size: 14, sun: '×0,7', rate: 'zalecana', rc: 'good', grid: true, fuel: '12 u paliwa',
+        facts: [['Siatka', '642 kafelki'], ['Atmosfera', 'gęsta · wiatr'], ['Start promu', '12 u paliwa'], ['Nasłonecznienie', '×0,7'], ['Temperatura', 'umiarkowana'], ['Woda', 'lód, dużo']],
+        note: 'Pełny zestaw surowców T0 i atmosfera do turbin wiatrowych. Najprostszy start, ale droższy start promu z powierzchni.',
+        deposits: [dep('FER', 'Ferryt', 60, 'wysoko'), dep('SIL', 'Silicyt', 55, 'średnio'), dep('KRI', 'Kriol', 75, 'wysoko'), dep('KAR', 'Karbonit', 45, 'średnio'), dep('KUP', 'Kupryt', 15, 'rzadko')] },
+      { id: 'f', short: 'f', name: 'Tau Ceti f', type: 'chłodna planeta lodowa', x: 418, y: 243, size: 11, sun: '×0,4', rate: 'trudny', rc: '', grid: true, fuel: '7 u paliwa',
+        facts: [['Siatka', '362 kafelki'], ['Atmosfera', 'cienka'], ['Start promu', '7 u paliwa'], ['Nasłonecznienie', '×0,4'], ['Temperatura', 'bardzo niska'], ['Woda', 'lód, bardzo dużo']],
+        note: 'Źródło wody i paliwa na później. Słabe słońce: energia z reaktorów.',
+        deposits: [dep('KRI', 'Kriol', 95, 'bardzo wysoko'), dep('KAR', 'Karbonit', 50, 'średnio')] },
+      { id: 'belt', short: 'pas', name: 'Pas pyłowy', type: 'dysk asteroid i pyłu', x: 870, y: 593, size: 6, sun: '×0,3', rate: 'wyprawy', rc: '', grid: false, fuel: '',
+        facts: [['Siatka', 'brak · bryły'], ['Atmosfera', '—'], ['Start promu', '—'], ['Nasłonecznienie', '×0,3'], ['Obiekty', 'tysiące'], ['Dostęp', 'górnik asteroid.']],
+        note: 'Masywny dysk pyłowy Tau Ceti: Platynit i Ferryt z wypraw górniczych. Nie da się na nim budować.',
+        deposits: [dep('PLA', 'Platynit', 40, 'średnio'), dep('FER', 'Ferryt', 70, 'wysoko'), dep('KAR', 'Karbonit', 55, 'średnio')] }
+    ];
+    var planets = P.map(function (p) {
+      var selected = self.state.sel === p.id;
+      return {
+        name: p.name, short: p.short, type: p.type, size: p.size, sun: p.sun, rate: p.rate,
+        bx: p.x - 16, by: p.y - 16, selected: selected, pressed: selected ? 'true' : 'false',
+        cls: 'pl' + (selected ? ' on' : ''), rowCls: 'row' + (selected ? ' on' : ''),
+        dot: selected ? '#C5C6C7' : '#8A939D', tagCls: 'tg' + (p.rc === 'good' ? ' sg' : ''),
+        pick: function () { self.setState({ sel: p.id }); }
+      };
+    });
+    var mini = P.map(function (p) {
+      var on = self.state.sel === p.id, s = on ? 6 : 4;
+      return { x: Math.round(109 + (p.x - 720) * 0.1655 - s / 2), y: Math.round(85 + (p.y - 380) * 0.172 - s / 2), s: s, c: on ? '#FFB000' : '#8A939D' };
+    });
+    var c = P.filter(function (p) { return p.id === self.state.sel; })[0];
+    var sel = {
+      name: c.name, short: c.short === 'pas' ? 'pas' : c.name, type: c.type, rate: c.rate, tagCls: 'tg' + (c.rc === 'good' ? ' sg' : ''),
+      note: c.note, canPick: c.grid, cannotPick: !c.grid, fuel: c.fuel, code: 'TC-' + c.id.toUpperCase(),
+      facts: c.facts.map(function (f) { return { k: f[0], v: f[1] }; }), deposits: c.deposits
+    };
+    var I = {
+      probe: 'M4 20l7-7 M11 13l3-9 7 7-9 3z',
+      zoom: 'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14z M16 16l5 5 M8 11h6 M11 8v6',
+      compare: 'M5 20V10 M12 20V4 M19 20v-7',
+      mark: 'M6 4h12v17l-6-4-6 4z'
+    };
+    var n = 0;
+    function cmd(label, key, icon, note, o) {
+      o = o || {};
+      var blocked = !!o.locked;
+      return { label: label, key: key, icon: I[icon], note: blocked ? '' : (note || ''), reason: blocked ? note : '',
+        cls: 'bt cl' + (blocked ? ' x' : ''), ad: blocked ? 'true' : 'false', rid: 'scn-r' + (n++), btn: true, empty: false };
+    }
+    var cmds = [
+      cmd('Wyślij sondę', 'W', 'probe', 'Profil złóż w głębi · zużywa jedyną sondę'),
+      cmd('Przybliż widok', 'Z', 'zoom', 'Kamera na zaznaczone ciało'),
+      cmd('Porównaj planety', 'V', 'compare', 'Tabela: siatka, słońce, woda, paliwo'),
+      cmd('Oznacz na później', 'M', 'mark', 'Cel kolejnej kolonii')
+    ];
+    while (cmds.length < 8) cmds.push({ empty: true, btn: false, no: String(cmds.length + 1).padStart(2, '0') });
+    return { planets: planets, mini: mini, sel: sel, cmds: cmds };
+  }
+}
+</script>
+</body>
+</html>

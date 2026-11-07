@@ -1,0 +1,29 @@
+{
+  "v": 3,
+  "createdOnFiles": { "v": 1, "at": "2026-11-07T01:30:00Z" },
+  "title": "Interfejs gry — kolonizacja układu",
+  "launch": { "view": "canvas" },
+  "pages": [],
+  "boards": {
+    "Main.dc.html": { "x": 0, "y": 0, "w": 1440, "h": 900, "title": "1 · Strona główna — znany wszechświat", "is_interactive": true },
+    "Login.dc.html": { "x": 1520, "y": 0, "w": 1440, "h": 900, "title": "2 · Logowanie dowódcy", "is_interactive": true },
+    "Arrival.dc.html": { "x": 0, "y": 1320, "w": 1440, "h": 900, "title": "3 · Przybycie statku-matki", "is_interactive": true },
+    "Scan.dc.html": { "x": 1520, "y": 1320, "w": 1440, "h": 900, "title": "4 · Skanowanie i wybór planety", "is_interactive": true },
+    "Spaceport.dc.html": { "x": 3040, "y": 1320, "w": 1440, "h": 900, "title": "5 · Budowa portu kosmicznego", "is_interactive": true },
+    "Colony.dc.html": { "x": 4560, "y": 1320, "w": 1440, "h": 900, "title": "6 · Rozbudowa kolonii — zaznaczanie", "is_interactive": true },
+    "System.dc.html": { "x": 0, "y": 2640, "w": 1440, "h": 900, "title": "7 · Widok układu — statki i planety", "is_interactive": true },
+    "Galaxy.dc.html": { "x": 1520, "y": 2640, "w": 1440, "h": 900, "title": "8 · Mapa znanych światów (w grze)", "is_interactive": true },
+    "HudKit.dc.html": { "x": 3040, "y": 2640, "w": 1440, "h": 900, "title": "9 · Komponenty HUD" }
+  },
+  "order": ["Main.dc.html", "Login.dc.html", "Arrival.dc.html", "Scan.dc.html", "Spaceport.dc.html", "Colony.dc.html", "System.dc.html", "Galaxy.dc.html", "HudKit.dc.html"],
+  "notes": {
+    "row1": { "x": 0, "y": -300, "text": "Wejście do gry", "kind": "title1", "maxW": 2960 },
+    "row2": { "x": 0, "y": 1020, "text": "Pierwsza sesja: przybycie i kolonizacja układu", "kind": "title1", "maxW": 6000 },
+    "row3": { "x": 0, "y": 2340, "text": "Przełączanie widoków i komponenty HUD", "kind": "title1", "maxW": 4480 },
+    "flow": { "x": 3040, "y": 0, "w": 440, "fill": "blue", "size": "m", "text": "Przepływ prototypu (Play): Strona główna → Logowanie → Przybycie → Skanowanie → Port kosmiczny → Kolonia. Z kolonii przełącznik widoków: Planeta / Układ / Galaktyka. Dane mock: gwiazdy z space-galaxy-poc (stars.data.ts), reguły i liczby z docs/economy-expansion-design.md." },
+    "rts": { "x": 6080, "y": 1320, "w": 440, "fill": "orange", "size": "m", "text": "Zasady RTS (jak w space-3d-poc): LPM zaznacza, PPM wydaje rozkaz, przeciągnięcie kamery nie zaznacza. Zaznaczenie otwiera panel wyboru i siatkę rozkazów ze skrótami klawiszowymi. Na planszach 6 i 7 kliknij obiekty w widoku." },
+    "ds": { "x": 3540, "y": 0, "w": 440, "fill": "blue", "size": "m", "text": "Styl wszystkich plansz: design-system/ w repo (HUD taktyczny). JetBrains Mono, jeden kolor sygnałowy #FFB000, czerwień tylko dla stanów krytycznych, promień 0 i ścięte narożniki, linie 1 px, bez cieni i przejść. Najechanie zapala krawędź, wciśnięcie odwraca kontrast. Plansza 9 to arkusz komponentów." },
+    "kit": { "x": 4560, "y": 2640, "w": 440, "fill": "teal", "size": "m", "text": "Komunikaty odrzuceń wzięte z PoC (NO_POWER, NO_RESOURCES, TILE_OCCUPIED, NO_RETURN_RESERVE) — każda niedostępna akcja mówi, czego brakuje." }
+  },
+  "designSystems": []
+}

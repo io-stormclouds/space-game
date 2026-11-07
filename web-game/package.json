@@ -1,0 +1,45 @@
+{
+  "name": "@space-game/web-game",
+  "version": "0.0.0",
+  "private": true,
+  "packageManager": "npm@10.9.8",
+  "workspaces": [
+    "packages/*",
+    "tools/*"
+  ],
+  "scripts": {
+    "ng": "ng",
+    "start": "ng serve",
+    "build": "ng build",
+    "typecheck": "tsc -p tsconfig.check.json",
+    "test": "npm run test:unit && npm run test:app",
+    "test:unit": "vitest run",
+    "test:app": "ng test --watch=false",
+    "e2e": "playwright test",
+    "check": "npm run typecheck && npm run test && npm run build && npm run e2e",
+    "econ:docs": "npm run docs -w @space-game/economy-model",
+    "econ:check": "npm run docs:check -w @space-game/economy-model",
+    "format": "prettier --write apps packages e2e"
+  },
+  "dependencies": {
+    "@angular/common": "^22.0.0",
+    "@angular/compiler": "^22.0.0",
+    "@angular/core": "^22.0.0",
+    "@angular/platform-browser": "^22.0.0",
+    "@fontsource/jetbrains-mono": "^5.0.0",
+    "rxjs": "~7.8.0",
+    "tslib": "^2.3.0"
+  },
+  "devDependencies": {
+    "@angular/build": "^22.0.6",
+    "@angular/cli": "^22.0.6",
+    "@angular/compiler-cli": "^22.0.0",
+    "@playwright/test": "~1.64.1",
+    "@types/node": "^22.10.0",
+    "jsdom": "^28.0.0",
+    "prettier": "^3.8.1",
+    "tsx": "^4.19.2",
+    "typescript": "~6.0.2",
+    "vitest": "^4.0.8"
+  }
+}

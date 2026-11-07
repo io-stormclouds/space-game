@@ -1,0 +1,80 @@
+{
+  "$schema": "./node_modules/@angular/cli/lib/config/schema.json",
+  "version": 1,
+  "cli": {
+    "packageManager": "npm",
+    "analytics": false
+  },
+  "newProjectRoot": "apps",
+  "projects": {
+    "game": {
+      "projectType": "application",
+      "schematics": {},
+      "root": "apps/game",
+      "sourceRoot": "apps/game/src",
+      "prefix": "wg",
+      "architect": {
+        "build": {
+          "builder": "@angular/build:application",
+          "options": {
+            "browser": "apps/game/src/main.ts",
+            "tsConfig": "apps/game/tsconfig.app.json",
+            "outputPath": "dist/game",
+            "assets": [
+              {
+                "glob": "**/*",
+                "input": "apps/game/public"
+              }
+            ],
+            "styles": ["apps/game/src/styles.css"]
+          },
+          "configurations": {
+            "production": {
+              "budgets": [
+                {
+                  "type": "initial",
+                  "maximumWarning": "1MB",
+                  "maximumError": "2MB"
+                },
+                {
+                  "type": "anyComponentStyle",
+                  "maximumWarning": "4kB",
+                  "maximumError": "8kB"
+                }
+              ],
+              "outputHashing": "all"
+            },
+            "development": {
+              "optimization": false,
+              "extractLicenses": false,
+              "sourceMap": true
+            }
+          },
+          "defaultConfiguration": "production"
+        },
+        "serve": {
+          "builder": "@angular/build:dev-server",
+          "options": {
+            "port": 4420
+          },
+          "configurations": {
+            "production": {
+              "buildTarget": "game:build:production"
+            },
+            "development": {
+              "buildTarget": "game:build:development"
+            }
+          },
+          "defaultConfiguration": "development"
+        },
+        "test": {
+          "builder": "@angular/build:unit-test",
+          "options": {
+            "tsConfig": "apps/game/tsconfig.spec.json",
+            "include": ["**/*.spec.ts", "../../../packages/ui/src/**/*.spec.ts"]
+          }
+        }
+      }
+    }
+  }
+}

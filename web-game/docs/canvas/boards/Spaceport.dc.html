@@ -1,0 +1,334 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<title>Budowa portu kosmicznego</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#FFB000}
+.hud,.hud *{box-sizing:border-box;border-radius:0;box-shadow:none;transition:none}
+.hud{font-family:'JetBrains Mono','IBM Plex Mono',Consolas,monospace;font-variant-numeric:tabular-nums slashed-zero;color:#C5C6C7;background:#0B0C10;font-size:12px;line-height:1.3}
+.hud :focus-visible{outline:2px solid #FFB000;outline-offset:2px}
+.vh{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+.gb{background-color:#0B0C10;background-image:linear-gradient(rgba(112,128,146,.10) 1px,transparent 1px),linear-gradient(90deg,rgba(112,128,146,.10) 1px,transparent 1px);background-size:32px 32px}
+.mi{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#8A939D;line-height:1.1}
+.tt{margin:0;font-size:16px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;line-height:1.1}
+.sg{color:#FFB000}.al{color:#FF5A4A}
+.fr{position:relative;background:#111419;border:1px solid rgba(112,128,146,.24)}
+.tk{position:absolute;width:8px;height:8px;border:0 solid #FFB000;pointer-events:none}
+.tk.a{top:-1px;left:-1px;border-top-width:1px;border-left-width:1px}.tk.b{top:-1px;right:-1px;border-top-width:1px;border-right-width:1px}
+.tk.c{bottom:-1px;left:-1px;border-bottom-width:1px;border-left-width:1px}.tk.d{bottom:-1px;right:-1px;border-bottom-width:1px;border-right-width:1px}
+.tab{position:absolute;top:0;left:16px;transform:translateY(-50%);padding:0 4px;background:#0B0C10;font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#FFB000;line-height:1;white-space:nowrap}
+.ser{position:absolute;right:6px;bottom:3px;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#58616B;line-height:1}
+.rb{position:absolute;left:0;top:0;right:0;height:48px;display:flex;align-items:stretch;background:#111419;border-top:1px solid #FFB000;border-bottom:1px solid rgba(112,128,146,.24)}
+.rb-id{display:flex;flex-direction:column;justify-content:center;gap:4px;padding:0 16px;border-right:1px solid rgba(112,128,146,.24);white-space:nowrap}
+.rb-nm{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;line-height:1.1}
+.rb-dl{display:flex;margin:0}
+.rb-lb{display:flex;align-items:center;padding:0 10px;border-right:1px solid rgba(112,128,146,.24)}
+.rs{display:flex;flex-direction:column;justify-content:center;gap:4px;padding:0 10px;border-right:1px solid rgba(112,128,146,.24);white-space:nowrap}
+.rs dt{display:flex;align-items:center;gap:6px;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#8A939D;line-height:1}
+.rs dd{display:flex;align-items:center;gap:8px;margin:0}
+.rs-c{font-weight:700;color:#C5C6C7}
+.rs-v{display:inline-flex;align-items:baseline;gap:2px;font-size:14px;font-weight:700;letter-spacing:.02em;line-height:1;color:#C5C6C7}
+.rs-d{font-size:11px;font-weight:700;color:#FFB000}
+.led{width:6px;height:6px;border:1px solid #58616B}
+.rb-sp{flex:1}
+.rb-cl{display:flex;align-items:center;gap:8px;padding:0 12px;border-left:1px solid rgba(112,128,146,.24)}
+.vs{display:flex;border:1px solid rgba(112,128,146,.24);background:#0B0C10}
+.vs>*{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 10px;border:0;border-right:1px solid rgba(112,128,146,.24);background:transparent;font:inherit;font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#8A939D;text-decoration:none;cursor:pointer;white-space:nowrap}
+.vs>*:last-child{border-right:0}
+.vs>a:hover,.vs>button:hover{color:#FFB000;background:#2A3644}
+.vs>a:active,.vs>button:active{color:#0B0C10;background:#FFB000}
+.vs>.cur{color:#FFB000;background:#3E3B2C;border-bottom:2px solid #FFB000;cursor:default}
+.vs>.cur:hover{color:#FFB000;background:#3E3B2C}
+.bt{--e:#3B4756;--f:#1F2833;--i:#C5C6C7;--x:#8A939D;--c:6px;position:relative;display:inline-flex;min-height:44px;margin:0;padding:1px;border:0;background:var(--e);color:var(--i);font:inherit;text-align:left;text-decoration:none;cursor:pointer;user-select:none;clip-path:polygon(var(--c) 0,100% 0,100% calc(100% - var(--c)),calc(100% - var(--c)) 100%,0 100%,0 var(--c))}
+.fc{--ci:calc(var(--c) - .6px);position:relative;flex:1;display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:8px;padding:6px 12px;background:var(--f);clip-path:polygon(var(--ci) 0,100% 0,100% calc(100% - var(--ci)),calc(100% - var(--ci)) 100%,0 100%,0 var(--ci))}
+.bl{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;line-height:1.1;color:var(--i)}
+.ic{display:inline-flex;color:var(--x)}
+.ky{justify-self:end;display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 3px;border:1px solid currentColor;font-size:10px;font-weight:700;line-height:1;color:var(--x)}
+.bt.p{--e:#FFB000;--x:#FFB000}
+.bt.on{--e:#FFB000;--f:#3E3B2C;--x:#FFB000}
+.bt:hover{--e:#FFB000;--f:#2A3644;--x:#FFB000}
+.bt.dg:hover{--e:#FF5A4A;--x:#FF5A4A}
+.bt:active{--e:#FFB000;--f:#FFB000;--i:#0B0C10;--x:#0B0C10}
+.bt.dg:active{--e:#FF5A4A;--f:#FF5A4A}
+.bt:focus-visible{outline:none;--e:#FFB000}
+.bt:focus-visible>.fc::before{content:'';position:absolute;inset:3px;border:1px dashed #FFB000;pointer-events:none}
+.bt.x{--e:rgba(112,128,146,.24);--f:#111419;--i:#8A939D;--x:#58616B;cursor:not-allowed}
+.bt.x>.fc{background-image:repeating-linear-gradient(135deg,transparent 0 5px,rgba(112,128,146,.10) 5px 6px)}
+.bt.cl{--c:4px;--e:#1F2833;width:100%;height:100%;min-height:72px}
+.bt.cl>.fc{grid-template-columns:minmax(0,1fr) auto;grid-template-rows:auto minmax(0,1fr);align-items:start;gap:4px;padding:6px 6px 6px 8px}
+.bt.cl .ic{grid-column:1;grid-row:1}.bt.cl .ky{grid-column:2;grid-row:1}
+.cb{grid-column:1/-1;grid-row:2;align-self:end;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;line-height:1.15;color:var(--i)}
+.bt.cl.p,.bt.cl.on,.bt.cl:hover,.bt.cl:active,.bt.cl:focus-visible{--e:#FFB000}
+.bt.cl.dg:hover,.bt.cl.dg:active{--e:#FF5A4A}
+.bt.cl.x{--e:#111419}
+.bt.bk{--c:4px;--e:#1F2833;width:100%;height:100%}
+.bt.bk>.fc{display:flex;flex-direction:column;align-items:stretch;justify-content:space-between;gap:6px;padding:8px 10px}
+.bk-h{display:flex;justify-content:space-between;align-items:flex-start;gap:6px}
+.bk-c{font-size:11px;letter-spacing:.02em;color:var(--x)}
+.bk-m{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#8A939D}
+.bk-s{font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#FFB000}
+.bt.bk.x .bk-s{color:#FF5A4A}
+.bt:active .bk-m,.bt:active .bk-s{color:#0B0C10}
+.bt.bk.on,.bt.bk:hover,.bt.bk:active,.bt.bk:focus-visible{--e:#FFB000}
+.bt.bk.x{--e:#111419}
+.bt.x:hover,.bt.x:active{--e:#FF5A4A;--f:#111419;--i:#8A939D;--x:#58616B}
+.bt.x:active .bk-m{color:#8A939D}.bt.x:active .bk-s{color:#FF5A4A}
+.cc{display:flex;flex-direction:column;padding-top:8px}
+.cc-h{display:flex;justify-content:space-between;align-items:baseline;gap:12px;height:28px;padding:6px 10px 0}
+.cc-t{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#FFB000;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cg{display:grid;grid-template-columns:repeat(4,96px);grid-auto-rows:72px;gap:1px;background:rgba(112,128,146,.24);border-top:1px solid rgba(112,128,146,.24);border-bottom:1px solid rgba(112,128,146,.24)}
+.ce{display:flex;min-width:0;background:#1F2833}
+.ce.em{position:relative;background-color:#111419;background-image:radial-gradient(rgba(112,128,146,.24) 1px,transparent 1px);background-size:6px 6px}
+.sn{position:absolute;top:4px;right:6px;font-size:10px;letter-spacing:.14em;color:#58616B}
+.ip,.ip0{position:absolute;left:0;right:0;bottom:0;height:55px;padding:6px 10px;flex-direction:column;gap:3px;background:#111419}
+.ip0{display:flex}
+.ip{display:none;z-index:1}
+.ce:hover>.ip,.ce:focus-within>.ip{display:flex}
+.ip-h{display:flex;justify-content:space-between;align-items:baseline;gap:10px;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+.ip-n{font-size:11px;color:#8A939D}
+.ip-r{font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#FF5A4A}
+.dr{display:flex;justify-content:space-between;align-items:center;gap:12px;min-height:26px;padding:4px 0;border-bottom:1px solid rgba(112,128,146,.10)}
+.dr>:first-child{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#8A939D;white-space:nowrap}
+.dr>:last-child{display:inline-flex;align-items:center;gap:8px;font-weight:700;text-align:right}
+.tg{display:inline-flex;align-items:center;gap:6px;height:18px;padding:0 6px;border:1px solid currentColor;font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;line-height:1;white-space:nowrap;color:#8A939D}
+.gl{margin:0;padding:0;list-style:none;display:flex;flex-direction:column}
+.gl>li{display:grid;grid-template-columns:28px minmax(0,1fr);gap:8px;align-items:center;min-height:30px;border-bottom:1px solid rgba(112,128,146,.10);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#8A939D}
+.gl-n{display:inline-grid;place-items:center;width:24px;height:18px;border:1px solid currentColor;font-size:10px;font-weight:700}
+.gl>li.cur{color:#FFB000;font-weight:700}
+.gl>li.dn>span:last-child{text-decoration:line-through}
+.dtag{position:absolute;padding:2px 4px;background:#0B0C10;border:1px solid #3B4756;font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#C5C6C7;line-height:1;pointer-events:none}
+</style>
+</helmet>
+<div class="hud" style="width: 1440px; height: 900px; position: relative; overflow: hidden">
+
+  <div aria-hidden="true" style="position: absolute; left: 100px; top: 120px; width: 1240px; height: 1240px; border-radius: 50%; background: #111419; border: 1px solid #3B4756"></div>
+  <sc-for list="{{tiles}}" as="t" hint-placeholder-count="40">
+    <div aria-hidden="true" style="position: absolute; left: {{t.x}}px; top: {{t.y}}px; width: 44px; height: 50px; clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%); background: {{t.bg}}; opacity: {{t.o}}"></div>
+  </sc-for>
+  <span class="dtag" style="left: 412px; top: 290px">FER · złoże</span>
+  <span class="dtag" style="left: 918px; top: 444px">KRI · złoże</span>
+  <span class="dtag" style="left: 538px; top: 506px">SIL · złoże</span>
+  <span class="dtag" style="left: 808px; top: 250px">KAR · złoże</span>
+
+  <svg width="1440" height="900" viewBox="0 0 1440 900" style="position: absolute; left: 0; top: 0; pointer-events: none" role="img" aria-label="Podgląd stawiania portu kosmicznego na trzech polach planety oraz prom schodzący z orbity">
+    <path d="M1210 70 C 1100 120, 900 170, 712 318" fill="none" stroke="#FFB000" stroke-width="1" stroke-dasharray="6 6"></path>
+    <path d="M1196 52 l18 8 l-6 14 l-16 -6 z" fill="#C5C6C7"></path>
+    <path d="M647.5 345.5 l22 -12.5 l22 12.5 l23 -12.5 l22 12.5 v25 l-22 12.5 v25 l-23 13 l-22 -13 v-25 l-22 -12.5 z" fill="none" stroke="#FFB000" stroke-width="1"></path>
+    <rect x="700" y="300" width="14" height="44" fill="#C5C6C7"></rect>
+    <rect x="696" y="294" width="22" height="8" fill="#FFB000"></rect>
+    <circle cx="672" cy="380" r="10" fill="none" stroke="#C5C6C7" stroke-width="1.5"></circle>
+    <path d="M664 380h16 M672 372v16" stroke="#C5C6C7"></path>
+  </svg>
+  <div style="position: absolute; left: 744px; top: 296px; display: flex; flex-direction: column; gap: 4px; pointer-events: none; padding: 4px 6px; background: #0B0C10; border-left: 2px solid #FFB000">
+    <span style="font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #FFB000">Port kosmiczny · podgląd</span>
+    <span class="mi" style="color: #C5C6C7">3 pola · można postawić</span>
+  </div>
+  <div class="mi" style="position: absolute; left: 1224px; top: 54px">Prom z Arki-1 · zejście</div>
+
+  <header class="rb">
+    <div class="rb-id"><span class="mi">Dzień 1 · 00:38 · lądowanie</span><span class="rb-nm">Tau Ceti e</span></div>
+    <div class="rb-lb"><span class="mi">Ładownia<br>Arki-1</span></div>
+    <dl class="rb-dl" aria-label="Ładownia Arki-1, podgląd kosztu">
+      <sc-for list="{{res}}" as="r" hint-placeholder-count="6">
+        <div class="rs" title="{{r.name}}">
+          <dt><span class="led" aria-hidden="true"></span><span class="rs-c">{{r.code}}</span><span class="vh">{{r.name}}</span></dt>
+          <dd><span class="rs-v">{{r.v}}</span><span class="rs-d">{{r.delta}}</span></dd>
+        </div>
+      </sc-for>
+    </dl>
+    <div class="rb-lb" style="border-right: 0"><span class="mi sg">Podgląd kosztu<br>budowli</span></div>
+    <div class="rb-sp"></div>
+    <nav class="rb-cl" aria-label="Przełącznik widoku">
+      <div class="vs">
+        <span class="cur" aria-current="page">Planeta</span>
+        <a href="Scan.dc.html">Układ</a>
+        <a href="Galaxy.dc.html">Galaktyka</a>
+      </div>
+    </nav>
+  </header>
+
+  <aside class="fr" aria-label="Rozkaz misji" style="position: absolute; left: 16px; top: 76px; width: 300px; padding: 18px 14px 18px; display: flex; flex-direction: column; gap: 10px">
+    <span class="tk a"></span><span class="tk b"></span><span class="tk c"></span><span class="tk d"></span>
+    <span class="tab" aria-hidden="true">[ ROZKAZ MISJI ]</span>
+    <h1 class="tt">Kolonizacja Tau Ceti</h1>
+    <ol class="gl">
+      <li class="dn"><span class="gl-n" aria-hidden="true">OK</span><span>Zeskanuj układ</span></li>
+      <li class="dn"><span class="gl-n" aria-hidden="true">OK</span><span>Planeta: Tau Ceti e</span></li>
+      <li class="cur"><span class="gl-n" aria-hidden="true">03</span><span>Postaw port kosmiczny</span></li>
+      <li><span class="gl-n" aria-hidden="true">04</span><span>Uruchom wydobycie</span></li>
+    </ol>
+    <span style="font-size: 11px; line-height: 1.5; color: #8A939D">Port obok złóż skraca dojazd łazików konstrukcyjnych.</span>
+    <span class="ser" aria-hidden="true">MSN · EXP-001</span>
+  </aside>
+
+  <aside class="fr" aria-label="Wybrane pole" style="position: absolute; right: 16px; top: 76px; width: 340px; padding: 18px 14px 18px; display: flex; flex-direction: column; gap: 12px">
+    <span class="tk a"></span><span class="tk b"></span><span class="tk c"></span><span class="tk d"></span>
+    <span class="tab" aria-hidden="true">[ POLE 214 ]</span>
+    <div style="display: flex; justify-content: space-between; align-items: baseline">
+      <h2 class="tt">Sześciokąt</h2>
+      <span class="mi">+ 2 sąsiednie</span>
+    </div>
+    <div>
+      <div class="dr"><span>Złoże na polu</span><span>brak</span></div>
+      <div class="dr"><span>Zajęte</span><span>nie</span></div>
+      <div class="dr"><span>Teren</span><span>równina · regolit</span></div>
+    </div>
+    <div style="display: flex; flex-direction: column">
+      <span class="mi" style="padding-bottom: 4px">Złoża w promieniu 3 pól</span>
+      <sc-for list="{{nearby}}" as="n" hint-placeholder-count="4">
+        <div class="dr"><span><b style="color: #C5C6C7; margin-right: 8px">{{n.code}}</b>{{n.name}}</span><span>{{n.v}}</span></div>
+      </sc-for>
+    </div>
+    <div style="display: flex; flex-direction: column">
+      <span class="mi" style="padding-bottom: 4px">Warunki budowy</span>
+      <sc-for list="{{checks}}" as="c" hint-placeholder-count="4">
+        <div style="display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 8px; align-items: center; min-height: 26px; border-bottom: 1px solid rgba(112,128,146,0.10); font-size: 11px">
+          <span class="tg" style="color: #C5C6C7; justify-content: center">OK</span><span>{{c}}</span>
+        </div>
+      </sc-for>
+    </div>
+    <span class="ser" aria-hidden="true">TILE · 214 / 642</span>
+  </aside>
+
+  <section class="fr" aria-label="Katalog budowli" style="position: absolute; left: 16px; top: 644px; width: 1003px; height: 240px; padding: 18px 16px 12px; display: flex; flex-direction: column; gap: 10px">
+    <span class="tk a"></span><span class="tk b"></span><span class="tk c"></span><span class="tk d"></span>
+    <span class="tab" aria-hidden="true">[ BUDOWA ]</span>
+    <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px">
+      <div class="vs" role="tablist" aria-label="Kategorie budowli">
+        <sc-for list="{{tabs}}" as="tb" hint-placeholder-count="5">
+          <button type="button" role="tab" class="{{tb.cls}}" aria-selected="{{tb.sel}}">{{tb.label}}</button>
+        </sc-for>
+      </div>
+      <span class="mi">Kategoria 1 / 5 · 6 budowli · klawisze 1–6</span>
+    </div>
+    <div style="flex: 1; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 1px; background: rgba(112,128,146,0.24); border-top: 1px solid rgba(112,128,146,0.24); border-bottom: 1px solid rgba(112,128,146,0.24)">
+      <sc-for list="{{cards}}" as="c" hint-placeholder-count="6">
+        <div class="ce">
+          <button type="button" class="{{c.cls}}" aria-pressed="{{c.pressed}}" aria-disabled="{{c.ad}}" aria-keyshortcuts="{{c.key}}">
+            <span class="fc">
+              <span class="bk-h"><span class="bl">{{c.name}}</span><span class="ky" aria-hidden="true">{{c.key}}</span></span>
+              <span class="bk-c">{{c.cost}}</span>
+              <span class="bk-m">{{c.meta}}</span>
+              <span class="bk-s">{{c.state}}</span>
+            </span>
+          </button>
+        </div>
+      </sc-for>
+    </div>
+    <span class="mi">Podgląd w kolorze sygnału: można postawić · <span class="al">czerwony: pole zajęte lub brak surowców</span></span>
+  </section>
+
+  <section class="fr cc" aria-label="Rozkazy: tryb stawiania" style="position: absolute; right: 16px; top: 644px; width: 389px; height: 240px">
+    <span class="tk a"></span><span class="tk b"></span><span class="tk c"></span><span class="tk d"></span>
+    <span class="tab" aria-hidden="true">[ CMD ]</span>
+    <div class="cc-h"><span class="cc-t">Tryb stawiania</span><span class="mi">CC-03 · 5 / 8</span></div>
+    <div class="cg" role="group" aria-label="Rozkazy">
+      <sc-for list="{{cmds}}" as="c" hint-placeholder-count="8">
+        <sc-if value="{{c.link}}" hint-placeholder-val="{{false}}">
+          <div class="ce">
+            <a class="{{c.cls}}" href="{{c.href}}" aria-keyshortcuts="{{c.key}}"><span class="fc"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="{{c.icon}}" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="square" stroke-linejoin="miter"></path></svg><span class="ky" aria-hidden="true">{{c.key}}</span><span class="cb">{{c.label}}</span></span></a>
+            <div class="ip"><div class="ip-h"><span>{{c.label}}</span><span class="mi">Klawisz · {{c.key}}</span></div><span class="ip-n">{{c.note}}</span></div>
+          </div>
+        </sc-if>
+        <sc-if value="{{c.btn}}" hint-placeholder-val="{{true}}">
+          <div class="ce">
+            <button type="button" class="{{c.cls}}" aria-disabled="{{c.ad}}" aria-describedby="{{c.rid}}" aria-keyshortcuts="{{c.key}}"><span class="fc"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="{{c.icon}}" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="square" stroke-linejoin="miter"></path></svg><span class="ky" aria-hidden="true">{{c.key}}</span><span class="cb">{{c.label}}</span></span></button>
+            <div class="ip"><div class="ip-h"><span>{{c.label}}</span><span class="mi">Klawisz · {{c.key}}</span></div><span class="ip-n">{{c.note}}</span><span class="ip-r" id="{{c.rid}}">{{c.reason}}</span></div>
+          </div>
+        </sc-if>
+        <sc-if value="{{c.empty}}" hint-placeholder-val="{{false}}">
+          <div class="ce em" aria-hidden="true"><span class="sn">{{c.no}}</span></div>
+        </sc-if>
+      </sc-for>
+    </div>
+    <div class="ip0"><span class="mi">LPM na polu: postaw · PPM: anuluj</span><span class="ip-n">Koszt zostanie pobrany z ładowni Arki-1</span></div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    var CX = 720, CY = 740, R = 620;
+    var DEP = { '5:9': 1, '5:10': 1, '6:9': 1, '6:10': 1, '9:20': 1, '9:21': 1, '10:20': 1, '10:21': 1, '8:21': 1, '10:12': 1, '11:12': 1, '11:13': 1, '4:18': 1, '4:19': 1, '5:18': 1 };
+    var GHOST = { '7:14': 1, '7:15': 1, '8:15': 1 };
+    var tiles = [];
+    for (var r = 0; r < 17; r++) {
+      for (var c = 0; c < 32; c++) {
+        var x = (r % 2 ? 23 : 0) + c * 46 - 20;
+        var y = 60 + r * 39;
+        var dx = x + 22 - CX, dy = y + 25 - CY;
+        var dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist > R - 30 || y > 720) continue;
+        var key = r + ':' + c;
+        var fade = Math.max(0.3, 1 - Math.pow(dist / R, 3));
+        if (GHOST[key]) tiles.push({ x: x, y: y, bg: '#FFB000', o: '0.35' });
+        else if (DEP[key]) tiles.push({ x: x, y: y, bg: '#3B4756', o: Math.max(0.7, fade).toFixed(2) });
+        else tiles.push({ x: x, y: y, bg: '#1F2833', o: fade.toFixed(2) });
+      }
+    }
+    var I = {
+      place: 'M6 21V4 M6 4h11l-2 4 2 4H6',
+      rotate: 'M4 12a8 8 0 1 0 3-6.2 M4 4v4h4',
+      grid: 'M4 4h16v16H4z M4 12h16 M12 4v16',
+      deposit: 'M12 3l6 7-6 11-6-11z M6 10h12',
+      cancel: 'M6 6l12 12 M18 6L6 18'
+    };
+    var n = 0;
+    function cmd(label, key, icon, note, o) {
+      o = o || {};
+      var blocked = !!o.locked;
+      return { label: label, key: key, icon: I[icon], note: blocked ? '' : (note || ''), reason: blocked ? note : '',
+        cls: 'bt cl' + (o.primary ? ' p' : '') + (o.on ? ' on' : '') + (o.danger ? ' dg' : '') + (blocked ? ' x' : ''),
+        ad: blocked ? 'true' : 'false', rid: 'spt-r' + (n++), href: o.href || false, link: !!o.href, btn: !o.href, empty: false };
+    }
+    var cmds = [
+      cmd('Postaw port', 'LPM', 'place', 'STA 120 · BET 80 · UKL 10 · 12 min', { primary: true, href: 'Colony.dc.html' }),
+      cmd('Obróć', 'R', 'rotate', 'Obrót podglądu o 60°'),
+      cmd('Siatka', 'G', 'grid', 'Włączona · pokazuje granice pól', { on: true }),
+      cmd('Złoża', 'I', 'deposit', 'Włączone · nakładka złóż', { on: true }),
+      cmd('Anuluj', 'Esc', 'cancel', 'Wyjście z trybu stawiania', { danger: true })
+    ];
+    while (cmds.length < 8) cmds.push({ empty: true, btn: false, link: false, no: String(cmds.length + 1).padStart(2, '0') });
+    function card(i, name, cost, meta, o) {
+      o = o || {};
+      return { key: String(i), name: name, cost: cost, meta: meta, state: o.selected ? 'Wybrany · wskaż pole' : 'Wymaga portu',
+        cls: 'bt bk' + (o.selected ? ' on' : ' x'), pressed: o.selected ? 'true' : 'false', ad: o.selected ? 'false' : 'true' };
+    }
+    function tab(label, active) { return { label: label, cls: active ? 'cur' : '', sel: active ? 'true' : 'false' }; }
+    return {
+      tiles: tiles, cmds: cmds,
+      res: [
+        { code: 'STA', name: 'Stal', v: '600', delta: '−120' }, { code: 'BET', name: 'Beton', v: '200', delta: '−80' },
+        { code: 'UKL', name: 'Układ scalony', v: '60', delta: '−10' }, { code: 'FER', name: 'Ferryt', v: '400', delta: '' },
+        { code: 'SIL', name: 'Silicyt', v: '300', delta: '' }, { code: 'KRI', name: 'Kriol', v: '200', delta: '' }
+      ],
+      nearby: [
+        { code: 'FER', name: 'Ferryt', v: '4 pola · ~1400 j.' },
+        { code: 'SIL', name: 'Silicyt', v: '3 pola · ~900 j.' },
+        { code: 'KRI', name: 'Kriol', v: '5 pól · ~1900 j.' },
+        { code: 'KAR', name: 'Karbonit', v: '3 pola · ~700 j.' }
+      ],
+      checks: ['3 wolne pola, bez pięciokąta', 'Surowce z ładowni Arki wystarczą', 'Port ma własny generator +5 MW', 'Prom wyląduje na porcie'],
+      tabs: [tab('Infrastruktura', true), tab('Wydobycie', false), tab('Energia', false), tab('Magazyny', false), tab('Przetwórstwo', false)],
+      cards: [
+        card(1, 'Port kosmiczny', 'STA 120 · BET 80 · UKL 10', '3 pola · +5 MW · 12 min', { selected: true }),
+        card(2, 'Habitat', 'FER 20 · SIL 10', '1 pole · −2 MW'),
+        card(3, 'Magazyn', 'FER 15 · KRI 5', '1 pole · −0,5 MW'),
+        card(4, 'Panel słoneczny', 'SIL 10', '1 pole · +3,5 MW'),
+        card(5, 'Turbina wiatrowa', 'FER 15 · SIL 10', '1 pole · +10 MW'),
+        card(6, 'Garaż pojazdów', 'FER 120 · SIL 40', '1 pole · −2 MW')
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

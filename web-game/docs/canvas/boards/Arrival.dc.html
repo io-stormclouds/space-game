@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<title>Przybycie statku-matki</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#FFB000}
+.hud,.hud *{box-sizing:border-box;border-radius:0;box-shadow:none;transition:none}
+.hud{font-family:'JetBrains Mono','IBM Plex Mono',Consolas,monospace;font-variant-numeric:tabular-nums slashed-zero;color:#C5C6C7;background:#0B0C10;font-size:12px;line-height:1.3}
+.hud :focus-visible{outline:2px solid #FFB000;outline-offset:2px}
+.vh{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+.gb{background-color:#0B0C10;background-image:linear-gradient(rgba(112,128,146,.10) 1px,transparent 1px),linear-gradient(90deg,rgba(112,128,146,.10) 1px,transparent 1px);background-size:32px 32px}
+.mi{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#8A939D;line-height:1.1}
+.tt{margin:0;font-size:16px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;line-height:1.1}
+.sg{color:#FFB000}.al{color:#FF5A4A}
+.fr{position:relative;background:#111419;border:1px solid rgba(112,128,146,.24)}
+.tk{position:absolute;width:8px;height:8px;border:0 solid #FFB000;pointer-events:none}
+.tk.a{top:-1px;left:-1px;border-top-width:1px;border-left-width:1px}.tk.b{top:-1px;right:-1px;border-top-width:1px;border-right-width:1px}
+.tk.c{bottom:-1px;left:-1px;border-bottom-width:1px;border-left-width:1px}.tk.d{bottom:-1px;right:-1px;border-bottom-width:1px;border-right-width:1px}
+.tab{position:absolute;top:0;left:16px;transform:translateY(-50%);padding:0 4px;background:#0B0C10;font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#FFB000;line-height:1;white-space:nowrap}
+.ser{position:absolute;right:6px;bottom:3px;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#58616B;line-height:1}
+.rb{position:absolute;left:0;top:0;right:0;height:48px;display:flex;align-items:stretch;background:#111419;border-top:1px solid #FFB000;border-bottom:1px solid rgba(112,128,146,.24)}
+.rb-id{display:flex;flex-direction:column;justify-content:center;gap:4px;padding:0 16px;border-right:1px solid rgba(112,128,146,.24);white-space:nowrap}
+.rb-nm{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;line-height:1.1}
+.rb-dl{display:flex;margin:0}
+.rb-lb{display:flex;align-items:center;padding:0 10px;border-right:1px solid rgba(112,128,146,.24)}
+.rs{display:flex;flex-direction:column;justify-content:center;gap:4px;padding:0 10px;border-right:1px solid rgba(112,128,146,.24);white-space:nowrap}
+.rs dt{display:flex;align-items:center;gap:6px;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#8A939D;line-height:1}
+.rs dd{display:flex;align-items:center;gap:8px;margin:0}
+.rs-c{font-weight:700;color:#C5C6C7}
+.rs-r{margin-left:auto;padding-left:6px;letter-spacing:.02em}
+.rs-r.ng{color:#FFB000}
+.rs-v{display:inline-flex;align-items:baseline;gap:2px;font-size:14px;font-weight:700;letter-spacing:.02em;line-height:1;color:#C5C6C7}
+.rs-x{font-weight:400;color:#8A939D}
+.rs-u{margin-left:4px;font-size:10px;font-weight:400;letter-spacing:.14em;color:#8A939D}
+.rs-d{font-size:11px;font-weight:700;color:#FFB000}
+.led{width:6px;height:6px;border:1px solid #58616B}
+.mt{position:relative;display:inline-block;flex:none;width:49px;height:8px;background:repeating-linear-gradient(90deg,rgba(112,128,146,.24) 0 4px,transparent 4px 5px)}
+.mt>span{position:absolute;left:0;top:0;bottom:0;background:repeating-linear-gradient(90deg,#8A939D 0 4px,transparent 4px 5px)}
+.rs.lo .rs-c,.rs.lo .rs-v{color:#FFB000}
+.rs.lo .led{background:#FFB000;border-color:#FFB000}
+.rs.lo .mt>span,.mt.lo>span{background:repeating-linear-gradient(90deg,#FFB000 0 4px,transparent 4px 5px)}
+.rs.cr .rs-c,.rs.cr .rs-v{color:#FF5A4A}
+.rs.cr .led{background:#FF5A4A;border-color:#FF5A4A;animation:hb 1s steps(1,end) infinite}
+.rs.cr .mt>span,.mt.cr>span{background:repeating-linear-gradient(90deg,#FF5A4A 0 4px,transparent 4px 5px)}
+@keyframes hb{50%{opacity:0}}
+@media (prefers-reduced-motion:reduce){.rs.cr .led{animation:none}}
+.rb-sp{flex:1}
+.rb-cl{display:flex;align-items:center;gap:8px;padding:0 12px;border-left:1px solid rgba(112,128,146,.24)}
+.vs{display:flex;border:1px solid rgba(112,128,146,.24);background:#0B0C10}
+.vs>*{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 10px;border:0;border-right:1px solid rgba(112,128,146,.24);background:transparent;font:inherit;font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#8A939D;text-decoration:none;cursor:pointer;white-space:nowrap}
+.vs>*:last-child{border-right:0}
+.vs>a:hover,.vs>button:hover{color:#FFB000;background:#2A3644}
+.vs>a:active,.vs>button:active{color:#0B0C10;background:#FFB000}
+.vs>.cur{color:#FFB000;background:#3E3B2C;border-bottom:2px solid #FFB000;cursor:default}
+.vs>.off{color:#58616B;cursor:not-allowed;background-image:repeating-linear-gradient(135deg,transparent 0 5px,rgba(112,128,146,.10) 5px 6px)}
+.bt{--e:#3B4756;--f:#1F2833;--i:#C5C6C7;--x:#8A939D;--c:6px;position:relative;display:inline-flex;min-height:44px;margin:0;padding:1px;border:0;background:var(--e);color:var(--i);font:inherit;text-align:left;text-decoration:none;cursor:pointer;user-select:none;clip-path:polygon(var(--c) 0,100% 0,100% calc(100% - var(--c)),calc(100% - var(--c)) 100%,0 100%,0 var(--c))}
+.fc{--ci:calc(var(--c) - .6px);position:relative;flex:1;display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:8px;padding:6px 12px;background:var(--f);clip-path:polygon(var(--ci) 0,100% 0,100% calc(100% - var(--ci)),calc(100% - var(--ci)) 100%,0 100%,0 var(--ci))}
+.bl{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;line-height:1.1;color:var(--i)}
+.ic{display:inline-flex;color:var(--x)}
+.ky{justify-self:end;display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 3px;border:1px solid currentColor;font-size:10px;font-weight:700;line-height:1;color:var(--x)}
+.bd{display:block;margin-top:3px;font-size:11px;letter-spacing:.02em;color:var(--x)}
+.rsn{display:block;margin-top:3px;font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#FF5A4A}
+.bt.p{--e:#FFB000;--x:#FFB000}
+.bt.on{--e:#FFB000;--f:#3E3B2C;--x:#FFB000}
+.bt:hover{--e:#FFB000;--f:#2A3644;--x:#FFB000}
+.bt.dg:hover{--e:#FF5A4A;--x:#FF5A4A}
+.bt:active{--e:#FFB000;--f:#FFB000;--i:#0B0C10;--x:#0B0C10}
+.bt.dg:active{--e:#FF5A4A;--f:#FF5A4A}
+.bt:focus-visible{outline:none;--e:#FFB000}
+.bt:focus-visible>.fc::before{content:'';position:absolute;inset:3px;border:1px dashed #FFB000;pointer-events:none}
+.bt.x{--e:rgba(112,128,146,.24);--f:#111419;--i:#8A939D;--x:#58616B;cursor:not-allowed}
+.bt.x>.fc{background-image:repeating-linear-gradient(135deg,transparent 0 5px,rgba(112,128,146,.10) 5px 6px)}
+.bt.cl{--c:4px;--e:#1F2833;width:100%;height:100%;min-height:72px}
+.bt.cl>.fc{grid-template-columns:minmax(0,1fr) auto;grid-template-rows:auto minmax(0,1fr);align-items:start;gap:4px;padding:6px 6px 6px 8px}
+.bt.cl .ic{grid-column:1;grid-row:1}.bt.cl .ky{grid-column:2;grid-row:1}
+.cb{grid-column:1/-1;grid-row:2;align-self:end;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;line-height:1.15;color:var(--i)}
+.bt.cl.p,.bt.cl.on,.bt.cl:hover,.bt.cl:active,.bt.cl:focus-visible{--e:#FFB000}
+.bt.cl.dg:hover,.bt.cl.dg:active{--e:#FF5A4A}
+.bt.cl.x{--e:#111419}
+.bt.x:hover,.bt.x:active{--e:#FF5A4A;--f:#111419;--i:#8A939D;--x:#58616B}
+.cc{display:flex;flex-direction:column;padding-top:8px}
+.cc-h{display:flex;justify-content:space-between;align-items:baseline;gap:12px;height:28px;padding:6px 10px 0}
+.cc-t{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#FFB000;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cg{display:grid;grid-template-columns:repeat(4,96px);grid-auto-rows:72px;gap:1px;background:rgba(112,128,146,.24);border-top:1px solid rgba(112,128,146,.24);border-bottom:1px solid rgba(112,128,146,.24)}
+.ce{display:flex;min-width:0;background:#1F2833}
+.ce.em{position:relative;background-color:#111419;background-image:radial-gradient(rgba(112,128,146,.24) 1px,transparent 1px);background-size:6px 6px}
+.sn{position:absolute;top:4px;right:6px;font-size:10px;letter-spacing:.14em;color:#58616B}
+.ip,.ip0{position:absolute;left:0;right:0;bottom:0;height:55px;padding:6px 10px;flex-direction:column;gap:3px;background:#111419}
+.ip0{display:flex}
+.ip{display:none;z-index:1}
+.ce:hover>.ip,.ce:focus-within>.ip{display:flex}
+.ip-h{display:flex;justify-content:space-between;align-items:baseline;gap:10px;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+.ip-n{font-size:11px;color:#8A939D}
+.ip-r{font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#FF5A4A}
+.dr{display:flex;justify-content:space-between;align-items:center;gap:12px;min-height:26px;padding:4px 0;border-bottom:1px solid rgba(112,128,146,.10)}
+.dr>:first-child{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#8A939D;white-space:nowrap}
+.dr>:last-child{display:inline-flex;align-items:center;gap:8px;font-weight:700;text-align:right}
+.tg{display:inline-flex;align-items:center;gap:6px;height:18px;padding:0 6px;border:1px solid currentColor;font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;line-height:1;white-space:nowrap}
+.gl{margin:0;padding:0;list-style:none;display:flex;flex-direction:column}
+.gl>li{display:grid;grid-template-columns:28px minmax(0,1fr);gap:8px;align-items:center;min-height:30px;border-bottom:1px solid rgba(112,128,146,.10);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#8A939D}
+.gl-n{display:inline-grid;place-items:center;width:24px;height:18px;border:1px solid currentColor;font-size:10px;font-weight:700}
+.gl>li.cur{color:#FFB000;font-weight:700}
+.gl>li.dn>span:last-child{text-decoration:line-through}
+</style>
+</helmet>
+<div class="hud gb" style="width: 1440px; height: 900px; position: relative; overflow: hidden">
+
+  <svg width="1440" height="900" viewBox="0 0 1440 900" style="position: absolute; left: 0; top: 0" role="img" aria-label="Widok układu Tau Ceti: gwiazda, pięć nieznanych obiektów na orbitach i statek-matka na kursie przybycia">
+    <g fill="none" stroke="#2A3644">
+      <ellipse cx="720" cy="380" rx="120" ry="46"></ellipse>
+      <ellipse cx="720" cy="380" rx="190" ry="72"></ellipse>
+      <ellipse cx="720" cy="380" rx="270" ry="103"></ellipse>
+      <ellipse cx="720" cy="380" rx="360" ry="137"></ellipse>
+      <ellipse cx="720" cy="380" rx="470" ry="179"></ellipse>
+    </g>
+    <ellipse cx="720" cy="380" rx="580" ry="221" fill="none" stroke="#3B4756" stroke-width="8" stroke-dasharray="1 5"></ellipse>
+    <circle cx="720" cy="380" r="17" fill="none" stroke="#58616B"></circle>
+    <circle cx="720" cy="380" r="9" fill="#C5C6C7"></circle>
+    <path d="M684 380h16 M740 380h16 M720 344v16 M720 400v16" stroke="#58616B"></path>
+    <path d="M1440 70 C 1330 110, 1220 140, 1132 214" fill="none" stroke="#FFB000" stroke-width="1" stroke-dasharray="6 6"></path>
+    <path d="M1132 214 L1100 242" fill="none" stroke="#FFB000" stroke-width="1" stroke-dasharray="2 4" opacity="0.6"></path>
+  </svg>
+
+  <sc-for list="{{unknowns}}" as="u" hint-placeholder-count="5">
+    <div style="position: absolute; left: {{u.x}}px; top: {{u.y}}px; display: flex; align-items: center; gap: 8px">
+      <span aria-hidden="true" style="width: 16px; height: 16px; border: 1px dashed #8A939D; display: inline-grid; place-items: center; font-size: 10px; font-weight: 700; color: #8A939D">?</span>
+      <span class="mi">{{u.label}}</span>
+    </div>
+  </sc-for>
+  <div class="mi" style="position: absolute; left: 744px; top: 402px; color: #C5C6C7">Tau Ceti · G8.5V</div>
+  <div class="mi" style="position: absolute; left: 1210px; top: 520px">Pas pyłowy · dysk</div>
+
+  <div style="position: absolute; left: 1104px; top: 190px; width: 56px; height: 48px">
+    <svg width="56" height="48" viewBox="0 0 56 48" aria-hidden="true">
+      <path d="M4 4h10M4 4v10M52 4H42M52 4v10M4 44h10M4 44V34M52 44H42M52 44V34" stroke="#FFB000" stroke-width="1" fill="none"></path>
+      <path d="M14 26 L40 18 L44 24 L40 30 Z" fill="#C5C6C7"></path>
+      <path d="M14 26 L20 20 M14 26 L20 32" stroke="#8A939D" stroke-width="1.5"></path>
+    </svg>
+  </div>
+  <div style="position: absolute; left: 1166px; top: 198px; display: flex; flex-direction: column; gap: 4px">
+    <span style="font-size: 12px; font-weight: 700; letter-spacing: 0.08em; color: #FFB000">ARKA-1</span>
+    <span class="mi">Statek-matka · hamowanie</span>
+  </div>
+
+  <header class="rb">
+    <div class="rb-id"><span class="mi">Dzień 1 · 00:04</span><span class="rb-nm">Układ Tau Ceti</span></div>
+    <div class="rb-lb"><span class="mi">Ładownia<br>Arki-1</span></div>
+    <dl class="rb-dl" aria-label="Ładownia Arki-1">
+      <sc-for list="{{res}}" as="r" hint-placeholder-count="7">
+        <div class="{{r.cls}}" title="{{r.name}}">
+          <dt><span class="led" aria-hidden="true"></span><span class="rs-c">{{r.code}}</span><span class="vh">{{r.name}}</span><span class="{{r.rcls}}">{{r.rate}}</span></dt>
+          <dd><span class="rs-v">{{r.v}}<span class="rs-x">{{r.max}}</span><span class="rs-u">{{r.unit}}</span></span><span class="rs-d">{{r.delta}}</span></dd>
+        </div>
+      </sc-for>
+    </dl>
+    <div class="rb-sp"></div>
+    <div class="rb-cl">
+      <span class="mi">Czas</span>
+      <div class="vs" aria-label="Tempo czasu">
+        <button type="button" aria-label="Pauza">II</button>
+        <span class="cur" aria-current="true">×1</span>
+        <button type="button">×3</button>
+        <button type="button">×10</button>
+      </div>
+    </div>
+    <nav class="rb-cl" aria-label="Przełącznik widoku">
+      <div class="vs">
+        <span class="off" aria-disabled="true" title="Najpierw wybierz planetę startową">Planeta</span>
+        <span class="cur" aria-current="page">Układ</span>
+        <a href="Galaxy.dc.html">Galaktyka</a>
+      </div>
+    </nav>
+  </header>
+
+  <div class="fr" role="status" style="position: absolute; left: 470px; top: 76px; width: 500px; padding: 14px 16px 12px; display: flex; gap: 12px; align-items: flex-start">
+    <span class="tk a"></span><span class="tk b"></span><span class="tk c"></span><span class="tk d"></span>
+    <span class="tab" aria-hidden="true">[ STATUS ]</span>
+    <span aria-hidden="true" style="flex: none; width: 8px; height: 8px; margin-top: 3px; background: #FFB000"></span>
+    <div style="display: flex; flex-direction: column; gap: 4px">
+      <span style="font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase">Przybycie do układu zakończone</span>
+      <span style="font-size: 11px; color: #8A939D">Napęd fuzyjny wygaszony. Zeskanuj układ, aby poznać planety.</span>
+    </div>
+  </div>
+
+  <aside class="fr" aria-label="Rozkaz misji" style="position: absolute; left: 16px; top: 76px; width: 300px; padding: 18px 14px 18px; display: flex; flex-direction: column; gap: 10px">
+    <span class="tk a"></span><span class="tk b"></span><span class="tk c"></span><span class="tk d"></span>
+    <span class="tab" aria-hidden="true">[ ROZKAZ MISJI ]</span>
+    <h1 class="tt">Kolonizacja Tau Ceti</h1>
+    <ol class="gl">
+      <sc-for list="{{goals}}" as="g" hint-placeholder-count="4">
+        <li class="{{g.cls}}"><span class="gl-n" aria-hidden="true">{{g.n}}</span><span>{{g.text}}</span></li>
+      </sc-for>
+    </ol>
+    <span class="ser" aria-hidden="true">MSN · EXP-001</span>
+  </aside>
+
+  <section class="fr" aria-label="Minimapa układu" style="position: absolute; left: 16px; top: 644px; width: 220px; height: 240px; display: flex; align-items: center; justify-content: center">
+    <span class="tk a"></span><span class="tk b"></span><span class="tk c"></span><span class="tk d"></span>
+    <span class="tab" aria-hidden="true">[ MAPA ]</span>
+    <svg width="218" height="170" viewBox="0 0 218 170" aria-hidden="true">
+      <g fill="none" stroke="#2A3644"><ellipse cx="109" cy="85" rx="22" ry="9"></ellipse><ellipse cx="109" cy="85" rx="40" ry="16"></ellipse><ellipse cx="109" cy="85" rx="58" ry="23"></ellipse><ellipse cx="109" cy="85" rx="76" ry="30"></ellipse><ellipse cx="109" cy="85" rx="96" ry="38"></ellipse></g>
+      <circle cx="109" cy="85" r="3" fill="#C5C6C7"></circle>
+      <rect x="58.5" y="44.5" width="102" height="72" fill="none" stroke="#8A939D" stroke-dasharray="3 3"></rect>
+      <rect x="187" y="35" width="6" height="6" fill="#FFB000"></rect>
+    </svg>
+    <span class="ser" aria-hidden="true">MAP · 1:40</span>
+  </section>
+
+  <section class="fr" aria-label="Zaznaczenie" style="position: absolute; left: 252px; top: 644px; width: 767px; height: 240px; padding: 18px 16px 16px; display: flex; flex-direction: column; gap: 10px">
+    <span class="tk a"></span><span class="tk b"></span><span class="tk c"></span><span class="tk d"></span>
+    <span class="tab" aria-hidden="true">[ ZAZNACZENIE ]</span>
+    <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px">
+      <div style="display: flex; align-items: baseline; gap: 12px">
+        <h2 class="tt sg">Arka-1</h2>
+        <span class="mi">Statek-matka · klasa międzygwiezdna</span>
+      </div>
+      <span class="tg">Kadłub 100%</span>
+    </div>
+    <div style="display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 24px">
+      <sc-for list="{{stats}}" as="s" hint-placeholder-count="4">
+        <div class="dr"><span>{{s.k}}</span><span class="{{s.cls}}">{{s.v}}<span class="{{s.mcls}}" aria-hidden="true"><span style="width: {{s.mw}}px"></span></span></span></div>
+      </sc-for>
+    </div>
+    <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 6px">
+      <span class="mi" style="margin-right: 4px">Na pokładzie</span>
+      <sc-for list="{{onboard}}" as="o" hint-placeholder-count="5">
+        <span class="tg" style="color: #8A939D"><span style="color: #C5C6C7">{{o.n}}</span>{{o.v}}</span>
+      </sc-for>
+    </div>
+    <span class="ser" aria-hidden="true">SEL · ARK-001</span>
+  </section>
+
+  <section class="fr cc" aria-label="Rozkazy: Arka-1" style="position: absolute; right: 16px; top: 644px; width: 389px; height: 240px">
+    <span class="tk a"></span><span class="tk b"></span><span class="tk c"></span><span class="tk d"></span>
+    <span class="tab" aria-hidden="true">[ CMD ]</span>
+    <div class="cc-h"><span class="cc-t">Arka-1</span><span class="mi">CC-01 · 8 / 8</span></div>
+    <div class="cg" role="group" aria-label="Rozkazy">
+      <sc-for list="{{cmds}}" as="c" hint-placeholder-count="8">
+        <sc-if value="{{c.link}}" hint-placeholder-val="{{false}}">
+          <div class="ce">
+            <a class="{{c.cls}}" href="{{c.href}}" aria-keyshortcuts="{{c.key}}"><span class="fc"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="{{c.icon}}" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="square" stroke-linejoin="miter"></path></svg><span class="ky" aria-hidden="true">{{c.key}}</span><span class="cb">{{c.label}}</span></span></a>
+            <div class="ip"><div class="ip-h"><span>{{c.label}}</span><span class="mi">Klawisz · {{c.key}}</span></div><span class="ip-n">{{c.note}}</span></div>
+          </div>
+        </sc-if>
+        <sc-if value="{{c.btn}}" hint-placeholder-val="{{true}}">
+          <div class="ce">
+            <button type="button" class="{{c.cls}}" aria-disabled="{{c.ad}}" aria-describedby="{{c.rid}}" aria-keyshortcuts="{{c.key}}"><span class="fc"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="{{c.icon}}" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="square" stroke-linejoin="miter"></path></svg><span class="ky" aria-hidden="true">{{c.key}}</span><span class="cb">{{c.label}}</span></span></button>
+            <div class="ip"><div class="ip-h"><span>{{c.label}}</span><span class="mi">Klawisz · {{c.key}}</span></div><span class="ip-n">{{c.note}}</span><span class="ip-r" id="{{c.rid}}">{{c.reason}}</span></div>
+          </div>
+        </sc-if>
+        <sc-if value="{{c.empty}}" hint-placeholder-val="{{false}}">
+          <div class="ce em" aria-hidden="true"><span class="sn">{{c.no}}</span></div>
+        </sc-if>
+      </sc-for>
+    </div>
+    <div class="ip0"><span class="mi">Wskaż rozkaz: skutek, koszt, powód blokady</span><span class="ip-n">Zablokowane: 3 · skróty działają w widoku</span></div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    var I = {
+      scan: 'M12 12 L18 6 M12 3a9 9 0 1 0 9 9 M12 7.5a4.5 4.5 0 1 0 4.5 4.5',
+      probe: 'M4 20l7-7 M11 13l3-9 7 7-9 3z',
+      move: 'M4 12h14 M13 6l6 6-6 6',
+      stop: 'M7 7h10v10H7z',
+      unload: 'M12 4v11 M7 10l5 5 5-5 M5 20h14',
+      shuttle: 'M12 3c3 3 4 7 4 11H8c0-4 1-8 4-11z M9 17l-2 4 M15 17l2 4',
+      flag: 'M6 21V4 M6 4h11l-2 4 2 4H6',
+      cargo: 'M4 8l8-4 8 4v8l-8 4-8-4z M4 8l8 4 8-4 M12 12v8'
+    };
+    var n = 0;
+    function cmd(label, key, icon, note, o) {
+      o = o || {};
+      var blocked = !!o.locked;
+      return { label: label, key: key, icon: I[icon], note: blocked ? '' : (note || ''), reason: blocked ? note : '',
+        cls: 'bt cl' + (o.primary ? ' p' : '') + (o.danger ? ' dg' : '') + (blocked ? ' x' : ''),
+        ad: blocked ? 'true' : 'false', rid: 'arr-r' + (n++), href: o.href || false, link: !!o.href, btn: !o.href, empty: false };
+    }
+    function rs(code, name, v, o) {
+      o = o || {};
+      return { code: code, name: name, v: v, max: o.max ? '/' + o.max : '', unit: o.unit || '', rate: o.rate || '', delta: o.delta || '',
+        cls: 'rs' + (o.st ? ' ' + o.st : ''), rcls: 'rs-r' + (o.rate && o.rate.charAt(0) === '−' ? ' ng' : '') };
+    }
+    function stat(k, v, pct, st) {
+      var lit = Math.round(pct * 10);
+      return { k: k, v: v, cls: st === 'lo' ? 'sg' : '', mcls: 'mt' + (st ? ' ' + st : ''), mw: Math.max(0, lit * 5 - 1) };
+    }
+    return {
+      unknowns: [
+        { x: 836, y: 352, label: 'Obiekt 1' }, { x: 548, y: 418, label: 'Obiekt 2' }, { x: 960, y: 450, label: 'Obiekt 3' },
+        { x: 410, y: 300, label: 'Obiekt 4' }, { x: 1150, y: 360, label: 'Obiekt 5' }
+      ],
+      res: [
+        rs('STA', 'Stal', '600'), rs('FER', 'Ferryt', '400'), rs('SIL', 'Silicyt', '300'), rs('KRI', 'Kriol', '200'),
+        rs('BET', 'Beton', '200'), rs('ZYW', 'Żywność', '180'), rs('UKL', 'Układ scalony', '60')
+      ],
+      goals: [
+        { n: '01', text: 'Zeskanuj układ · Q', cls: 'cur' },
+        { n: '02', text: 'Wybierz planetę startową', cls: '' },
+        { n: '03', text: 'Wyląduj i postaw port kosmiczny', cls: '' },
+        { n: '04', text: 'Uruchom wydobycie FER, SIL, KRI', cls: '' }
+      ],
+      stats: [
+        stat('Paliwo · kapsuły', '12 / 40', 0.3, 'lo'),
+        stat('Koloniści', '200 · hibernacja', 1, ''),
+        stat('Ładownia', '2000 / 2000 j.', 1, ''),
+        stat('Moc pokładowa', '9 / 12 MW', 0.75, '')
+      ],
+      onboard: [
+        { n: '2×', v: 'Łazik konstr.' }, { n: '1×', v: 'Prom orbitalny' }, { n: '1×', v: 'Sonda' },
+        { n: '20', v: 'Pręty paliwowe' }, { n: '40', v: 'Silniki' }
+      ],
+      cmds: [
+        cmd('Skanuj układ', 'Q', 'scan', 'Skan pasywny: 5 obiektów · 15 min · bez kosztu', { primary: true, href: 'Scan.dc.html' }),
+        cmd('Wyślij sondę', 'W', 'probe', 'Zużywa jedyną sondę · szczegółowy profil 1 ciała'),
+        cmd('Leć do…', 'E', 'move', 'Wskaż cel PPM · paliwo wg odległości'),
+        cmd('Zatrzymaj', 'S', 'stop', 'Przerywa bieżący manewr'),
+        cmd('Ładownia', 'L', 'cargo', '2000 / 2000 j. · 7 surowców'),
+        cmd('Wypuść prom', 'T', 'shuttle', 'Najpierw wybierz planetę', { locked: true }),
+        cmd('Załóż kolonię', 'C', 'flag', 'Najpierw zeskanuj układ', { locked: true }),
+        cmd('Rozładuj na orbicie', 'R', 'unload', 'Wymaga Stacji orbitalnej', { locked: true })
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

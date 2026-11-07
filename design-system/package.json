@@ -3,6 +3,19 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "sideEffects": [
+    "*.css"
+  ],
+  "exports": {
+    ".": "./src/index.ts",
+    "./core": "./src/core/index.ts",
+    "./css/tokens.css": "./src/tokens/tokens.generated.css",
+    "./css/base.css": "./src/styles/base.css",
+    "./css/hud-frame.css": "./src/components/HudFrame/HudFrame.css",
+    "./css/rts-button.css": "./src/components/RTSButton/RTSButton.css",
+    "./css/resource-panel.css": "./src/components/ResourcePanel/ResourcePanel.css",
+    "./css/command-card.css": "./src/components/CommandCard/CommandCard.css"
+  },
   "scripts": {
     "dev": "vite",
     "tokens": "tsx scripts/generate-tokens.ts",

@@ -1,0 +1,11 @@
+{
+  "name": "@space-game/economy-model",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Parametric economy model that generates the tables of docs/economy-expansion-design.md.",
+  "scripts": {
+    "docs": "node build-doc.mjs",
+    "docs:check": "node build-doc.mjs --check"
+  }
+}

@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<title>Znany wszechświat</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#FFB000}a:hover{color:#FFD060}
+.hud,.hud *{box-sizing:border-box;border-radius:0;box-shadow:none;transition:none}
+.hud{font-family:'JetBrains Mono','IBM Plex Mono',Consolas,monospace;font-variant-numeric:tabular-nums slashed-zero;color:#C5C6C7;background:#0B0C10;font-size:12px;line-height:1.3}
+.hud :focus-visible{outline:2px solid #FFB000;outline-offset:2px}
+.gb{background-color:#0B0C10;background-image:linear-gradient(rgba(112,128,146,.10) 1px,transparent 1px),linear-gradient(90deg,rgba(112,128,146,.10) 1px,transparent 1px);background-size:32px 32px}
+.lb{font-size:11px;font-weight:500;letter-spacing:.14em;text-transform:uppercase;color:#8A939D;line-height:1.1}
+.mi{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#8A939D;line-height:1.1}
+.tt{font-size:16px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;line-height:1.1}
+.fr{position:relative;background:#111419;border:1px solid rgba(112,128,146,.24)}
+.tk{position:absolute;width:8px;height:8px;border:0 solid #FFB000;pointer-events:none}
+.tk.a{top:-1px;left:-1px;border-top-width:1px;border-left-width:1px}.tk.b{top:-1px;right:-1px;border-top-width:1px;border-right-width:1px}
+.tk.c{bottom:-1px;left:-1px;border-bottom-width:1px;border-left-width:1px}.tk.d{bottom:-1px;right:-1px;border-bottom-width:1px;border-right-width:1px}
+.tab{position:absolute;top:0;left:16px;transform:translateY(-50%);padding:0 4px;background:#0B0C10;font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#FFB000;line-height:1}
+.ser{position:absolute;right:6px;bottom:3px;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#58616B;line-height:1}
+.bt{--e:#3B4756;--f:#1F2833;--i:#C5C6C7;--x:#8A939D;--c:6px;position:relative;display:inline-flex;min-height:44px;margin:0;padding:1px;border:0;background:var(--e);color:var(--i);font:inherit;text-align:left;text-decoration:none;cursor:pointer;user-select:none;clip-path:polygon(var(--c) 0,100% 0,100% calc(100% - var(--c)),calc(100% - var(--c)) 100%,0 100%,0 var(--c))}
+.fc{--ci:calc(var(--c) - .6px);position:relative;flex:1;display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:8px;padding:6px 12px;background:var(--f);clip-path:polygon(var(--ci) 0,100% 0,100% calc(100% - var(--ci)),calc(100% - var(--ci)) 100%,0 100%,0 var(--ci))}
+.bl{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;line-height:1.1;color:var(--i)}
+.ic{display:inline-flex;color:var(--x)}
+.ky{justify-self:end;display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 3px;border:1px solid currentColor;font-size:10px;font-weight:700;line-height:1;color:var(--x)}
+.bd{display:block;margin-top:2px;font-size:11px;letter-spacing:.02em;color:var(--x)}
+.bt.p{--e:#FFB000;--x:#FFB000}
+.bt.on{--e:#FFB000;--f:#3E3B2C;--x:#FFB000}
+.bt:hover{--e:#FFB000;--f:#2A3644;--x:#FFB000}
+.bt:active{--e:#FFB000;--f:#FFB000;--i:#0B0C10;--x:#0B0C10}
+.bt:focus-visible{outline:none;--e:#FFB000}
+.bt:focus-visible>.fc::before{content:'';position:absolute;inset:3px;border:1px dashed #FFB000;pointer-events:none}
+.row{display:grid;grid-template-columns:22px minmax(0,1fr) 64px;align-items:center;gap:8px;width:100%;height:26px;padding:0 8px;border:0;border-bottom:1px solid rgba(112,128,146,.10);background:transparent;color:#C5C6C7;font:inherit;font-size:11px;letter-spacing:.06em;text-transform:uppercase;text-align:left;cursor:pointer}
+.row:hover{background:#2A3644;color:#FFB000}
+.row:active{background:#FFB000;color:#0B0C10}
+.row.on{background:#3E3B2C;color:#FFB000}
+.star:hover .sl{color:#FFB000}
+.dr{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:5px 0;border-bottom:1px solid rgba(112,128,146,.10)}
+.dr>:first-child{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#8A939D}
+.dr>:last-child{font-weight:700;text-align:right}
+.tg{display:inline-flex;align-items:center;gap:6px;height:18px;padding:0 6px;border:1px solid currentColor;font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;line-height:1;white-space:nowrap}
+.vs{display:flex;border:1px solid rgba(112,128,146,.24);background:#111419}
+.vs>*{display:inline-flex;align-items:center;height:32px;padding:0 12px;border:0;border-right:1px solid rgba(112,128,146,.24);border-bottom:2px solid transparent;background:transparent;font:inherit;font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#8A939D;text-decoration:none;cursor:pointer}
+.vs>*:last-child{border-right:0}
+.vs>a:hover{color:#FFB000;background:#2A3644}
+.vs>a:active{color:#0B0C10;background:#FFB000}
+.vs>.cur{color:#FFB000;background:#3E3B2C;border-bottom-color:#FFB000}
+</style>
+</helmet>
+<div class="hud gb" style="width: 1440px; height: 900px; position: relative; overflow: hidden">
+
+  <sc-for list="{{rings}}" as="r" hint-placeholder-count="3">
+    <div aria-hidden="true" style="position: absolute; left: {{r.left}}px; top: {{r.top}}px; width: {{r.size}}px; height: {{r.size}}px; border-radius: 50%; border: 1px dashed rgba(112,128,146,0.28)"></div>
+    <div aria-hidden="true" class="mi" style="position: absolute; left: {{r.lx}}px; top: {{r.ly}}px; color: #58616B">{{r.label}}</div>
+  </sc-for>
+  <div aria-hidden="true" style="position: absolute; left: 0; right: 0; top: 450px; height: 1px; background: rgba(112,128,146,0.18)"></div>
+  <div aria-hidden="true" style="position: absolute; top: 48px; bottom: 0; left: 900px; width: 1px; background: rgba(112,128,146,0.18)"></div>
+
+  <sc-for list="{{stars}}" as="s" hint-placeholder-count="20">
+    <button class="star" onClick="{{s.pick}}" aria-label="{{s.aria}}" style="position: absolute; left: {{s.bx}}px; top: {{s.by}}px; width: 28px; height: 28px; padding: 0; border: 0; background: transparent; cursor: pointer">
+      <span aria-hidden="true" style="position: absolute; left: {{s.off}}px; top: {{s.off}}px; width: {{s.size}}px; height: {{s.size}}px; border-radius: 50%; background: {{s.color}}"></span>
+      <sc-if value="{{s.selected}}" hint-placeholder-val="{{false}}">
+        <span aria-hidden="true" style="position: absolute; left: -4px; top: -4px; width: 8px; height: 8px; border-top: 1px solid #FFB000; border-left: 1px solid #FFB000"></span>
+        <span aria-hidden="true" style="position: absolute; right: -4px; top: -4px; width: 8px; height: 8px; border-top: 1px solid #FFB000; border-right: 1px solid #FFB000"></span>
+        <span aria-hidden="true" style="position: absolute; left: -4px; bottom: -4px; width: 8px; height: 8px; border-bottom: 1px solid #FFB000; border-left: 1px solid #FFB000"></span>
+        <span aria-hidden="true" style="position: absolute; right: -4px; bottom: -4px; width: 8px; height: 8px; border-bottom: 1px solid #FFB000; border-right: 1px solid #FFB000"></span>
+      </sc-if>
+      <span class="sl" style="position: absolute; {{s.lblPos}}; top: 8px; white-space: nowrap; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: {{s.lc}}; opacity: {{s.lblOpacity}}">{{s.name}}</span>
+    </button>
+  </sc-for>
+  <div aria-hidden="true" class="mi" style="position: absolute; left: 910px; top: 458px; color: #58616B">SOL · 0,0,0 PC</div>
+
+  <header class="rb" style="position: absolute; left: 0; top: 0; right: 0; height: 48px; display: flex; align-items: stretch; background: #111419; border-top: 1px solid #FFB000; border-bottom: 1px solid rgba(112,128,146,0.24)">
+    <div style="display: flex; flex-direction: column; justify-content: center; gap: 4px; padding: 0 16px; border-right: 1px solid rgba(112,128,146,0.24)">
+      <span class="mi">Katalog znanych światów · v0.3</span>
+      <span style="font-size: 14px; font-weight: 700; letter-spacing: 0.1em">[NAZWA GRY]</span>
+    </div>
+    <nav aria-label="Nawigacja" style="display: flex; align-items: center; padding: 0 12px; border-right: 1px solid rgba(112,128,146,0.24)">
+      <div class="vs">
+        <span class="cur" aria-current="page">Katalog</span>
+        <a href="#">O grze</a>
+        <a href="#">Rankingi projektów</a>
+      </div>
+    </nav>
+    <div style="flex: 1"></div>
+    <div style="display: flex; align-items: center; gap: 8px; padding: 0 16px; border-left: 1px solid rgba(112,128,146,0.24)">
+      <span aria-hidden="true" style="width: 6px; height: 6px; background: #C5C6C7"></span>
+      <span class="mi" style="color: #C5C6C7">Serwer · online</span>
+    </div>
+    <div style="display: flex; align-items: center; padding: 0 8px; border-left: 1px solid rgba(112,128,146,0.24)">
+      <a class="bt p" href="Login.dc.html" style="min-height: 40px"><span class="fc"><span class="bl">Zaloguj</span><span class="ky" aria-hidden="true">Enter</span></span></a>
+    </div>
+  </header>
+
+  <section class="fr" aria-label="Katalog gwiazd" style="position: absolute; left: 16px; top: 72px; width: 340px; padding: 14px 0 16px">
+    <span class="tk a"></span><span class="tk b"></span><span class="tk c"></span><span class="tk d"></span>
+    <span class="tab" aria-hidden="true">[ KATALOG ]</span>
+    <div style="display: flex; flex-direction: column; gap: 6px; padding: 0 12px 10px; border-bottom: 1px solid rgba(112,128,146,0.24)">
+      <h1 style="margin: 0; font-size: 22px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; line-height: 1.1">Znany wszechświat</h1>
+      <span class="mi">20 obiektów · sortowanie: odległość od Sol</span>
+    </div>
+    <div style="display: grid; grid-template-columns: 22px minmax(0, 1fr) 64px; gap: 8px; padding: 8px 8px 4px" class="mi">
+      <span>Kl.</span><span>Obiekt</span><span style="text-align: right">ly</span>
+    </div>
+    <sc-for list="{{rows}}" as="w" hint-placeholder-count="20">
+      <button class="{{w.cls}}" onClick="{{w.pick}}">
+        <span style="font-weight: 700">{{w.cl}}</span>
+        <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap">{{w.name}}</span>
+        <span style="text-align: right">{{w.ly}}</span>
+      </button>
+    </sc-for>
+    <span class="ser" aria-hidden="true">CAT · 041 / v0.3</span>
+  </section>
+
+  <aside class="fr" aria-label="Karta obiektu" style="position: absolute; left: 1084px; top: 420px; width: 340px; padding: 18px 14px 22px; display: flex; flex-direction: column; gap: 12px">
+    <span class="tk a"></span><span class="tk b"></span><span class="tk c"></span><span class="tk d"></span>
+    <span class="tab" aria-hidden="true">[ OBIEKT ]</span>
+    <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px">
+      <h2 class="tt" style="margin: 0">{{sel.name}}</h2>
+      <sc-if value="{{sel.isTarget}}" hint-placeholder-val="{{true}}"><span class="tg" style="color: #FFB000">Cel ekspedycji</span></sc-if>
+    </div>
+    <span class="mi">{{sel.cls}} · {{sel.typeName}}</span>
+    <p style="margin: 0; font-size: 11px; line-height: 1.5; color: #8A939D">{{sel.desc}}</p>
+    <div style="display: flex; flex-direction: column">
+      <sc-for list="{{sel.stats}}" as="st" hint-placeholder-count="6">
+        <div class="dr"><span>{{st.k}}</span><span>{{st.v}}</span></div>
+      </sc-for>
+    </div>
+    <sc-if value="{{sel.isTarget}}" hint-placeholder-val="{{true}}">
+      <a class="bt p" href="Login.dc.html"><span class="fc"><span class="bl">Dołącz do ekspedycji</span><span class="ky" aria-hidden="true">Enter</span></span></a>
+    </sc-if>
+    <sc-if value="{{sel.notTarget}}" hint-placeholder-val="{{false}}">
+      <a class="bt" href="Login.dc.html"><span class="fc"><span><span class="bl">Zaloguj, aby oznaczyć cel</span><span class="bd">Cele wybiera się z kolonii w grze</span></span><span class="ky" aria-hidden="true">Enter</span></span></a>
+    </sc-if>
+    <span class="ser" aria-hidden="true">OBJ · {{sel.code}}</span>
+  </aside>
+
+  <footer style="position: absolute; left: 16px; right: 16px; bottom: 14px; display: flex; justify-content: space-between; gap: 24px">
+    <span class="mi">Przeciągnij: obrót · kółko: przybliżenie · klik: karta obiektu</span>
+    <span class="mi" style="color: #58616B">Rzut uproszczony · 1 pc ≈ 104 px · dane: stars.data.ts</span>
+  </footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = { sel: 'tau' }; }
+  renderVals() {
+    var TYPES = { M: 'czerwony karzeł', K: 'pomarańczowy karzeł', G: 'żółty karzeł', A: 'gorąca gwiazda A/F', BD: 'brązowy karzeł', SOL: 'żółty karzeł' };
+    var S = [
+      { id: 'sol', name: 'Słońce', x: 0, y: 0, z: 0, ly: 0, cls: 'G2V', t: 'SOL', lum: '1', pl: 8, temp: 5778, mk: '—', kap: '—', side: 'R', show: true, desc: 'Nasza gwiazda i punkt odniesienia mapy. Układ macierzysty ludzkości.' },
+      { id: 'prox', name: 'Proxima Centauri', x: -1.295, y: 0.102, z: -0.03, ly: 4.24, cls: 'M5.5Ve', t: 'M', lum: '0,0017', pl: 2, temp: 3042, mk: 'Mk I', kap: '170', side: 'L', show: true, desc: 'Najbliższa gwiazda. Czerwony karzeł z planetą Proxima b w ekosferze.' },
+      { id: 'acen', name: 'Alpha Centauri A/B', x: -1.634, y: 0.006, z: -0.491, ly: 4.37, cls: 'G2V + K1V', t: 'G', lum: '1,52 + 0,5', pl: 0, temp: 5790, mk: 'Mk I', kap: '175', side: 'L', show: true, desc: 'Układ podwójny bardzo podobny do Słońca. Brak znanych planet.' },
+      { id: 'barn', name: 'Gwiazda Barnarda', x: 0.058, y: 1.825, z: -0.046, ly: 5.96, cls: 'M4Ve', t: 'M', lum: '0,0035', pl: 1, temp: 3134, mk: 'Mk II', kap: '239', side: 'L', show: true, desc: 'Najszybciej poruszająca się gwiazda względem Słońca. Czerwony karzeł.' },
+      { id: 'luh', name: 'Luhman 16', x: -1.5, y: -1.2, z: 0.4, ly: 6.52, cls: 'L7.5/T0.5', t: 'BD', lum: '0,00004', pl: 0, temp: 1720, mk: 'Mk II', kap: '261', side: 'R', show: false, desc: 'Podwójny układ brązowych karłów. Bogaty w Deuter i Hel-3.' },
+      { id: 'wise', name: 'WISE 0855−0714', x: -0.3, y: -2.2, z: 0.1, ly: 7.27, cls: 'Y4', t: 'BD', lum: '0,0000001', pl: 0, temp: 250, mk: 'Mk II', kap: '291', side: 'R', show: false, desc: 'Ekstremalnie zimny podbrązowy karzeł.' },
+      { id: 'wolf', name: 'Wolf 359', x: -2.31, y: 0.15, z: 0.31, ly: 7.78, cls: 'M6Ve', t: 'M', lum: '0,001', pl: 0, temp: 2800, mk: 'Mk II', kap: '312', side: 'L', show: true, desc: 'Czerwony karzeł z silnymi rozbłyskami.' },
+      { id: 'lal', name: 'Lalande 21185', x: 0.55, y: -2.4, z: 2.1, ly: 8.31, cls: 'M2V', t: 'M', lum: '0,021', pl: 0, temp: 3828, mk: 'Mk II', kap: '333', side: 'R', show: true, desc: 'Czerwony karzeł widoczny gołym okiem w dobrych warunkach.' },
+      { id: 'sir', name: 'Syriusz A/B', x: -1.339, y: -1.809, z: -2.466, ly: 8.6, cls: 'A1V + DA2', t: 'A', lum: '25,4', pl: 0, temp: 9940, mk: 'Mk II', kap: '344', side: 'R', show: true, desc: 'Najjaśniejsza gwiazda nocnego nieba z białym karłem. Energia słoneczna ×8.' },
+      { id: 'blc', name: 'BL Ceti', x: -2.1, y: -0.5, z: -1.95, ly: 8.73, cls: 'M5.5V', t: 'M', lum: '0,0009', pl: 0, temp: 2970, mk: 'Mk II', kap: '350', side: 'R', show: false, desc: 'Rozbłyskowy czerwony karzeł z układu UV Ceti.' },
+      { id: 'eri', name: 'Epsilon Eridani', x: -2.012, y: -0.62, z: -3.003, ly: 10.52, cls: 'K2V', t: 'K', lum: '0,34', pl: 1, temp: 5084, mk: 'Mk III', kap: '421', side: 'R', show: true, desc: 'Pomarańczowy karzeł z potwierdzoną planetą.' },
+      { id: 'lac', name: 'Lacaille 9352', x: -2.956, y: -0.21, z: -2.818, ly: 10.74, cls: 'M1.5Ve', t: 'M', lum: '0,033', pl: 0, temp: 3626, mk: 'Mk III', kap: '430', side: 'R', show: false, desc: 'Jeden z najjaśniejszych czerwonych karłów na niebie.' },
+      { id: 'ezaq', name: 'EZ Aquarii', x: -3.3, y: 0.05, z: -1.58, ly: 11.27, cls: 'M5Ve', t: 'M', lum: '0,001', pl: 0, temp: 2950, mk: 'Mk III', kap: '451', side: 'R', show: false, desc: 'Potrójny układ czerwonych karłów.' },
+      { id: 'cyg', name: '61 Cygni A', x: 1.54, y: 3.17, z: 3.31, ly: 11.4, cls: 'K5V', t: 'K', lum: '0,085', pl: 0, temp: 4526, mk: 'Mk III', kap: '456', side: 'R', show: true, desc: 'Pierwsza gwiazda, której odległość zmierzono metodą paralaksy.' },
+      { id: 'proc', name: 'Procyon A', x: -0.004, y: 0.003, z: -3.501, ly: 11.46, cls: 'F5IV-V', t: 'A', lum: '6,93', pl: 0, temp: 6530, mk: 'Mk III', kap: '459', side: 'R', show: true, desc: 'Podolbrzym w fazie ewolucji. Silne nasłonecznienie.' },
+      { id: 'tau', name: 'Tau Ceti', x: -2.821, y: -1.041, z: -3.213, ly: 11.91, cls: 'G8.5V', t: 'G', lum: '0,52', pl: 5, temp: 5344, mk: 'Mk III', kap: '477', side: 'L', show: true, target: true, desc: 'Gwiazda podobna do Słońca z pięcioma kandydatami na planety. Cel pierwszej ekspedycji kolonizacyjnej.' },
+      { id: 'gj', name: 'GJ 1061', x: -1.8, y: -2.8, z: -2.7, ly: 11.98, cls: 'M5.5V', t: 'M', lum: '0,0015', pl: 3, temp: 2953, mk: 'Mk III', kap: '480', side: 'R', show: false, desc: 'Czerwony karzeł z trzema superziemiami.' },
+      { id: 'yz', name: 'YZ Ceti', x: -3.35, y: -1.1, z: -2.2, ly: 12.13, cls: 'M4.5V', t: 'M', lum: '0,0017', pl: 3, temp: 3056, mk: 'Mk III', kap: '486', side: 'L', show: true, desc: 'Czerwony karzeł z trzema planetami wielkości Ziemi.' },
+      { id: 'kap', name: 'Gwiazda Kapteyna', x: -0.984, y: -1.412, z: -3.801, ly: 12.78, cls: 'M1.5V', t: 'M', lum: '0,012', pl: 2, temp: 3570, mk: 'Mk IV', kap: '512', side: 'R', show: true, desc: 'Gwiazda halo galaktycznego z dwiema kandydatkami na superziemie.' },
+      { id: 'alt', name: 'Altair', x: 2.5, y: 3.8, z: 4.2, ly: 16.73, cls: 'A7Vn', t: 'A', lum: '10,6', pl: 0, temp: 7670, mk: 'Mk IV', kap: '670', side: 'R', show: true, desc: 'Gwiazda wirująca tak szybko, że jest spłaszczona na równiku.' }
+    ];
+    var CX = 900, CY = 450, K = 0.8;
+    var self = this;
+    function fmt(ly) { return ly ? String(ly).replace('.', ',') : '0'; }
+    var stars = S.map(function (s) {
+      var sx = CX + K * (s.x * 130 + s.y * 60);
+      var sy = CY + K * (-s.z * 80 + s.y * 45);
+      var size = s.t === 'SOL' ? 10 : s.t === 'A' ? 9 : s.t === 'G' ? 8 : s.t === 'K' ? 6 : 4;
+      var selected = self.state.sel === s.id;
+      return {
+        name: s.name, aria: s.name + ', ' + (s.ly ? fmt(s.ly) + ' lat świetlnych' : 'Słońce'),
+        bx: Math.round(sx - 14), by: Math.round(sy - 14), off: 14 - size / 2, size: size,
+        color: s.target ? '#FFB000' : s.t === 'SOL' ? '#FFFFFF' : '#C5C6C7', selected: selected,
+        lc: selected || s.target ? '#FFB000' : '#8A939D',
+        lblPos: s.side === 'L' ? 'right: 30px' : 'left: 30px',
+        lblOpacity: s.show || selected ? 1 : 0,
+        pick: function () { self.setState({ sel: s.id }); }
+      };
+    });
+    var rows = S.slice(1).map(function (s) {
+      var on = self.state.sel === s.id;
+      return { cls: on ? 'row on' : 'row', cl: s.t === 'BD' ? 'L' : s.t === 'A' ? 'A' : s.t, name: s.name, ly: fmt(s.ly), pick: function () { self.setState({ sel: s.id }); } };
+    });
+    var cur = S.filter(function (s) { return s.id === self.state.sel; })[0] || S[15];
+    var sel = {
+      name: cur.name, cls: cur.cls, typeName: TYPES[cur.t], desc: cur.desc, isTarget: !!cur.target, notTarget: !cur.target,
+      code: cur.id.toUpperCase(),
+      stats: [
+        { k: 'Odległość od Sol', v: fmt(cur.ly) + ' ly' },
+        { k: 'Temperatura', v: cur.temp.toLocaleString('pl-PL') + ' K' },
+        { k: 'Jasność', v: cur.lum + ' L☉' },
+        { k: 'Znane planety', v: String(cur.pl) },
+        { k: 'Wymagany napęd', v: cur.mk },
+        { k: 'Kapsuły fuzyjne', v: cur.kap }
+      ]
+    };
+    var rings = [159, 319, 478].map(function (r, i) {
+      return { left: CX - r, top: CY - r, size: r * 2, lx: CX + Math.round(r * 0.71) + 6, ly: CY - Math.round(r * 0.71) - 14, label: ['5 ly', '10 ly', '15 ly'][i] };
+    });
+    return { stars: stars, rows: rows, sel: sel, rings: rings };
+  }
+}
+</script>
+</body>
+</html>

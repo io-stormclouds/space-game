@@ -1,0 +1,13 @@
+{
+  "name": "@space-game/ui",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Angular port of the HUD design system components. Styles and framework-free logic come from design-system/.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@space-game/hud-design-system": "file:../../../design-system"
+  }
+}

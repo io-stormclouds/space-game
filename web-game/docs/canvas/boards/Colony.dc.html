@@ -1,0 +1,377 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<title>Rozbudowa kolonii</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#FFB000}
+.hud,.hud *{box-sizing:border-box;border-radius:0;box-shadow:none;transition:none}
+.hud{font-family:'JetBrains Mono','IBM Plex Mono',Consolas,monospace;font-variant-numeric:tabular-nums slashed-zero;color:#C5C6C7;background:#0B0C10;font-size:12px;line-height:1.3}
+.hud :focus-visible{outline:2px solid #FFB000;outline-offset:2px}
+.vh{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+.mi{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#8A939D;line-height:1.1}
+.tt{margin:0;font-size:16px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;line-height:1.1}
+.sg{color:#FFB000}.al{color:#FF5A4A}
+.fr{position:relative;background:#111419;border:1px solid rgba(112,128,146,.24)}
+.tk{position:absolute;width:8px;height:8px;border:0 solid #FFB000;pointer-events:none}
+.tk.a{top:-1px;left:-1px;border-top-width:1px;border-left-width:1px}.tk.b{top:-1px;right:-1px;border-top-width:1px;border-right-width:1px}
+.tk.c{bottom:-1px;left:-1px;border-bottom-width:1px;border-left-width:1px}.tk.d{bottom:-1px;right:-1px;border-bottom-width:1px;border-right-width:1px}
+.tab{position:absolute;top:0;left:16px;transform:translateY(-50%);padding:0 4px;background:#0B0C10;font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#FFB000;line-height:1;white-space:nowrap}
+.ser{position:absolute;right:6px;bottom:3px;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#58616B;line-height:1}
+.rb{position:absolute;left:0;top:0;right:0;height:48px;display:flex;align-items:stretch;background:#111419;border-top:1px solid #FFB000;border-bottom:1px solid rgba(112,128,146,.24)}
+.rb-id{display:flex;flex-direction:column;justify-content:center;gap:4px;padding:0 16px;border-right:1px solid rgba(112,128,146,.24);white-space:nowrap}
+.rb-nm{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;line-height:1.1}
+.rb-dl{display:flex;margin:0}
+.rs{display:flex;flex-direction:column;justify-content:center;gap:4px;padding:0 10px;border-right:1px solid rgba(112,128,146,.24);white-space:nowrap}
+.rs dt{display:flex;align-items:center;gap:6px;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#8A939D;line-height:1}
+.rs dd{display:flex;align-items:center;gap:8px;margin:0}
+.rs-c{font-weight:700;color:#C5C6C7}
+.rs-r{margin-left:auto;padding-left:6px;letter-spacing:.02em}
+.rs-r.ng{color:#FFB000}
+.rs-v{display:inline-flex;align-items:baseline;gap:2px;font-size:14px;font-weight:700;letter-spacing:.02em;line-height:1;color:#C5C6C7}
+.rs-x{font-weight:400;color:#8A939D}
+.rs-u{margin-left:4px;font-size:10px;font-weight:400;letter-spacing:.14em;color:#8A939D}
+.led{width:6px;height:6px;border:1px solid #58616B}
+.mt{position:relative;display:inline-block;flex:none;width:49px;height:8px;background:repeating-linear-gradient(90deg,rgba(112,128,146,.24) 0 4px,transparent 4px 5px)}
+.mt>span{position:absolute;left:0;top:0;bottom:0;background:repeating-linear-gradient(90deg,#8A939D 0 4px,transparent 4px 5px)}
+.rs.lo .rs-c,.rs.lo .rs-v{color:#FFB000}
+.rs.lo .led{background:#FFB000;border-color:#FFB000}
+.rs.lo .mt>span{background:repeating-linear-gradient(90deg,#FFB000 0 4px,transparent 4px 5px)}
+.rs.cr .rs-c,.rs.cr .rs-v{color:#FF5A4A}
+.rs.cr .led{background:#FF5A4A;border-color:#FF5A4A}
+.rb-sp{flex:1}
+.rb-cl{display:flex;align-items:center;gap:8px;padding:0 12px;border-left:1px solid rgba(112,128,146,.24)}
+.vs{display:flex;border:1px solid rgba(112,128,146,.24);background:#0B0C10}
+.vs>*{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 10px;border:0;border-right:1px solid rgba(112,128,146,.24);background:transparent;font:inherit;font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#8A939D;text-decoration:none;cursor:pointer;white-space:nowrap}
+.vs>*:last-child{border-right:0}
+.vs>a:hover,.vs>button:hover{color:#FFB000;background:#2A3644}
+.vs>a:active,.vs>button:active{color:#0B0C10;background:#FFB000}
+.vs>.cur{color:#FFB000;background:#3E3B2C;border-bottom:2px solid #FFB000;cursor:default}
+.bt{--e:#3B4756;--f:#1F2833;--i:#C5C6C7;--x:#8A939D;--c:6px;position:relative;display:inline-flex;min-height:44px;margin:0;padding:1px;border:0;background:var(--e);color:var(--i);font:inherit;text-align:left;text-decoration:none;cursor:pointer;user-select:none;clip-path:polygon(var(--c) 0,100% 0,100% calc(100% - var(--c)),calc(100% - var(--c)) 100%,0 100%,0 var(--c))}
+.fc{--ci:calc(var(--c) - .6px);position:relative;flex:1;display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:8px;padding:6px 12px;background:var(--f);clip-path:polygon(var(--ci) 0,100% 0,100% calc(100% - var(--ci)),calc(100% - var(--ci)) 100%,0 100%,0 var(--ci))}
+.ic{display:inline-flex;color:var(--x)}
+.ky{justify-self:end;display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 3px;border:1px solid currentColor;font-size:10px;font-weight:700;line-height:1;color:var(--x)}
+.bt.p{--e:#FFB000;--x:#FFB000}
+.bt:hover{--e:#FFB000;--f:#2A3644;--x:#FFB000}
+.bt.dg:hover{--e:#FF5A4A;--x:#FF5A4A}
+.bt:active{--e:#FFB000;--f:#FFB000;--i:#0B0C10;--x:#0B0C10}
+.bt.dg:active{--e:#FF5A4A;--f:#FF5A4A}
+.bt:focus-visible{outline:none;--e:#FFB000}
+.bt:focus-visible>.fc::before{content:'';position:absolute;inset:3px;border:1px dashed #FFB000;pointer-events:none}
+.bt.x{--e:rgba(112,128,146,.24);--f:#111419;--i:#8A939D;--x:#58616B;cursor:not-allowed}
+.bt.x>.fc{background-image:repeating-linear-gradient(135deg,transparent 0 5px,rgba(112,128,146,.10) 5px 6px)}
+.bt.cl{--c:4px;--e:#1F2833;width:100%;height:100%;min-height:72px}
+.bt.cl>.fc{grid-template-columns:minmax(0,1fr) auto;grid-template-rows:auto minmax(0,1fr);align-items:start;gap:4px;padding:6px 6px 6px 8px}
+.bt.cl .ic{grid-column:1;grid-row:1}.bt.cl .ky{grid-column:2;grid-row:1}
+.cb{grid-column:1/-1;grid-row:2;align-self:end;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;line-height:1.15;color:var(--i)}
+.bt.cl.p,.bt.cl:hover,.bt.cl:active,.bt.cl:focus-visible{--e:#FFB000}
+.bt.cl.dg:hover,.bt.cl.dg:active{--e:#FF5A4A}
+.bt.cl.x{--e:#111419}
+.bt.x:hover,.bt.x:active{--e:#FF5A4A;--f:#111419;--i:#8A939D;--x:#58616B}
+.cc{display:flex;flex-direction:column;padding-top:8px}
+.cc-h{display:flex;justify-content:space-between;align-items:baseline;gap:12px;height:28px;padding:6px 10px 0}
+.cc-t{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#FFB000;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cg{display:grid;grid-template-columns:repeat(4,96px);grid-auto-rows:72px;gap:1px;background:rgba(112,128,146,.24);border-top:1px solid rgba(112,128,146,.24);border-bottom:1px solid rgba(112,128,146,.24)}
+.ce{display:flex;min-width:0;background:#1F2833}
+.ce.em{position:relative;background-color:#111419;background-image:radial-gradient(rgba(112,128,146,.24) 1px,transparent 1px);background-size:6px 6px}
+.sn{position:absolute;top:4px;right:6px;font-size:10px;letter-spacing:.14em;color:#58616B}
+.ip,.ip0{position:absolute;left:0;right:0;bottom:0;height:55px;padding:6px 10px;flex-direction:column;gap:3px;background:#111419}
+.ip0{display:flex}
+.ip{display:none;z-index:1}
+.ce:hover>.ip,.ce:focus-within>.ip{display:flex}
+.ip-h{display:flex;justify-content:space-between;align-items:baseline;gap:10px;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+.ip-n{font-size:11px;color:#8A939D}
+.ip-r{font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#FF5A4A}
+.dr{display:flex;justify-content:space-between;align-items:center;gap:12px;min-height:26px;padding:4px 0;border-bottom:1px solid rgba(112,128,146,.10)}
+.dr>:first-child{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#8A939D;white-space:nowrap}
+.dr>:last-child{display:inline-flex;align-items:center;gap:8px;font-weight:700;text-align:right}
+.tg{display:inline-flex;align-items:center;gap:6px;height:18px;padding:0 6px;border:1px solid currentColor;font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;line-height:1;white-space:nowrap;color:#8A939D}
+.tg.ok{color:#C5C6C7}.tg.sg{color:#FFB000}.tg.al{color:#FF5A4A}
+.pgb{height:2px;background:rgba(112,128,146,.24)}
+.pgb>span{display:block;height:100%;background:#FFB000}
+.dtag{position:absolute;padding:2px 4px;background:#0B0C10;border:1px solid #3B4756;font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#C5C6C7;line-height:1;pointer-events:none}
+.mk{position:absolute;padding:0;border:1px solid #3B4756;background:#111419;color:#C5C6C7;display:flex;align-items:center;justify-content:center;font:inherit;cursor:pointer}
+.mk:hover{border-color:#FFB000;color:#FFB000}
+.mk:active{border-color:#FFB000;background:#FFB000;color:#0B0C10}
+.mk:disabled{cursor:default}
+.mk:disabled:hover{border-color:#3B4756;color:#C5C6C7}
+.mk.bld{border-style:dashed;border-color:#8A939D;color:#8A939D;background-image:repeating-linear-gradient(135deg,transparent 0 5px,rgba(112,128,146,.18) 5px 6px)}
+.mk.on{z-index:2;border-color:#FFB000;background-color:#3E3B2C;color:#FFB000}
+.mk:hover{z-index:3}
+.mk.on::after{content:'';position:absolute;inset:-6px;pointer-events:none;background:linear-gradient(#FFB000,#FFB000) left top/8px 1px no-repeat,linear-gradient(#FFB000,#FFB000) left top/1px 8px no-repeat,linear-gradient(#FFB000,#FFB000) right top/8px 1px no-repeat,linear-gradient(#FFB000,#FFB000) right top/1px 8px no-repeat,linear-gradient(#FFB000,#FFB000) left bottom/8px 1px no-repeat,linear-gradient(#FFB000,#FFB000) left bottom/1px 8px no-repeat,linear-gradient(#FFB000,#FFB000) right bottom/8px 1px no-repeat,linear-gradient(#FFB000,#FFB000) right bottom/1px 8px no-repeat}
+.mkl{position:absolute;left:50%;top:calc(100% + 7px);transform:translateX(-50%);padding:1px 4px;background:#0B0C10;white-space:nowrap;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#C5C6C7;pointer-events:none}
+.mk:hover .mkl{opacity:1 !important}
+.mk.on .mkl{color:#FFB000}
+.lg{display:grid;grid-template-columns:44px minmax(0,1fr);gap:8px;padding:5px 0;border-bottom:1px solid rgba(112,128,146,.10);font-size:11px}
+</style>
+</helmet>
+<div class="hud" style="width: 1440px; height: 900px; position: relative; overflow: hidden">
+
+  <div aria-hidden="true" style="position: absolute; left: 100px; top: 120px; width: 1240px; height: 1240px; border-radius: 50%; background: #111419; border: 1px solid #3B4756"></div>
+  <sc-for list="{{tiles}}" as="t" hint-placeholder-count="40">
+    <div aria-hidden="true" style="position: absolute; left: {{t.x}}px; top: {{t.y}}px; width: 44px; height: 50px; clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%); background: {{t.bg}}; opacity: {{t.o}}"></div>
+  </sc-for>
+  <span class="dtag" style="left: 372px; top: 222px">FER</span>
+  <span class="dtag" style="left: 990px; top: 452px">KRI</span>
+  <span class="dtag" style="left: 498px; top: 528px">SIL</span>
+  <span class="dtag" style="left: 890px; top: 214px">KAR</span>
+
+  <svg width="1440" height="900" viewBox="0 0 1440 900" style="position: absolute; left: 0; top: 0; pointer-events: none" aria-hidden="true">
+    <path d="M400 263 L446 302 L538 341 L617 341" fill="none" stroke="#8A939D" stroke-width="3" stroke-dasharray="4 5"></path>
+    <path d="M425 302 L446 302" fill="none" stroke="#8A939D" stroke-width="3" stroke-dasharray="4 5"></path>
+    <path d="M690 430 C 700 445, 715 452, 730 460" fill="none" stroke="#FFB000" stroke-width="1" stroke-dasharray="3 5"></path>
+  </svg>
+  <span class="mi" style="position: absolute; left: 284px; top: 282px; padding: 1px 4px; background: #0B0C10">Taśma L1 → magazyn</span>
+
+  <sc-for list="{{marks}}" as="m" hint-placeholder-count="14">
+    <button type="button" class="{{m.cls}}" onClick="{{m.pick}}" aria-label="{{m.aria}}" aria-pressed="{{m.pressed}}" disabled="{{m.static}}" style="left: {{m.x}}px; top: {{m.y}}px; width: {{m.w}}px; height: {{m.w}}px; border-radius: {{m.radius}}">
+      <svg width="{{m.iw}}" height="{{m.iw}}" viewBox="0 0 24 24" aria-hidden="true"><path d="{{m.icon}}" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="square" stroke-linejoin="miter"></path></svg>
+      <span class="mkl" style="opacity: {{m.lo}}">{{m.label}}</span>
+    </button>
+  </sc-for>
+
+  <header class="rb">
+    <div class="rb-id"><span class="mi">Dzień 1 · 19:40 · tempo/min</span><span class="rb-nm">Kol · Tau Ceti e</span></div>
+    <dl class="rb-dl" aria-label="Zasoby kolonii">
+      <sc-for list="{{res}}" as="r" hint-placeholder-count="8">
+        <div class="{{r.cls}}" title="{{r.title}}">
+          <dt><span class="led" aria-hidden="true"></span><span class="rs-c">{{r.code}}</span><span class="vh">{{r.name}}</span><span class="{{r.rcls}}">{{r.rate}}</span></dt>
+          <dd><span class="rs-v">{{r.v}}<span class="rs-x">{{r.max}}</span><span class="rs-u">{{r.unit}}</span></span><sc-if value="{{r.meter}}" hint-placeholder-val="{{false}}"><span class="mt" aria-hidden="true"><span style="width: {{r.mw}}px"></span></span></sc-if></dd>
+        </div>
+      </sc-for>
+    </dl>
+    <div class="rb-sp"></div>
+    <div class="rb-cl">
+      <div class="vs" aria-label="Tempo czasu">
+        <button type="button" aria-label="Pauza">II</button>
+        <span class="cur" aria-current="true">×1</span>
+        <button type="button">×3</button>
+      </div>
+    </div>
+    <nav class="rb-cl" aria-label="Przełącznik widoku">
+      <div class="vs">
+        <span class="cur" aria-current="page">Planeta</span>
+        <a href="System.dc.html">Układ</a>
+        <a href="Galaxy.dc.html">Galaktyka</a>
+      </div>
+    </nav>
+  </header>
+
+  <aside class="fr" aria-label="Cele" style="position: absolute; left: 16px; top: 76px; width: 280px; padding: 18px 14px 18px; display: flex; flex-direction: column; gap: 10px">
+    <span class="tk a"></span><span class="tk b"></span><span class="tk c"></span><span class="tk d"></span>
+    <span class="tab" aria-hidden="true">[ CELE · ERA E1 ]</span>
+    <h1 class="tt">Kolonia</h1>
+    <sc-for list="{{goals}}" as="g" hint-placeholder-count="3">
+      <div style="display: flex; flex-direction: column; gap: 4px">
+        <div style="display: flex; justify-content: space-between; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase"><span>{{g.text}}</span><span style="font-weight: 700">{{g.v}}</span></div>
+        <div class="pgb" aria-hidden="true"><span style="width: {{g.pct}}%"></span></div>
+      </div>
+    </sc-for>
+    <span class="ser" aria-hidden="true">OBJ · E1 / 3</span>
+  </aside>
+
+  <aside class="fr" aria-label="Dziennik zdarzeń" style="position: absolute; right: 16px; top: 76px; width: 340px; padding: 18px 14px 18px; display: flex; flex-direction: column">
+    <span class="tk a"></span><span class="tk b"></span><span class="tk c"></span><span class="tk d"></span>
+    <span class="tab" aria-hidden="true">[ DZIENNIK ]</span>
+    <sc-for list="{{log}}" as="l" hint-placeholder-count="4">
+      <div class="lg"><span style="font-weight: 700; color: #8A939D">{{l.t}}</span><span class="{{l.cls}}">{{l.text}}</span></div>
+    </sc-for>
+    <span class="ser" aria-hidden="true">LOG · 4 / 128</span>
+  </aside>
+
+  <section class="fr" aria-label="Minimapa planety" style="position: absolute; left: 16px; top: 644px; width: 220px; height: 240px; display: flex; align-items: center; justify-content: center">
+    <span class="tk a"></span><span class="tk b"></span><span class="tk c"></span><span class="tk d"></span>
+    <span class="tab" aria-hidden="true">[ MAPA ]</span>
+    <svg width="170" height="170" viewBox="0 0 170 170" aria-hidden="true">
+      <circle cx="85" cy="85" r="78" fill="#0B0C10" stroke="#3B4756"></circle>
+      <rect x="68" y="60" width="4" height="4" fill="#8A939D"></rect><rect x="74" y="68" width="4" height="4" fill="#8A939D"></rect>
+      <rect x="110" y="82" width="4" height="4" fill="#8A939D"></rect><rect x="76" y="96" width="4" height="4" fill="#8A939D"></rect>
+      <rect x="83" y="74" width="8" height="8" fill="#C5C6C7"></rect>
+      <rect x="52.5" y="48.5" width="70" height="52" fill="none" stroke="#8A939D" stroke-dasharray="3 3"></rect>
+      <rect x="{{mm.x}}" y="{{mm.y}}" width="6" height="6" fill="#FFB000"></rect>
+    </svg>
+    <span class="ser" aria-hidden="true">MAP · GP(8,0)</span>
+  </section>
+
+  <section class="fr" aria-label="Zaznaczenie" style="position: absolute; left: 252px; top: 644px; width: 767px; height: 240px; padding: 18px 16px 16px; display: flex; flex-direction: column; gap: 10px">
+    <span class="tk a"></span><span class="tk b"></span><span class="tk c"></span><span class="tk d"></span>
+    <span class="tab" aria-hidden="true">[ ZAZNACZENIE ]</span>
+    <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px">
+      <div style="display: flex; align-items: baseline; gap: 12px; min-width: 0">
+        <h2 class="tt sg">{{sel.name}}</h2>
+        <span class="mi">{{sel.sub}}</span>
+      </div>
+      <span class="{{sel.stateCls}}">{{sel.state}}</span>
+    </div>
+    <div style="display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 24px">
+      <sc-for list="{{sel.stats}}" as="s" hint-placeholder-count="4">
+        <div class="dr"><span>{{s.k}}</span><span>{{s.v}}</span></div>
+      </sc-for>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <span class="mi">{{sel.nextTitle}}</span>
+      <div style="display: flex; flex-wrap: wrap; gap: 6px">
+        <sc-for list="{{sel.next}}" as="nx" hint-placeholder-count="3">
+          <span class="{{nx.cls}}">{{nx.text}}</span>
+        </sc-for>
+      </div>
+    </div>
+    <span class="ser" aria-hidden="true">SEL · {{sel.code}}</span>
+  </section>
+
+  <section class="fr cc" aria-label="Rozkazy" style="position: absolute; right: 16px; top: 644px; width: 389px; height: 240px">
+    <span class="tk a"></span><span class="tk b"></span><span class="tk c"></span><span class="tk d"></span>
+    <span class="tab" aria-hidden="true">[ CMD ]</span>
+    <div class="cc-h"><span class="cc-t">{{sel.name}}</span><span class="mi">{{sel.cc}}</span></div>
+    <div class="cg" role="group" aria-label="Rozkazy">
+      <sc-for list="{{cmds}}" as="c" hint-placeholder-count="8">
+        <sc-if value="{{c.btn}}" hint-placeholder-val="{{true}}">
+          <div class="ce">
+            <button type="button" class="{{c.cls}}" aria-disabled="{{c.ad}}" aria-describedby="{{c.rid}}" aria-keyshortcuts="{{c.key}}"><span class="fc"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="{{c.icon}}" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="square" stroke-linejoin="miter"></path></svg><span class="ky" aria-hidden="true">{{c.key}}</span><span class="cb">{{c.label}}</span></span></button>
+            <div class="ip"><div class="ip-h"><span>{{c.label}}</span><span class="mi">Klawisz · {{c.key}}</span></div><span class="ip-n">{{c.note}}</span><span class="ip-r" id="{{c.rid}}">{{c.reason}}</span></div>
+          </div>
+        </sc-if>
+        <sc-if value="{{c.empty}}" hint-placeholder-val="{{false}}">
+          <div class="ce em" aria-hidden="true"><span class="sn">{{c.no}}</span></div>
+        </sc-if>
+      </sc-for>
+    </div>
+    <div class="ip0"><span class="mi">Wskaż rozkaz: skutek, koszt, powód blokady</span><span class="ip-n">{{sel.hint}}</span></div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = { sel: 'kop' }; }
+  renderVals() {
+    var self = this;
+    var CX = 720, CY = 740, R = 620;
+    var DEP = { '5:9': 1, '5:10': 1, '6:9': 1, '6:10': 1, '9:20': 1, '9:21': 1, '10:20': 1, '10:21': 1, '8:21': 1, '10:12': 1, '11:12': 1, '11:13': 1, '4:18': 1, '4:19': 1, '5:18': 1 };
+    var tiles = [];
+    function pos(r, c) { return { x: (r % 2 ? 23 : 0) + c * 46 - 20, y: 60 + r * 39 }; }
+    for (var r = 0; r < 17; r++) for (var c = 0; c < 32; c++) {
+      var p = pos(r, c), dx = p.x + 22 - CX, dy = p.y + 25 - CY, dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist > R - 30 || p.y > 720) continue;
+      var key = r + ':' + c, fade = Math.max(0.3, 1 - Math.pow(dist / R, 3));
+      tiles.push({ x: p.x, y: p.y, bg: DEP[key] ? '#3B4756' : '#1F2833', o: (DEP[key] ? Math.max(0.7, fade) : fade).toFixed(2) });
+    }
+    var I = {
+      port: 'M6 21V4 M6 4h11l-2 4 2 4H6', mine: 'M4 20l8-8 M10 6l8 8 M13 3l8 8-3 3-8-8z', ice: 'M12 3c4 5 6 8 6 11a6 6 0 0 1-12 0c0-3 2-6 6-11z',
+      crystal: 'M12 3l6 7-6 11-6-11z M6 10h12', panel: 'M3 8h18l-2 9H5z M4 12.5h16 M12 8v9', fan: 'M12 12v9 M12 12L6 7 M12 12l7-2 M12 12l-1-8',
+      home: 'M4 11l8-7 8 7 M6 10v10h12V10', box: 'M4 8l8-4 8 4v8l-8 4-8-4z M4 8l8 4 8-4 M12 12v8', smelt: 'M5 21h14 M7 21V10l4 3V9l4 3V6l4 3v12',
+      rover: 'M3 15h18v3H3z M7 15l2-5h6l2 5', up: 'M12 19V6 M6 11l6-6 6 6 M6 20h12', pause: 'M8 6v12 M16 6v12', bolt: 'M13 3L5 14h6l-1 7 8-11h-6z',
+      belt: 'M3 15h18 M3 19h18 M7 15v4 M12 15v4 M17 15v4 M12 4v7 M9 8l3 3 3-3', x: 'M6 6l12 12 M18 6L6 18', info: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z M12 10v6 M12 7v.5',
+      build: 'M14 6l4 4 M3 21l9-9 M12 12l2-2 4 4-2 2z', move: 'M4 12h14 M13 6l6 6-6 6', homeback: 'M10 6l-6 6 6 6 M4 12h11a5 5 0 0 1 5 5', stop: 'M7 7h10v10H7z',
+      scan: 'M12 12 L18 6 M12 3a9 9 0 1 0 9 9 M12 7.5a4.5 4.5 0 1 0 4.5 4.5', plus: 'M12 5v14 M5 12h14', shuttle: 'M12 3c3 3 4 7 4 11H8c0-4 1-8 4-11z', flag: 'M6 21V4 M6 4h11l-2 4 2 4H6', list: 'M8 6h12 M8 12h12 M8 18h12 M4 6h.5 M4 12h.5 M4 18h.5'
+    };
+    var M = [
+      { id: 'port', label: 'Port kosmiczny L2', rc: [7, 14], big: true, icon: 'port', sel: true },
+      { id: 'kop', label: 'Kopalnia FER L2', rc: [5, 9], icon: 'mine', sel: true },
+      { label: 'Kopalnia FER L1', rc: [6, 10], icon: 'mine' },
+      { label: 'Ekstraktor KRI L1', rc: [9, 20], icon: 'ice' },
+      { label: 'Wieża SIL L1', rc: [11, 12], icon: 'crystal' },
+      { label: 'Magazyn L1', rc: [7, 12], icon: 'box' },
+      { label: 'Panel słoneczny', rc: [6, 13], icon: 'panel' }, { label: 'Panel słoneczny', rc: [6, 15], icon: 'panel' },
+      { label: 'Turbina wiatrowa', rc: [4, 12], icon: 'fan' }, { label: 'Turbina wiatrowa', rc: [4, 14], icon: 'fan' },
+      { label: 'Habitat L1', rc: [8, 17], icon: 'home' }, { label: 'Habitat L1', rc: [9, 17], icon: 'home' },
+      { id: 'huta', label: 'Huta · budowa 42%', rc: [10, 16], big: true, icon: 'smelt', sel: true, building: true },
+      { id: 'rov', label: 'Łazik R-2', xy: [690, 416], icon: 'rover', sel: true, unit: true }
+    ];
+    var marks = M.map(function (m) {
+      var p = m.xy ? { x: m.xy[0], y: m.xy[1] } : pos(m.rc[0], m.rc[1]);
+      var w = m.big ? 44 : m.unit ? 28 : 30;
+      var selected = !!m.id && self.state.sel === m.id;
+      var cx = m.xy ? p.x : p.x + 22, cy = m.xy ? p.y : p.y + 25;
+      return {
+        x: Math.round(cx - w / 2), y: Math.round(cy - w / 2), w: w, iw: m.big ? 22 : 16, icon: I[m.icon], label: m.label, aria: m.label,
+        static: !m.sel, radius: m.unit ? '50%' : '0', pressed: selected ? 'true' : 'false',
+        cls: 'mk' + (m.building ? ' bld' : '') + (selected ? ' on' : ''),
+        lo: selected || m.big || m.unit ? 1 : 0,
+        pick: function () { if (m.id) self.setState({ sel: m.id }); }
+      };
+    });
+    var MM = { port: [84, 75], kop: [67, 59], huta: [96, 92], rov: [79, 82] };
+    var n = 0;
+    function cmd(label, key, icon, note, o) {
+      o = o || {};
+      var blocked = !!o.locked;
+      return { label: label, key: key, icon: I[icon], note: blocked ? '' : (note || ''), reason: blocked ? note : '',
+        cls: 'bt cl' + (o.primary ? ' p' : '') + (o.danger ? ' dg' : '') + (blocked ? ' x' : ''),
+        ad: blocked ? 'true' : 'false', rid: 'col-r' + (n++), btn: true, empty: false };
+    }
+    function tag(text, st) { return { text: text, cls: 'tg' + (st === 'ok' ? ' ok' : st === 'bad' ? ' al' : '') }; }
+    var SEL = {
+      kop: { name: 'Kopalnia Ferrytu', sub: 'poziom 2 · pole 233 · złoże FER', state: 'pracuje', st: 'ok', code: 'B-233',
+        stats: [['Wydobycie', '3,2 FER/min'], ['Złoże', '380 / 460'], ['Moc', '−4,3 MW'], ['Załoga', '3']],
+        nextTitle: 'Rozbudowa do L3 · 6 min · wydobycie 5,1 FER/min', next: [tag('FER 60', 'ok'), tag('STA 20', 'ok'), tag('SLN 3 · brak 3', 'bad'), tag('Wymaga Portu L3', 'bad')],
+        cmds: [cmd('Rozbuduj do L3', 'U', 'up', 'Wymaga Portu kosmicznego L3', { locked: true }), cmd('Wstrzymaj', 'P', 'pause', 'Zwolni 4,3 MW'), cmd('Priorytet mocy', 'O', 'bolt', 'Teraz: produkcja'),
+          cmd('Podłącz taśmę', 'B', 'belt', 'Wyjście: taśma L1 → Magazyn'), cmd('Pokaż złoże', 'I', 'info', 'Wyczerpie się za ~2 h'), cmd('Rozbierz', 'X', 'x', 'Zwrot 50% materiałów', { danger: true })] },
+      rov: { name: 'Łazik R-2', sub: 'konstrukcyjny Mk I · jednostka naziemna', state: 'buduje Hutę', st: 'sg', code: 'U-002',
+        stats: [['Zadanie', 'Huta 42%'], ['Ładunek', '10 / 10 j.'], ['Prędkość', '12 j./min'], ['Bateria', '76%']],
+        nextTitle: 'Kolejka zadań', next: [tag('1 · Huta · pole 380', 'ok'), tag('2 · Panel słoneczny · pole 251', ''), tag('3 · Magazyn L2', '')],
+        cmds: [cmd('Buduj', 'B', 'build', 'Otwiera katalog budowy', { primary: true }), cmd('Jedź do', 'PPM', 'move', 'Ścieżka po kafelkach'), cmd('Rozbuduj budowlę', 'U', 'up', 'Wskaż budowlę'),
+          cmd('Wróć do portu', 'H', 'homeback', 'Ładowanie baterii'), cmd('Zatrzymaj', 'S', 'stop', 'Przerywa zadanie'), cmd('Szukaj złóż', 'I', 'scan', 'Wymaga łazika Mk III', { locked: true })] },
+      port: { name: 'Port kosmiczny', sub: 'poziom 2 · centrum dowodzenia i lądowisko', state: 'aktywny', st: 'ok', code: 'B-214',
+        stats: [['Magazyn', '3600 j.'], ['Moc', '+8 MW'], ['Łaziki', '2 / 3'], ['Sufit poziomów', 'L2']],
+        nextTitle: 'Rozbudowa do L3 · 2 h · odblokowuje erę E2', next: [tag('FER 2400 · brak 2088', 'bad'), tag('SIL 1200 · brak 1012', 'bad'), tag('STA 600 · brak 145', 'bad'), tag('BEL 300 · wymaga Montowni', 'bad'), tag('UKL 60 · brak 10', 'bad')],
+        cmds: [cmd('Produkuj łazik', 'Q', 'plus', 'FER 20 · SIL 5 · 3 min', { primary: true }), cmd('Wezwij prom', 'T', 'shuttle', 'Z Arki-1 na orbicie'), cmd('Rozbuduj do L3', 'U', 'up', 'Brak: FER 2088 · SIL 1012 · STA 145', { locked: true }),
+          cmd('Punkt zbiórki', 'Y', 'flag', 'Dla nowych łazików'), cmd('Raport kolonii', 'R', 'list', 'Produkcja i zużycie'), cmd('Ładownia Arki', 'L', 'box', '1580 j. na orbicie')] },
+      huta: { name: 'Huta', sub: 'w budowie · 3 pola · stal i miedź', state: 'budowa 42%', st: 'sg', code: 'B-380',
+        stats: [['Pozostało', '6 min'], ['Łazik', 'R-2'], ['Pobór po starcie', '−6 MW'], ['Załoga', '4']],
+        nextTitle: 'Po ukończeniu', next: [tag('4 FER + 2 KAR → 2 STA / 4 min', 'ok'), tag('4 KUP → 2 MIE / 4 min', 'ok')],
+        cmds: [cmd('Dodaj łazik', 'A', 'rover', 'Skraca czas budowy', { primary: true }), cmd('Priorytet', 'O', 'bolt', 'Materiały najpierw tutaj'), cmd('Anuluj budowę', 'X', 'x', 'Zwrot 75% materiałów', { danger: true }),
+          cmd('Pokaż porty', 'I', 'info', 'Wejścia: FER, KAR'), cmd('Zaplanuj taśmę', 'B', 'belt', 'Od kopalń do wejścia'), cmd('Zatrzymaj budowę', 'P', 'pause', 'Łazik czeka na miejscu')] }
+    };
+    var s = SEL[this.state.sel];
+    var cmds = s.cmds.slice();
+    while (cmds.length < 8) cmds.push({ empty: true, btn: false, no: String(cmds.length + 1).padStart(2, '0') });
+    var locked = s.cmds.filter(function (c) { return c.ad === 'true'; }).length;
+    var mm = MM[this.state.sel];
+    function rs(code, name, v, o) {
+      o = o || {};
+      var pct = o.pct === undefined ? null : Math.max(0, Math.min(1, o.pct));
+      return { code: code, name: name, title: o.title || name, v: v, max: o.max ? '/' + o.max : '', unit: o.unit || '', rate: o.rate || '',
+        cls: 'rs' + (o.st ? ' ' + o.st : ''), rcls: 'rs-r' + (o.rate && o.rate.charAt(0) === '−' ? ' ng' : ''),
+        meter: pct !== null, mw: pct === null ? 0 : Math.max(0, Math.round(pct * 10) * 5 - 1) };
+    }
+    return {
+      tiles: tiles, marks: marks, cmds: cmds, mm: { x: mm[0], y: mm[1] },
+      sel: {
+        name: s.name, sub: s.sub, state: s.state, stateCls: 'tg' + (s.st === 'sg' ? ' sg' : ' ok'), nextTitle: s.nextTitle, code: s.code,
+        cc: 'CC-06 · ' + s.cmds.length + ' / 8', hint: locked ? 'Zablokowane: ' + locked + ' · skróty działają w widoku' : 'Wszystkie rozkazy dostępne',
+        stats: s.stats.map(function (x) { return { k: x[0], v: x[1] }; }), next: s.next
+      },
+      res: [
+        rs('FER', 'Ferryt', '312', { rate: '+6,4' }),
+        rs('SIL', 'Silicyt', '188', { rate: '+2,0' }),
+        rs('KRI', 'Kriol', '240', { rate: '+2,0' }),
+        rs('KAR', 'Karbonit', '46', { rate: '±0', st: 'lo', title: 'Karbonit: brak kopalni' }),
+        rs('STA', 'Stal', '455', { title: 'Stal: Huta w budowie' }),
+        rs('BET', 'Beton', '96', { title: 'Beton regolitowy' }),
+        rs('ENE', 'Energia', '21,5', { max: '28', unit: 'MW', pct: 21.5 / 28, title: 'Moc: pobór / produkcja na Tau Ceti e' }),
+        rs('POP', 'Załoga', '38', { max: '45', pct: 38 / 45, title: 'Załoga: zatrudniona / miejsca w habitatach' })
+      ],
+      goals: [
+        { text: 'Zbuduj Hutę', v: '42%', pct: 42 },
+        { text: 'Moc kolonii', v: '28 / 40 MW', pct: 70 },
+        { text: 'Kopalnia Karbonitu', v: '0 / 1', pct: 0 }
+      ],
+      log: [
+        { t: '19:32', text: 'Kopalnia Ferrytu L2 gotowa', cls: '' },
+        { t: '18:55', text: 'Łazik R-2 dostarczył materiały do Huty', cls: '' },
+        { t: '18:20', text: 'Złoże FER (pole 233): zostało 380 j.', cls: '' },
+        { t: '17:40', text: 'Odrzucono Topielnik lodu: za mało mocy (brakuje 1,5 MW)', cls: 'sg' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

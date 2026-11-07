@@ -35,10 +35,18 @@ src/
 ├─ components/ResourcePanel/      górny pasek surowców
 ├─ components/CommandCard/        siatka rozkazów z inspektorem i skrótami klawiszowymi
 ├─ icons/Icons.tsx                ikony obrysowe z ostrymi końcami linii
+├─ icons/icon-paths.ts            ścieżki tych ikon (bez Reacta)
+├─ core/                          część bez Reacta: odczyty surowców, typy kosztów i przycisków; core/index.ts zbiera tokeny, format i ikony
 ├─ utils/                         format liczb pl-PL, cx()
 ├─ preview/                       plac zabaw z działającym stanem (nie wchodzi do biblioteki)
-└─ index.ts                       publiczny eksport
+└─ index.ts                       publiczny eksport (React)
 ```
+
+`package.json` wystawia wejścia pakietu:
+
+- `.` to komponenty Reacta;
+- `./core` to część bez frameworka;
+- `./css/tokens.css`, `./css/base.css` i `./css/<komponent>.css` to style.
 
 Kolejność stylów u konsumenta: `tokens.generated.css`, potem `styles/base.css`. Komponenty importują własny CSS.
 
@@ -113,6 +121,8 @@ W TypeScripcie: `import { color, cssVar } from './tokens/design-tokens'`. `cssVa
 ## Przeniesienie do Angulara
 
 Wszystkie PoC są w Angularze 22. Warstwa CSS (tokeny, `base.css` i pliki CSS komponentów z klasami `hud-*` / `rts-btn*`) nie zależy od Reacta. Komponenty Angulara mogą renderować te same klasy i atrybuty (`aria-disabled`, `aria-pressed`, `data-flash`, `data-state`). Do przepisania zostaje tylko logika: błysk przy aktywacji, skróty klawiszowe i stan inspektora.
+
+Port istnieje w `web-game/packages/ui`. Zależy od tego pakietu przez `file:`. Ładuje CSS z wejść `./css/*`, a tokeny, formatowanie, `resourceState` i ścieżki ikon bierze z `./core`, bez kopii. Zmiana w DS wymaga więc sprawdzenia obu stron: `npm run build` tutaj i `npm run check` w `web-game/`.
 
 ## Weryfikacja
 

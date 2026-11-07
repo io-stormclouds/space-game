@@ -10,21 +10,13 @@ import {
   type CSSProperties,
   type ReactNode,
 } from 'react';
+import type { Cost, RTSButtonLayout, RTSButtonVariant } from '../../core/commands';
 import { motion } from '../../tokens/design-tokens';
 import { cx } from '../../utils/cx';
 import { formatQty } from '../../utils/format';
 import './RTSButton.css';
 
-/** One line of a cost, e.g. `{ code: 'MET', amount: 150 }`; `missing` marks the shortfall. */
-export interface Cost {
-  code: string;
-  amount: number;
-  missing?: boolean;
-}
-
-export type RTSButtonVariant = 'default' | 'primary' | 'danger';
-/** `wide`: standalone action with cost and reason lines. `cell`: compact command-card slot. */
-export type RTSButtonLayout = 'wide' | 'cell';
+export type { Cost, RTSButtonLayout, RTSButtonVariant };
 
 export interface RTSButtonProps
   extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'onClick' | 'disabled' | 'children' | 'type'> {
