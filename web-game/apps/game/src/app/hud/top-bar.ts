@@ -54,7 +54,8 @@ export class TopBar {
   protected readonly views: ViewKind[] = ['planet', 'system', 'galaxy', 'atanor'];
   protected readonly tempo = computed(() => this.game.snapshot()?.tempo ?? 60);
   protected readonly paused = computed(() => this.game.snapshot()?.paused ?? false);
-  protected readonly planetReady = computed(() => !!this.game.world()?.colony.siteBodyId || this.game.snapshot()?.scenarioId === 'planeta-matka');
+  /** The planet camera needs a body to look at: the chosen site or a home base (PoC world, load runs). */
+  protected readonly planetReady = computed(() => this.game.colonyBodyId() !== null);
 
   /** Per-minute rates from consecutive snapshots (exponential smoothing). */
   private readonly rates = signal<Record<string, number>>({});

@@ -34,11 +34,17 @@ import {
   type WorldState,
 } from '@space-game/domain';
 import { DEFAULT_GALAXY_OPTIONS, GalaxySim, type GalaxySimOptions, type GalaxySimState } from './galaxy-sim';
+import { LOAD_SPECS, buildLoad, type LoadLevel } from './load';
 
 export const SCENARIOS: Readonly<Record<ScenarioId, Scenario>> = {
   'tau-ceti': TAU_CETI_SCENARIO,
   'planeta-matka': POC_SCENARIO,
+  'load-s': LOAD_SPECS.S.base,
+  'load-m': LOAD_SPECS.M.base,
+  'load-l': LOAD_SPECS.L.base,
 };
+
+const LOAD_LEVELS: Partial<Record<ScenarioId, LoadLevel>> = { 'load-s': 'S', 'load-m': 'M', 'load-l': 'L' };
 
 export interface MockServerOptions {
   /** Real seconds per fixed step. */
@@ -101,8 +107,9 @@ export class MockServer {
     this.scenarioId = scenarioId;
     this.economyParams = economy;
     const eco = computeEconomy(economy);
-    this.sim = new Simulation(scenario, { economy: eco });
-    this.galaxy = new GalaxySim(eco, this.galaxyOptions);
+    const level = LOAD_LEVELS[scenarioId];
+    this.sim = level ? buildLoad(level, eco) : new Simulation(scenario, { economy: eco });
+    this.galaxy = new GalaxySim(eco, level === 'S' || !level ? this.galaxyOptions : { ...this.galaxyOptions, players: level === 'L' ? 60 : 12 });
     this.tempo = tempo;
     this.tempos = [{ step: 0, tempo }];
     this.stepIndex = 0;

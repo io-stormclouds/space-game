@@ -17,6 +17,7 @@
     "test:app": "ng test --watch=false",
     "e2e": "playwright test",
     "check": "npm run typecheck && npm run test && npm run build && npm run e2e",
+    "perf": "ng build && node tools/perf/run.mjs",
     "econ:docs": "npm run docs -w @space-game/economy-model",
     "econ:check": "npm run docs:check -w @space-game/economy-model",
     "format": "prettier --write apps packages e2e"

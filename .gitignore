@@ -9,6 +9,8 @@ coverage/
 test-results/
 playwright-report/
 blob-report/
+# Chromium traces of the perf runs (~16 MB each); the report and latest.json stay in git
+web-game/tools/perf/results/trace-*.json
 
 # Logs and OS files
 *.log

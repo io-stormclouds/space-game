@@ -119,7 +119,7 @@ export class GamePage {
     if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
     const view = VIEW_KEYS[e.key];
     if (view) {
-      if (view === 'planet' && !this.game.world()?.colony.siteBodyId && this.game.snapshot()?.scenarioId !== 'planeta-matka') return;
+      if (view === 'planet' && this.game.colonyBodyId() === null) return;
       e.preventDefault();
       this.ui.view.set(view);
       return;

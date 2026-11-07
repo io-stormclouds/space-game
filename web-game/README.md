@@ -12,6 +12,7 @@ npm run check        # typy, testy, build produkcyjny i e2e, w tej kolejności
 
 - `#/` — strona główna (katalog gwiazd), `#/logowanie` — logowanie (mock przyjmuje dowolne dane), `#/gra` — gra od przybycia Arki-1 do Tau Ceti.
 - Wejście w środek gry: `#/scenariusz-przybycie`, `#/scenariusz-skan`, `#/scenariusz-port`, `#/scenariusz-kolonia`, `#/scenariusz-planeta-matka` (świat 3D PoC).
+- Scenariusze obciążenia (F5): `#/scenariusz-obciazenie-s`, `-m`, `-l`.
 - Klawisze:
   - `1`–`4`: widoki Planeta, Układ, Galaktyka, Atanor;
   - Spacja: pauza; `+` / `−`: tempo ×1, ×60, ×600;
@@ -28,6 +29,7 @@ npm run check        # typy, testy, build produkcyjny i e2e, w tej kolejności
 | `test:app` | `ng test`: komponenty Angulara, kompilacja AOT, jsdom, mock w wątku |
 | `build` | build produkcyjny do `dist/game` |
 | `e2e` | Playwright w Chromium przy 1440×900 (WebGL przez SwiftShader), sam uruchamia `ng serve` na porcie 4420 |
+| `perf` | build produkcyjny i pomiar scenariuszy obciążenia S/M/L w Chromium; zapisuje `docs/PERF-REPORT.md` |
 | `econ:check`, `econ:docs` | zgodność `docs/economy-expansion-design.md` z modelem ekonomii |
 
 ## Struktura

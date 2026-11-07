@@ -7,7 +7,10 @@ import type { GameService } from './game.service';
  * GameApi with the same commands a player would give, fast-forwarded while paused, so the game
  * state is genuine.
  */
-export const PRESETS = ['przybycie', 'skan', 'port', 'kolonia', 'planeta-matka'] as const;
+export const PRESETS = ['przybycie', 'skan', 'port', 'kolonia', 'planeta-matka', 'obciazenie-s', 'obciazenie-m', 'obciazenie-l'] as const;
+
+/** F5 load levels by address: #/scenariusz-obciazenie-m. */
+const LOAD: Partial<Record<string, ScenarioId>> = { 'obciazenie-s': 'load-s', 'obciazenie-m': 'load-m', 'obciazenie-l': 'load-l' };
 export type PresetId = (typeof PRESETS)[number];
 
 export function isPreset(id: string): id is PresetId {
@@ -18,6 +21,8 @@ const STEPS = 60;
 const MAX_ROUNDS = 400;
 
 export async function runPreset(game: GameService, commands: CommandsService, id: PresetId): Promise<GameSnapshot> {
+  const load = LOAD[id];
+  if (load) return game.start(load);
   const scenario: ScenarioId = id === 'planeta-matka' ? 'planeta-matka' : 'tau-ceti';
   let snap = await game.start(scenario);
   if (id === 'przybycie' || id === 'planeta-matka') return snap;

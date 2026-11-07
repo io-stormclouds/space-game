@@ -131,6 +131,23 @@ Wspólna domena w `packages/domain` jest w czystym TypeScripcie, bez Angulara, T
   - e2e: każdy widok dostępny z HUD; liczniki w nakładce (planeta 19 wywołań / 31 tys. trójkątów, układ 17 / 29 tys., galaktyka 6, Atanor 2); po 20 przełączeniach geometrie i tekstury wracają do stanu wyjściowego; zawsze 1 kontekst WebGL.
 - **Paczka startowa:** 279 kB (75 kB w transferze). Three.js i PixiJS ładują się dopiero z ekranem gry.
 
+## 3c. Wykonane w F5 (FAKT)
+
+- **Scenariusze obciążenia** (`packages/mock-server/src/load.ts`, adresy `#/scenariusz-obciazenie-s | -m | -l`). Generowane z ziarna, więc każdy przebieg mierzy ten sam świat:
+
+  | Poziom | Świat | Budowle | Statki w locie | Łaziki | Gracze |
+  |---|---|---|---|---|---|
+  | S | PoC | 20 | 1 | 1 | 6 |
+  | M | Tau Ceti | 300 | 40 | 20 | 12 |
+  | L | Tau Ceti | 1500 | 200 | 100 | 60 |
+- **Pomiar:** `npm run perf` buduje wersję produkcyjną i mierzy w Chromium (Playwright) każdy widok każdego scenariusza. Zbiera FPS, percentyle klatki, draw calls, trójkąty, liczniki GPU, konteksty, krok symulacji, stertę JS i czas startu, oraz ślad Chromium dla M w widoku układu. Liczy też rozmiar pobrania.
+- **Raport:** [PERF-REPORT.md](PERF-REPORT.md), tabela scenariusz × metryka × budżet z zadaniami naprawczymi.
+- **Wynik na tym komputerze** (P6: i9-12900K, RTX 4060 Ti, Chromium 156):
+  - 60 FPS we wszystkich scenariuszach i widokach, więc W18 B jest spełnione z zapasem;
+  - krok symulacji L: średnio 0,5 ms, maksymalnie 3,3 ms;
+  - pierwsza sesja pobiera 2,7 MB (budżet 15–25 MB);
+  - przekroczenia dotyczą tylko trójkątów w widoku planety: M 256 tys. (uwaga), L 1,1 mln (przekroczenie). Powód: budynki wszystkich ciał są rysowane bez odcinania (`frustumCulled = false`) i bez LOD. Zadania są w raporcie.
+
 ### Różnice względem plansz kanwy (zrzuty 1440×900, F3)
 
 | Plansza | Różnica | Powód |
@@ -247,6 +264,10 @@ Na prośbę „decyzje wg rekomendacji” rozstrzygam pytania P1–P6 i kwestie 
 | G6 | Kto liczy maszynę Atanora | Widok (podgląd budynku). Produkcja T3 w ekonomii zostaje na liczbach dokumentu (A3). Przeniesienie do mocka po F6. |
 | G7 | Tempo maszyny i wejścia z magazynu kolonii | Później; dziś własne takty na sekundę i nieograniczone wejścia. |
 | G8 | Kolory materiałów | Propozycja w `packages/render/src/atanor/style.ts`; do DS później. |
+| D17 | Poziom L | 1500 budowli zamiast „np. 2000”. Wszystkie ciała Tau Ceti z siatką mają 1870 kafelków, a 80% zostawia łazikom przejazd. 200 statków, 100 łazików. |
+| D18 | Budżety F5 | FPS według W18 B: S ≥ 58 (tolerancja vsync), M ≥ 30, L tylko pomiar. Draw calls (uwaga od 100, limit 150), trójkąty (od 200 tys., limit 400 tys.) i pobranie (15 / 25 MB) z `init.md` obowiązują we wszystkich scenariuszach, także L, bo pokazują, gdzie zabraknie zapasu. |
+| D19 | Zadania naprawcze F5 | Tylko zapisane w raporcie, bez naprawy w F5: FPS mieści się w budżecie, a odcinanie i LOD to praca nad widokiem po decyzji o docelowej liczbie budowli na ciało. |
+| D20 | Ślad Chromium | Zapisywany lokalnie (ok. 16 MB), poza gitem; w repozytorium są raport i `latest.json`. |
 
 ## 5a. Znane problemy
 

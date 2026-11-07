@@ -1,0 +1,10 @@
+{
+  "name": "@space-game/perf",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "F5 performance runs: load scenarios S/M/L in Chromium against the production build, report vs budgets.",
+  "scripts": {
+    "run": "node run.mjs"
+  }
+}

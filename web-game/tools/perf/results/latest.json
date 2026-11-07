@@ -1,0 +1,252 @@
+{
+  "date": "2026-11-07T17:24:32.937Z",
+  "machine": {
+    "cpu": "12th Gen Intel(R) Core(TM) i9-12900K",
+    "cores": 24,
+    "memoryGB": 64,
+    "os": "win32 10.0.26100",
+    "browser": "Chromium 156.0.8078.4",
+    "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4060 Ti (0x00002805) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+    "viewport": "1440×900"
+  },
+  "sampleMs": 5000,
+  "warmupMs": 2500,
+  "runs": [
+    {
+      "scenario": "S",
+      "view": "planet",
+      "startMs": 384,
+      "frames": 300,
+      "fps": 60.00240009600384,
+      "p50": 16.699999999999818,
+      "p95": 16.700000000000728,
+      "p99": 16.800000000000182,
+      "worst": 16.800000000000182,
+      "drawCalls": 20,
+      "triangles": 27204,
+      "geometries": 23,
+      "textures": 0,
+      "contexts": 1,
+      "stepMeanMs": 0,
+      "stepMaxMs": 0.2,
+      "heapMB": 14.9
+    },
+    {
+      "scenario": "S",
+      "view": "system",
+      "startMs": 384,
+      "frames": 300,
+      "fps": 60.00120002400049,
+      "p50": 16.69999999999891,
+      "p95": 16.700000000000728,
+      "p99": 16.80000000000109,
+      "worst": 16.80000000000109,
+      "drawCalls": 10,
+      "triangles": 7132,
+      "geometries": 24,
+      "textures": 0,
+      "contexts": 1,
+      "stepMeanMs": 0,
+      "stepMaxMs": 0.2,
+      "heapMB": 16.8
+    },
+    {
+      "scenario": "S",
+      "view": "galaxy",
+      "startMs": 384,
+      "frames": 300,
+      "fps": 60.00360021601295,
+      "p50": 16.69999999999709,
+      "p95": 16.700000000000728,
+      "p99": 16.799999999999272,
+      "worst": 16.80000000000291,
+      "drawCalls": 6,
+      "triangles": 0,
+      "geometries": 5,
+      "textures": 0,
+      "contexts": 1,
+      "stepMeanMs": 0,
+      "stepMaxMs": 0.2,
+      "heapMB": 12.2
+    },
+    {
+      "scenario": "M",
+      "view": "planet",
+      "startMs": 256,
+      "frames": 301,
+      "fps": 60.001993421708356,
+      "p50": 16.699999999999818,
+      "p95": 16.799999999999727,
+      "p99": 16.800000000000182,
+      "worst": 16.800000000000182,
+      "drawCalls": 69,
+      "triangles": 256312,
+      "geometries": 58,
+      "textures": 0,
+      "contexts": 1,
+      "stepMeanMs": 0.1,
+      "stepMaxMs": 0.9,
+      "heapMB": 22.6
+    },
+    {
+      "scenario": "M",
+      "view": "system",
+      "startMs": 256,
+      "frames": 302,
+      "fps": 59.2168473891645,
+      "p50": 16.69999999999891,
+      "p95": 16.799999999999272,
+      "p99": 16.80000000000109,
+      "worst": 83.39999999999964,
+      "drawCalls": 17,
+      "triangles": 85604,
+      "geometries": 32,
+      "textures": 0,
+      "contexts": 1,
+      "stepMeanMs": 0.1,
+      "stepMaxMs": 0.5,
+      "heapMB": 35.2
+    },
+    {
+      "scenario": "M",
+      "view": "galaxy",
+      "startMs": 256,
+      "frames": 300,
+      "fps": 60.00120002400046,
+      "p50": 16.700000000000728,
+      "p95": 16.799999999999272,
+      "p99": 16.80000000000291,
+      "worst": 16.80000000000291,
+      "drawCalls": 6,
+      "triangles": 0,
+      "geometries": 5,
+      "textures": 0,
+      "contexts": 1,
+      "stepMeanMs": 0.1,
+      "stepMaxMs": 0.7,
+      "heapMB": 19.4
+    },
+    {
+      "scenario": "L",
+      "view": "planet",
+      "startMs": 264,
+      "frames": 300,
+      "fps": 60.00240009600385,
+      "p50": 16.699999999999818,
+      "p95": 16.799999999999727,
+      "p99": 16.800000000000182,
+      "worst": 16.800000000000182,
+      "drawCalls": 136,
+      "triangles": 1116488,
+      "geometries": 130,
+      "textures": 0,
+      "contexts": 1,
+      "stepMeanMs": 0.5,
+      "stepMaxMs": 3.3,
+      "heapMB": 31.7
+    },
+    {
+      "scenario": "L",
+      "view": "system",
+      "startMs": 264,
+      "frames": 300,
+      "fps": 60.00240009600385,
+      "p50": 16.69999999999891,
+      "p95": 16.799999999999272,
+      "p99": 16.80000000000109,
+      "worst": 16.80000000000109,
+      "drawCalls": 17,
+      "triangles": 321284,
+      "geometries": 32,
+      "textures": 0,
+      "contexts": 1,
+      "stepMeanMs": 0.4,
+      "stepMaxMs": 3.2,
+      "heapMB": 42.6
+    },
+    {
+      "scenario": "L",
+      "view": "galaxy",
+      "startMs": 264,
+      "frames": 300,
+      "fps": 60.002400096003804,
+      "p50": 16.700000000000728,
+      "p95": 16.700000000000728,
+      "p99": 16.80000000000291,
+      "worst": 16.80000000000291,
+      "drawCalls": 6,
+      "triangles": 0,
+      "geometries": 5,
+      "textures": 0,
+      "contexts": 1,
+      "stepMeanMs": 0.4,
+      "stepMaxMs": 3,
+      "heapMB": 29.7
+    },
+    {
+      "scenario": "Atanor",
+      "view": "atanor",
+      "startMs": 229,
+      "frames": 300,
+      "fps": 60.00240009600385,
+      "p50": 16.699999999999818,
+      "p95": 16.700000000000728,
+      "p99": 16.800000000000182,
+      "worst": 16.800000000000182,
+      "drawCalls": 2,
+      "triangles": 530,
+      "geometries": 0,
+      "textures": 14,
+      "contexts": 1,
+      "stepMeanMs": 0,
+      "stepMaxMs": 0.3,
+      "heapMB": 21.8
+    }
+  ],
+  "download": {
+    "initial": {
+      "raw": 279236,
+      "gzip": 84729
+    },
+    "code": {
+      "raw": 2221017,
+      "gzip": 644238
+    },
+    "fontsLoaded": {
+      "raw": 87244,
+      "gzip": 87397
+    },
+    "assets": {
+      "raw": 501484,
+      "gzip": 170514
+    },
+    "total": {
+      "raw": 3028629,
+      "gzip": 1120720
+    },
+    "files": 96
+  },
+  "errors": [],
+  "budgets": {
+    "downloadMB": {
+      "warn": 15,
+      "fail": 25,
+      "source": "init.md"
+    },
+    "drawCalls": {
+      "warn": 100,
+      "fail": 150,
+      "source": "init.md"
+    },
+    "triangles": {
+      "warn": 200000,
+      "fail": 400000,
+      "source": "init.md"
+    },
+    "fps": {
+      "S": 58,
+      "M": 30,
+      "source": "W18 B (60 w S, 30 w M; 58 = tolerancja vsync)"
+    }
+  }
+}
