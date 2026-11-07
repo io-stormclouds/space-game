@@ -2,6 +2,8 @@ import { ChangeDetectionStrategy, Component, computed, effect, inject, input, si
 import { TEMPO_PRESETS } from '@space-game/api';
 import type { ViewKind } from '@space-game/render';
 import { CommandCard, HudFrame } from '@space-game/ui';
+import { Designer } from '../designer/designer';
+import { DesignerPanel } from '../designer/designer-panel';
 import { CommandsService } from '../game/commands';
 import { GameService } from '../game/game.service';
 import { isPreset, runPreset } from '../game/presets';
@@ -20,7 +22,7 @@ const TEMPOS = TEMPO_PRESETS.filter((t) => t !== 10);
 /** The game screen: shared HUD of the canvas (top bar 48 px, dock 240 px) over the world view. */
 @Component({
   selector: 'wg-game-page',
-  imports: [TopBar, WorldView, MissionPanel, StatusBanner, ScanPanel, LogPanel, SystemMap, SelectionPanel, CommandCard, HudFrame, PerfOverlay],
+  imports: [TopBar, WorldView, MissionPanel, StatusBanner, ScanPanel, LogPanel, SystemMap, SelectionPanel, CommandCard, HudFrame, PerfOverlay, DesignerPanel],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { '(window:keydown)': 'onKey($event)' },
   template: `
@@ -32,7 +34,9 @@ const TEMPOS = TEMPO_PRESETS.filter((t) => t !== 10);
           <wg-mission-panel />
         }
         <wg-status-banner />
-        @if (showScan()) {
+        @if (designer.open()) {
+          <wg-designer-panel />
+        } @else if (showScan()) {
           <wg-scan-panel />
         } @else {
           <wg-log-panel />
@@ -64,6 +68,8 @@ export class GamePage {
   protected readonly game = inject(GameService);
   protected readonly ui = inject(UiState);
   private readonly commands = inject(CommandsService);
+  /** Created with the game screen, so its telemetry collects from the first step (F6). */
+  protected readonly designer = inject(Designer);
   /** Route parameter of `#/scenariusz-<preset>` (W15 C). */
   readonly preset = input<string>();
   protected readonly loading = signal(false);
@@ -91,25 +97,11 @@ export class GamePage {
     try {
       if (wanted) await runPreset(this.game, this.commands, wanted);
       else if (!this.game.snapshot()) await this.game.start('tau-ceti');
-      this.startView();
+      this.ui.restartView();
       this.ready.set(true);
     } finally {
       // only after the start view is set, so a key pressed right away is not overridden
       this.loading.set(false);
-    }
-  }
-
-  private startView(): void {
-    const w = this.game.world();
-    const ark = w?.ships.find((s) => s.role === 'MOTHERSHIP');
-    if (w?.colony.foundedAt !== null && w?.colony.siteBodyId) {
-      this.ui.view.set('planet');
-      this.ui.select({ kind: 'BODY', bodyId: w.colony.siteBodyId });
-    } else if (this.game.snapshot()?.scenarioId === 'planeta-matka') {
-      this.ui.view.set('planet');
-    } else if (ark) {
-      this.ui.view.set('system');
-      this.ui.select({ kind: 'SHIP', shipId: ark.id });
     }
   }
 
@@ -138,6 +130,10 @@ export class GamePage {
         return;
       case '`':
         this.ui.perfVisible.update((v) => !v);
+        return;
+      case 'F2':
+        e.preventDefault();
+        this.designer.toggle();
         return;
       case 'Escape':
         // after the command card: it cancels placement itself when it has an Esc command

@@ -17,6 +17,7 @@ export * from './sim/frame-snapshot';
 export * from './sim/rules';
 export * from './sim/economy/colony';
 export * from './sim/objectives';
+export * from './sim/flows';
 export { GAME_CONSTANTS, type GameConstants } from './sim/config/game-constants';
 
 // math used by the renderer

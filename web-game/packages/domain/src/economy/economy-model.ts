@@ -35,6 +35,18 @@ export interface EconomyParams {
   atanorPowerGrowth: number;
   atanorPowerPerHex: number;
   atanorPowerPerArm: number;
+  /**
+   * Measured Atanor solutions per recipe (F6 designer panel, A3): replace the catalog's provisional
+   * cycles / area / arms of the doc §8.3. Absent = the document's numbers.
+   */
+  atanor?: Readonly<Record<string, AtanorMeasured>>;
+}
+
+/** Numbers of a running Atanor solution, measured in the building view. */
+export interface AtanorMeasured {
+  cycles: number;
+  area: number;
+  arms: number;
 }
 
 export const DEFAULT_ECONOMY_PARAMS: EconomyParams = {
@@ -107,11 +119,14 @@ export function addQty(a: Record<string, number>, b: Qty, k: number): void {
 
 function resolveRecipe(r: RecipeData, p: EconomyParams): Recipe {
   if (r.atanor) {
-    const { level, cycles, area, arms } = r.atanor;
+    const measured = p.atanor?.[r.id];
+    const atanor = measured ? { ...r.atanor, cycles: measured.cycles, area: measured.area, arms: measured.arms } : r.atanor;
+    const { level, cycles, area, arms } = atanor;
     const tick = p.atanorTick[level] ?? 1;
     const base = p.atanorBasePower * Math.pow(p.atanorPowerGrowth, level - 1);
     return {
       ...r,
+      atanor,
       time: +(cycles * tick).toFixed(2),
       power: +(base + p.atanorPowerPerHex * area + p.atanorPowerPerArm * arms).toFixed(1),
     };

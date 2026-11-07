@@ -3,6 +3,7 @@ import type { ResourceReadout } from '@space-game/ui';
 import { ResourcePanel } from '@space-game/ui';
 import type { ViewKind } from '@space-game/render';
 import { TEMPO_PRESETS } from '@space-game/api';
+import { Designer } from '../designer/designer';
 import { bodyName, clockText } from '../game/format';
 import { GameService } from '../game/game.service';
 import { UiState } from '../game/ui-state';
@@ -39,6 +40,11 @@ const MAX_STOCKS = 7;
             </button>
           }
         </nav>
+        <div class="seg">
+          <button type="button" data-action="designer" [attr.aria-pressed]="designer.open()" aria-keyshortcuts="F2" [title]="t.designer.toggleHint" (click)="designer.toggle()">
+            {{ t.designer.toggle }}
+          </button>
+        </div>
       </div>
     </header>
   `,
@@ -50,6 +56,7 @@ export class TopBar {
   protected readonly t = inject(TEXT);
   protected readonly game = inject(GameService);
   protected readonly ui = inject(UiState);
+  protected readonly designer = inject(Designer);
   protected readonly tempos = TEMPO_PRESETS.filter((p) => p !== 10);
   protected readonly views: ViewKind[] = ['planet', 'system', 'galaxy', 'atanor'];
   protected readonly tempo = computed(() => this.game.snapshot()?.tempo ?? 60);

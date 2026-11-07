@@ -8,6 +8,9 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: CI,
   retries: 0,
+  // Every test renders WebGL in software (SwiftShader) on the CPU: more than ~6 browsers at once
+  // starve each other and the frame-based view tests time out (12 workers did on 24 cores).
+  workers: CI ? 2 : 6,
   reporter: [['list']],
   use: {
     baseURL: `http://localhost:${PORT}`,

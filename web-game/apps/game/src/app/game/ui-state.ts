@@ -48,6 +48,28 @@ export class UiState {
     this.selection.set({ kind: 'NONE' });
   }
 
+  /**
+   * View after a (re)start: the colony planet when there is one, else the system with the Ark
+   * selected. `keepAtanor`: a restart from the designer panel leaves the Atanor view open (it does
+   * not depend on the world).
+   */
+  restartView(keepAtanor = false): void {
+    this.clear();
+    const w = this.game.world();
+    const body = this.game.colonyBodyId();
+    const ark = w?.ships.find((s) => s.role === 'MOTHERSHIP');
+    if (keepAtanor && this.view() === 'atanor') return;
+    if (body && (w?.colony.foundedAt !== null || !w.colony.siteBodyId)) {
+      this.view.set('planet');
+      if (w?.colony.siteBodyId) this.select({ kind: 'BODY', bodyId: body });
+    } else if (ark) {
+      this.view.set('system');
+      this.select({ kind: 'SHIP', shipId: ark.id });
+    } else {
+      this.view.set('system');
+    }
+  }
+
   startPlacement(kind: string): void {
     this.placement.set({ kind, rotation: 0, preview: null });
     this.targeting.set(false);

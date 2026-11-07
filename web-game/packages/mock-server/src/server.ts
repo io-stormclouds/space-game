@@ -5,9 +5,11 @@ import type {
   CatalogLevel,
   CatalogView,
   CommandResult,
+  EconomyReport,
   FrameData,
   GameSnapshot,
   RecordedCommand,
+  ReplayResult,
   SaveFile,
   ScenarioId,
   StepStats,
@@ -18,9 +20,13 @@ import {
   SECONDS_PER_MODEL_MINUTE,
   Simulation,
   TAU_CETI_SCENARIO,
+  DEFAULT_ECONOMY_PARAMS,
   colonyObjectives,
   computeEconomy,
+  economyTables,
   footprintTiles,
+  nominalFlows,
+  type NominalFlows,
   STARS,
   tileId as tileIdOf,
   tileIndexOf,
@@ -209,6 +215,23 @@ export class MockServer {
     };
   }
 
+  /** F6: document tables (default parameters) next to the tables of `params` (default: the running economy). */
+  economyReport(params?: EconomyParams): EconomyReport {
+    const current = params ? computeEconomy(params) : this.sim.rules.economy;
+    return {
+      params: current.params,
+      defaults: DEFAULT_ECONOMY_PARAMS,
+      doc: economyTables(this.docEconomy),
+      current: economyTables(current),
+    };
+  }
+
+  private readonly docEconomy = computeEconomy();
+
+  nominalFlows(bodyId: BodyId): NominalFlows {
+    return nominalFlows(this.sim.world, this.sim.rules, this.sim.grids, bodyId);
+  }
+
   catalog(): CatalogView {
     const rules = this.sim.rules;
     const eco = rules.economy;
@@ -357,7 +380,7 @@ export class MockServer {
   }
 
   /** Re-runs the scenario from its start with the file's commands and tempos, up to its step. */
-  replay(file: SaveFile): GameSnapshot {
+  replay(file: SaveFile): ReplayResult {
     this.assertFile(file);
     if (file.stepSeconds !== this.stepSeconds) throw new Error(`step length differs: ${file.stepSeconds} vs ${this.stepSeconds}`);
     this.start(file.scenarioId, file.economy, file.tempos[0]?.tempo ?? 60);
@@ -365,12 +388,13 @@ export class MockServer {
     const commands = [...file.commands];
     let ti = 1;
     let ci = 0;
+    let rejected = 0;
     for (let s = 0; s <= file.step; s++) {
       while (ti < tempos.length && tempos[ti]!.step === s) this.setTempo(tempos[ti++]!.tempo);
-      while (ci < commands.length && commands[ci]!.step === s) this.command(commands[ci++]!.command);
+      while (ci < commands.length && commands[ci]!.step === s) if (!this.command(commands[ci++]!.command).ok) rejected++;
       if (s < file.step) this.step();
     }
-    return this.snapshot();
+    return { ...this.snapshot(), replayStats: { commands: commands.length, rejected } };
   }
 
   private assertFile(file: SaveFile): void {

@@ -4,6 +4,8 @@ import type {
   Command,
   DomainEvent,
   EconomyParams,
+  EconomyTables,
+  NominalFlows,
   Objective,
   RejectReason,
   WorldState,
@@ -108,6 +110,11 @@ export interface SaveFile {
   meta: unknown;
 }
 
+/** Snapshot after a replay, with how many recorded commands the replayed world rejected (F6: other parameters). */
+export interface ReplayResult extends GameSnapshot {
+  replayStats: { commands: number; rejected: number };
+}
+
 export interface CommandResult {
   ok: boolean;
   events: DomainEvent[];
@@ -201,6 +208,16 @@ export interface BuildPreview extends Availability {
   tiles: number[];
 }
 
+/** F6: the economy document's tables (default parameters) next to the tables of other parameters. */
+export interface EconomyReport {
+  /** Parameters the `current` tables were computed from. */
+  params: EconomyParams;
+  /** Parameters of the document (Załącznik A). */
+  defaults: EconomyParams;
+  doc: EconomyTables;
+  current: EconomyTables;
+}
+
 export type Unsubscribe = () => void;
 
 export interface GameApi {
@@ -216,7 +233,7 @@ export interface GameApi {
   save(): Promise<SaveFile>;
   load(file: SaveFile): Promise<GameSnapshot>;
   /** Re-runs the scenario with the file's commands; resolves with the replayed snapshot. */
-  replay(file: SaveFile): Promise<GameSnapshot>;
+  replay(file: SaveFile): Promise<ReplayResult>;
   /** Latest snapshot, or a fresh one. */
   snapshot(): Promise<GameSnapshot>;
   /** Names, costs and times of the current economy. */
@@ -227,6 +244,10 @@ export interface GameApi {
   previewBuild(bodyId: BodyId, tileIndex: number, kind: string, rotation: number): Promise<BuildPreview>;
   /** Nearest valid tile to the colony's port for `kind` (auto placement; extractors: on a `material` deposit), or null. */
   suggestTile(bodyId: BodyId, kind: string, material?: string): Promise<{ tileIndex: number; rotation: number } | null>;
+  /** Document tables vs the tables of `params` (default: the economy of the running game). Starts nothing. */
+  economyReport(params?: EconomyParams): Promise<EconomyReport>;
+  /** Rates the body should reach by the document (full power, free storage), for comparison with measured ones. */
+  nominalFlows(bodyId: BodyId): Promise<NominalFlows>;
   onSnapshot(listener: (s: GameSnapshot) => void): Unsubscribe;
   onEvents(listener: (events: DomainEvent[]) => void): Unsubscribe;
   onFrame(listener: (f: FrameData) => void): Unsubscribe;

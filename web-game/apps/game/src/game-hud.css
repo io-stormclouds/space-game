@@ -1,5 +1,16 @@
 /* Shared HUD layout of the game screen (canvas boards 3–9). Uses only DS tokens. */
 
+/*
+ * Chart series colours of the designer panel (F6). Not in the DS yet (proposal, like G8): the signal
+ * amber #FFB000 is too light for a data mark (OKLCH L 0.81), so slot 1 is a darker amber step.
+ * Validated with the dataviz palette checker on --hud-color-hull: lightness band, chroma, CVD and
+ * normal-vision separation (ΔE 25 / 28), contrast ≥ 3:1.
+ */
+:root {
+  --wg-chart-1: #C08400;
+  --wg-chart-2: #3F86D4;
+}
+
 .game { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: 48px 1fr 240px; height: 100%; overflow: hidden; background: var(--hud-color-void); }
 .game__world { position: relative; grid-row: 1 / 4; grid-column: 1; min-height: 0; }
 .game__top { grid-row: 1; grid-column: 1; z-index: 2; }
@@ -42,5 +53,21 @@
 .dim { color: var(--hud-color-text-dim); }
 .list { list-style: none; margin: 0; padding: 0; display: grid; }
 .list > li { display: grid; gap: var(--hud-space-4); align-items: center; padding: 6px 0; border-bottom: 1px solid var(--hud-color-line-faint); font-size: var(--hud-font-size-label); }
+/* Designer panel tables (F6): numbers right-aligned in tabular figures. */
+.dtable { width: 100%; border-collapse: collapse; font-size: var(--hud-font-size-label); font-variant-numeric: tabular-nums; }
+.dtable th { position: sticky; top: 0; background: var(--hud-color-hull); color: var(--hud-color-text-dim); font-size: var(--hud-font-size-micro); font-weight: var(--hud-font-weight-bold); letter-spacing: var(--hud-tracking-label); text-transform: uppercase; text-align: right; padding: 4px 6px; border-bottom: 1px solid var(--hud-color-line); }
+.dtable td { text-align: right; padding: 4px 6px; border-bottom: 1px solid var(--hud-color-line-faint); white-space: nowrap; }
+.dtable th.l, .dtable td.l { text-align: left; }
+.dtable td.name { white-space: normal; color: var(--hud-color-text-dim); }
+.dtable tr.is-changed td.cur { color: var(--hud-color-signal); font-weight: var(--hud-font-weight-bold); }
+.dtable td.up { color: var(--hud-color-signal); }
+.dtable td.down { color: var(--hud-color-alert); }
+.actions { display: flex; flex-wrap: wrap; gap: var(--hud-space-3); align-items: center; }
+.btn { height: 30px; padding: 0 12px; background: var(--hud-color-hull); border: 1px solid var(--hud-color-metal); color: var(--hud-color-text); font: inherit; font-size: var(--hud-font-size-label); font-weight: var(--hud-font-weight-bold); letter-spacing: var(--hud-tracking-label); text-transform: uppercase; cursor: pointer; }
+.btn:hover:not(:disabled) { background: var(--hud-color-graphite); }
+.btn--primary { border-color: var(--hud-color-signal); color: var(--hud-color-signal); }
+.btn:disabled { color: var(--hud-color-text-faint); border-color: var(--hud-color-line); cursor: not-allowed; }
+.btn:focus-visible { outline: 2px solid var(--hud-color-signal); outline-offset: 2px; }
+.note { margin: 0; font-size: var(--hud-font-size-micro); color: var(--hud-color-text-dim); line-height: 1.5; }
 .bar-meter { height: 4px; background: var(--hud-color-graphite); }
 .bar-meter > span { display: block; height: 100%; background: var(--hud-color-signal); }

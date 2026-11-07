@@ -14,23 +14,23 @@ Pomiar: build produkcyjny, 2.5 s rozgrzewki i 5 s próbkowania klatek na widok, 
 
 | Scenariusz | Widok | FPS | Klatka p50 / p95 / p99 [ms] | Draw calls | Trójkąty | Geometrie / tekstury | Konteksty | Krok sym. śr. / maks. [ms] | Sterta JS [MB] | Start [ms] | Ocena |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| S | planet | 60 | 16,7 / 16,7 / 16,8 | 20 | 27 204 | 23 / 0 | 1 | 0 / 0,2 | 14,9 | 384 | OK |
-| S | system | 60 | 16,7 / 16,7 / 16,8 | 10 | 7132 | 24 / 0 | 1 | 0 / 0,2 | 16,8 | 384 | OK |
-| S | galaxy | 60 | 16,7 / 16,7 / 16,8 | 6 | 0 | 5 / 0 | 1 | 0 / 0,2 | 12,2 | 384 | OK |
-| M | planet | 60 | 16,7 / 16,8 / 16,8 | 69 | 256 312 | 58 / 0 | 1 | 0,1 / 0,9 | 22,6 | 256 | UWAGA |
-| M | system | 59,2 | 16,7 / 16,8 / 16,8 | 17 | 85 604 | 32 / 0 | 1 | 0,1 / 0,5 | 35,2 | 256 | OK |
-| M | galaxy | 60 | 16,7 / 16,8 / 16,8 | 6 | 0 | 5 / 0 | 1 | 0,1 / 0,7 | 19,4 | 256 | OK |
-| L | planet | 60 | 16,7 / 16,8 / 16,8 | 136 | 1 116 488 | 130 / 0 | 1 | 0,5 / 3,3 | 31,7 | 264 | PRZEKROCZONY |
-| L | system | 60 | 16,7 / 16,8 / 16,8 | 17 | 321 284 | 32 / 0 | 1 | 0,4 / 3,2 | 42,6 | 264 | UWAGA |
-| L | galaxy | 60 | 16,7 / 16,7 / 16,8 | 6 | 0 | 5 / 0 | 1 | 0,4 / 3 | 29,7 | 264 | OK |
-| Atanor | atanor | 60 | 16,7 / 16,7 / 16,8 | 2 | 530 | 0 / 14 | 1 | 0 / 0,3 | 21,8 | 229 | OK |
+| S | planet | 60 | 16,7 / 16,7 / 16,8 | 20 | 27 204 | 23 / 0 | 1 | 0 / 0,1 | 13,3 | 384 | OK |
+| S | system | 60 | 16,7 / 16,8 / 16,8 | 10 | 7132 | 24 / 0 | 1 | 0 / 0,2 | 15,1 | 384 | OK |
+| S | galaxy | 60 | 16,7 / 16,7 / 16,8 | 6 | 0 | 5 / 0 | 1 | 0 / 0,2 | 13,8 | 384 | OK |
+| M | planet | 60 | 16,7 / 16,7 / 16,8 | 69 | 256 312 | 58 / 0 | 1 | 0,1 / 0,6 | 20,5 | 230 | UWAGA |
+| M | system | 59,2 | 16,7 / 16,7 / 16,8 | 17 | 85 604 | 32 / 0 | 1 | 0,1 / 0,8 | 17,1 | 230 | OK |
+| M | galaxy | 60 | 16,7 / 16,7 / 16,8 | 6 | 0 | 5 / 0 | 1 | 0,1 / 0,8 | 21,8 | 230 | OK |
+| L | planet | 60 | 16,7 / 16,7 / 16,8 | 136 | 1 116 488 | 130 / 0 | 1 | 0,6 / 3,1 | 24,3 | 233 | PRZEKROCZONY |
+| L | system | 60 | 16,7 / 16,7 / 16,8 | 17 | 321 284 | 32 / 0 | 1 | 0,4 / 3,5 | 43,1 | 233 | UWAGA |
+| L | galaxy | 60 | 16,7 / 16,7 / 16,8 | 6 | 0 | 5 / 0 | 1 | 0,4 / 3 | 30,9 | 233 | OK |
+| Atanor | atanor | 60 | 16,7 / 16,8 / 16,8 | 2 | 530 | 0 / 14 | 1 | 0 / 0,1 | 35 | 231 | OK |
 
 ## Rozmiar pobrania
 
 | Część | Bez kompresji | gzip |
 |---|---|---|
 | Paczka startowa (strona główna, logowanie) | 0,3 MB | 0,1 MB |
-| Cały kod (z leniwymi częściami: gra, Three.js, PixiJS, worker) | 2,1 MB | 0,6 MB |
+| Cały kod (z leniwymi częściami: gra, Three.js, PixiJS, worker) | 2,2 MB | 0,6 MB |
 | Fonty pobierane przy polskim tekście (latin + latin-ext, 3 grubości) | 0,1 MB | 0,1 MB |
 | Modele KayKit | 0,5 MB | 0,2 MB |
 | **Pierwsza sesja razem** (kod + fonty + modele) | **2,7 MB** | 0,9 MB |

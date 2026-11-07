@@ -2,7 +2,7 @@ import type { ReplyValue, Request, RequestMessage, WorkerMessage } from '@space-
 import { MockServer, type MockServerOptions } from './server';
 
 /** Requests that do not change the game (no snapshot push after them). */
-const QUERIES = new Set<Request['kind']>(['snapshot', 'save', 'catalog', 'availability', 'previewBuild', 'suggestTile']);
+const QUERIES = new Set<Request['kind']>(['snapshot', 'save', 'catalog', 'availability', 'previewBuild', 'suggestTile', 'economyReport', 'nominalFlows']);
 
 export interface HostOptions extends MockServerOptions {
   /** Real ms between loop ticks (≈ display refresh). */
@@ -108,6 +108,10 @@ export class ServerHost {
         return s.previewBuild(r.bodyId, r.tileIndex, r.buildingKind, r.rotation);
       case 'suggestTile':
         return s.suggestTile(r.bodyId, r.buildingKind, r.material);
+      case 'economyReport':
+        return s.economyReport(r.economy);
+      case 'nominalFlows':
+        return s.nominalFlows(r.bodyId);
     }
   }
 }

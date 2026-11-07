@@ -148,6 +148,36 @@ Wspólna domena w `packages/domain` jest w czystym TypeScripcie, bez Angulara, T
   - pierwsza sesja pobiera 2,7 MB (budżet 15–25 MB);
   - przekroczenia dotyczą tylko trójkątów w widoku planety: M 256 tys. (uwaga), L 1,1 mln (przekroczenie). Powód: budynki wszystkich ciał są rysowane bez odcinania (`frustumCulled = false`) i bez LOD. Zadania są w raporcie.
 
+## 3d. Wykonane w F6 (FAKT)
+
+Panel projektanta (`apps/game/src/app/designer/`) otwiera się klawiszem F2 albo przyciskiem „Projektant” w pasku górnym. To szuflada po prawej stronie ekranu gry, nad światem. Zakładki:
+
+| Zakładka | Co robi | Skąd dane |
+|---|---|---|
+| Parametry | Formularz Załącznika A: wycena, wzrosty na poziom, docelowe zwroty E1–E4, takty i moc Atanora. Przy zmienionym polu widać wartość dokumentu. „Zastosuj: nowa gra” uruchamia scenariusz od początku z nowymi parametrami. „Zastosuj: odtwórz tę grę” powtarza te same rozkazy w tych samych krokach i podaje, ile z nich odrzucono. | `GameApi.start(scenario, economy)`, `replay(file)` |
+| Tabele | Ery (mnożnik k), materiały (wartość V), budynki L1 (koszt w kr, czas, zwrot): dokument obok szkicu, z różnicą, filtr „tylko zmienione”. | nowe zapytanie `GameApi.economyReport(params)` (`economyTables` w domenie) |
+| Przepływy | Wykresy mocy (produkcja i pobór), załogi i magazynu kolonii w czasie gry. Tabela tempa: dokument (stawka katalogu × poziom, przy pełnej mocy) obok pomiaru ze zdarzeń z ostatnich 30 min gry. | zdarzenia i migawki (`Telemetry`), nowe zapytanie `GameApi.nominalFlows(body)` |
+| Dziennik | Wszystkie zdarzenia domeny (bufor: 1000 zdarzeń i 300 taktów), filtr typu, eksport CSV. | strumień zdarzeń workera |
+| Atanor | A3: receptury według dokumentu §8.3 obok liczb zmierzonych w widoku budynku; „Wstaw zmierzone do szkicu”. | odczyt widoku Atanor, `EconomyParams.atanor` |
+| Plik | Eksport zapisu (JSON z całym światem, dziennikiem rozkazów i parametrami), wczytanie, odtworzenie z rozkazów; sprawdzenie, czy plik to zapis web-game. | `save`, `load`, `replay` |
+
+- **Domena:**
+  - `economyTables(eco)`: wiersze tabel dokumentu;
+  - `nominalFlows(world, rules, grids, body)`;
+  - opcjonalne `EconomyParams.atanor`: zmierzone cykle, obszar i ramiona zastępują liczby z §8.3 w czasie i mocy receptury.
+- **Kontrakt:**
+  - nowe zapytania `economyReport` i `nominalFlows`;
+  - `replay` zwraca też `replayStats` (rozkazy, odrzucone).
+- **Pierwszy pomiar A3 w panelu** (A_NAD, przy parametrach dokumentu):
+  - dokument: cykle 12, obszar 9, ramiona 2, moc 12,5 MW;
+  - zmierzone: cykle 12, obszar 12, ramiona 2, moc 14 MW;
+  - skutek: wartość NAD rośnie z 45,33 do 47,13 kr (+4%).
+- **Testy:**
+  - mock: 5 testów zapytań projektanta;
+  - aplikacja: 6 testów funkcji panelu;
+  - e2e: 5 scenariuszy panelu (parametr → tabele → nowa gra; odtworzenie z odrzuconymi rozkazami; wykres z odczytem pod kursorem i tabelą temp; Atanor; eksport i import zapisu, obcy plik odrzucony).
+- **Wydajność po F6:** bez zmian (raport F5 wygenerowany ponownie: L krok 0,6 / 3,1 ms, 60 FPS).
+
 ### Różnice względem plansz kanwy (zrzuty 1440×900, F3)
 
 | Plansza | Różnica | Powód |
@@ -268,6 +298,15 @@ Na prośbę „decyzje wg rekomendacji” rozstrzygam pytania P1–P6 i kwestie 
 | D18 | Budżety F5 | FPS według W18 B: S ≥ 58 (tolerancja vsync), M ≥ 30, L tylko pomiar. Draw calls (uwaga od 100, limit 150), trójkąty (od 200 tys., limit 400 tys.) i pobranie (15 / 25 MB) z `init.md` obowiązują we wszystkich scenariuszach, także L, bo pokazują, gdzie zabraknie zapasu. |
 | D19 | Zadania naprawcze F5 | Tylko zapisane w raporcie, bez naprawy w F5: FPS mieści się w budżecie, a odcinanie i LOD to praca nad widokiem po decyzji o docelowej liczbie budowli na ciało. |
 | D20 | Ślad Chromium | Zapisywany lokalnie (ok. 16 MB), poza gitem; w repozytorium są raport i `latest.json`. |
+| D21 | Miejsce panelu projektanta | Szuflada na ekranie gry (F2), nie osobna trasa: działa na bieżącej grze, a świat zostaje widoczny. |
+| D22 | Co znaczy „dokument” w porównaniach | Tabele `computeEconomy()` przy parametrach domyślnych. Dokument ekonomii jest z nich generowany, a `econ:check` pilnuje zgodności. |
+| D23 | Zastosowanie parametrów | Dwa tryby: nowa gra (scenariusz od początku) i odtworzenie tej gry (te same rozkazy w tych samych krokach, z liczbą odrzuconych). Bez zmiany parametrów w trakcie gry: ekonomia jest stała w obrębie jednego świata, więc zapis i powtórka pozostają dokładne. |
+| D24 | Tempo nominalne a zmierzone | Nominalne: stawka katalogu × współczynnik poziomu przy pełnej mocy i wolnym magazynie, bez wyczerpanych złóż. Zmierzone: zdarzenia `EXTRACTION_TICK` i `BATCH_*` z ostatnich 30 min gry. |
+| D25 | Porównanie Atanora (A3) | Oba wiersze przy parametrach dokumentu, żeby różnica była tylko pomiarem. Zmierzone liczby mogą trafić do gry przez szkic (`EconomyParams.atanor`) i „Zastosuj”. Model w dokumencie zostaje na §8.3 do decyzji projektowej. |
+| D26 | Kolory wykresów | `--wg-chart-1` #C08400, `--wg-chart-2` #3F86D4: sprawdzone walidatorem palety na tle `--hud-color-hull` (jasność, nasycenie, rozróżnialność przy zaburzeniach widzenia barw, kontrast). Bursztyn sygnałowy DS #FFB000 jest za jasny na znacznik danych. Do DS później, jak G8. |
+| D27 | Telemetria | Zbiera od startu każdej gry, także przy zamkniętym panelu (wykres ma historię). Sygnały aktualizowane z migawkami (~10 Hz), nie przy każdym zdarzeniu. |
+| D28 | Równoległość e2e | 6 przeglądarek naraz (CI: 2). Przy 12 WebGL programowy (SwiftShader) przeciążał procesor i testy widoków przekraczały czas. |
+| D29 | Zwrot E0 | Nie jest parametrem w panelu: k ery E0 = 1 z definicji modelu. |
 
 ## 5a. Znane problemy
 
@@ -282,3 +321,6 @@ Na prośbę „decyzje wg rekomendacji” rozstrzygam pytania P1–P6 i kwestie 
 | ID | Pytanie | Blokuje |
 |---|---|---|
 | P4 | Adres zdalnego repozytorium | — |
+| P7 | Czy przyjąć zmierzone liczby Atanora (A_NAD: obszar 12 zamiast 9) do dokumentu ekonomii (§8.3)? Skutek: moc +1,5 MW, wartość NAD +4% (45,33 → 47,13 kr). | aktualizację dokumentu ekonomii |
+| P8 | Docelowa liczba budowli na ciało (od niej zależy, czy odcinanie i LOD z zadań F5 są potrzebne przed betą) | zadania naprawcze F5 |
+| P9 | Czy kolory wykresów (D26) i materiałów (G8) dołączyć do design systemu? | — |

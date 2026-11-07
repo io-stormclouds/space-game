@@ -18,6 +18,7 @@ npm run check        # typy, testy, build produkcyjny i e2e, w tej kolejności
   - Spacja: pauza; `+` / `−`: tempo ×1, ×60, ×600;
   - `Esc`: anuluj;
   - `` ` ``: nakładka wydajności;
+  - `F2`: panel projektanta (parametry ekonomii, tabele dokumentu, przepływy, dziennik, Atanor, plik zapisu);
   - rozkazy mają klawisze pokazane na karcie.
 
 ## Skrypty
@@ -35,7 +36,7 @@ npm run check        # typy, testy, build produkcyjny i e2e, w tej kolejności
 ## Struktura
 
 ```
-apps/game/              aplikacja Angular (zoneless, Signals): ekrany, HUD, widok świata
+apps/game/              aplikacja Angular (zoneless, Signals): ekrany, HUD, widok świata, panel projektanta (designer/)
 packages/domain/        czysty TypeScript: katalog ekonomii, reguły, symulacja, scenariusze, Atanor, gwiazdy
 packages/api/           kontrakt GameApi i klient Web Workera
 packages/mock-server/   mock serwera: stały krok, dziennik rozkazów, zapis/powtórka, gracze i rynek

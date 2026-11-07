@@ -1,12 +1,14 @@
-import type { BodyId, Command, DomainEvent, EconomyParams } from '@space-game/domain';
+import type { BodyId, Command, DomainEvent, EconomyParams, NominalFlows } from '@space-game/domain';
 import type {
   Availability,
   BuildPreview,
   CatalogView,
   CommandResult,
+  EconomyReport,
   FrameData,
   GameApi,
   GameSnapshot,
+  ReplayResult,
   SaveFile,
   ScenarioId,
   Tempo,
@@ -68,7 +70,7 @@ export function createWorkerGameApi(worker: WorkerLike): GameApi {
     stepOnce: (steps = 1) => call<GameSnapshot>({ kind: 'stepOnce', steps }),
     save: () => call<SaveFile>({ kind: 'save' }),
     load: (file: SaveFile) => call<GameSnapshot>({ kind: 'load', file }),
-    replay: (file: SaveFile) => call<GameSnapshot>({ kind: 'replay', file }),
+    replay: (file: SaveFile) => call<ReplayResult>({ kind: 'replay', file }),
     snapshot: () => (latest ? Promise.resolve(latest) : call<GameSnapshot>({ kind: 'snapshot' })),
     catalog: () => call<CatalogView>({ kind: 'catalog' }),
     availability: (bodyId: BodyId, kinds: string[]) => call<Record<string, Availability>>({ kind: 'availability', bodyId, kinds }),
@@ -76,6 +78,8 @@ export function createWorkerGameApi(worker: WorkerLike): GameApi {
       call<BuildPreview>({ kind: 'previewBuild', bodyId, tileIndex, buildingKind, rotation }),
     suggestTile: (bodyId: BodyId, buildingKind: string, material?: string) =>
       call<{ tileIndex: number; rotation: number } | null>({ kind: 'suggestTile', bodyId, buildingKind, ...(material ? { material } : {}) }),
+    economyReport: (economy?: EconomyParams) => call<EconomyReport>({ kind: 'economyReport', ...(economy ? { economy } : {}) }),
+    nominalFlows: (bodyId: BodyId) => call<NominalFlows>({ kind: 'nominalFlows', bodyId }),
     onSnapshot: (l) => subscribe(snapshotListeners, l),
     onEvents: (l) => subscribe(eventListeners, l),
     onFrame: (l) => subscribe(frameListeners, l),

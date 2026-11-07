@@ -1,9 +1,10 @@
-import type { BodyId, Command, DomainEvent, EconomyParams } from '@space-game/domain';
+import type { BodyId, Command, DomainEvent, EconomyParams, NominalFlows } from '@space-game/domain';
 import type {
   Availability,
   BuildPreview,
   CatalogView,
   CommandResult,
+  EconomyReport,
   FrameData,
   GameSnapshot,
   SaveFile,
@@ -28,7 +29,9 @@ export type Request =
   | { kind: 'catalog' }
   | { kind: 'availability'; bodyId: BodyId; kinds: string[] }
   | { kind: 'previewBuild'; bodyId: BodyId; tileIndex: number; buildingKind: string; rotation: number }
-  | { kind: 'suggestTile'; bodyId: BodyId; buildingKind: string; material?: string };
+  | { kind: 'suggestTile'; bodyId: BodyId; buildingKind: string; material?: string }
+  | { kind: 'economyReport'; economy?: EconomyParams }
+  | { kind: 'nominalFlows'; bodyId: BodyId };
 
 export type RequestMessage = { id: number; request: Request };
 
@@ -40,6 +43,8 @@ export type ReplyValue =
   | Record<string, Availability>
   | BuildPreview
   | { tileIndex: number; rotation: number }
+  | EconomyReport
+  | NominalFlows
   | null;
 
 export type WorkerMessage =
