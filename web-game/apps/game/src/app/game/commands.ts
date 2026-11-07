@@ -116,16 +116,21 @@ export class CommandsService {
     return this.slot(id, label, hotkey, icon, { disabledReason: reason });
   }
 
-  /** Building view of the Fabryka atanorowa (W08 A): run, step, reset, recipe, speed. */
+  /**
+   * Atanor view (W08 A, AT1): run, step, reset, speed, back. The machine of a building follows the
+   * building's recipe; only the sandbox (designer F2) switches levels.
+   */
   private atanorCard(): CardModel {
     const t = this.t;
     const c = t.commands;
     const a = this.ui.atanor();
     const r = this.ui.atanorReadout();
-    if (!a) return { title: t.cmd.title, context: t.atanor.tab, status: '', slots: [] };
-    const levels = a.levels();
-    const i = Math.max(0, levels.findIndex((l) => l.id === r?.levelId));
-    const next = levels[(i + 1) % levels.length]!;
+    const site = this.ui.atanorBuilding();
+    const world = this.game.world();
+    const where = this.ui.planetAvailable() ? t.hud.views.planet : t.hud.views.system;
+    const back = this.slot('back', c.atanorBack.label, 'Esc', 'cancel', { description: c.atanorBack.note(where), run: () => this.ui.closeAtanor() });
+    const context = site && world ? t.atanor.site(this.bodyLabelOf(world, site.bodyId), Math.max(1, site.level)) : `${t.atanor.sandbox}${r ? ' · ' + r.levelName : ''}`;
+    if (!a) return { title: t.cmd.title, context, status: '', slots: [back] };
     const tps = r?.ticksPerSecond ?? 1.67;
     const slots: Array<CommandSlot | null> = [
       r?.playing
@@ -133,16 +138,28 @@ export class CommandsService {
         : this.slot('play', c.atanorPlay.label, 'P', 'produce', { variant: 'primary', description: c.atanorPlay.note, run: () => a.play() }),
       this.slot('step', c.atanorStep.label, 'K', 'move', { description: c.atanorStep.note, run: () => a.step() }),
       this.slot('reset', c.atanorReset.label, 'R', 'repeat', { description: c.atanorReset.note, run: () => a.reset() }),
-      this.slot('level', c.atanorLevel.label, 'L', 'research', {
-        description: c.atanorLevel.note(r?.levelName ?? '—'),
-        run: () => {
-          a.setLevel(next.recipeId ?? next.id);
-          this.ui.atanorLevel.set(next.recipeId ?? next.id);
-        },
-      }),
       this.slot('faster', c.atanorFaster.label, 'F', 'upgrade', { description: c.atanorFaster.note(Math.round(tps * 10) / 10), run: () => a.setTicksPerSecond(tps >= 30 ? 1.67 : tps * 3) }),
     ];
-    return { title: t.cmd.title, context: r ? `${r.recipeId ?? ''} ${r.levelName}`.trim() : t.atanor.tab, status: 'ATN', slots };
+    if (!site) {
+      const levels = a.levels();
+      const i = Math.max(0, levels.findIndex((l) => l.id === r?.levelId));
+      const next = levels[(i + 1) % levels.length]!;
+      slots.push(
+        this.slot('level', c.atanorLevel.label, 'L', 'research', {
+          description: c.atanorLevel.note(r?.levelName ?? '—'),
+          run: () => {
+            a.setLevel(next.recipeId ?? next.id);
+            this.ui.atanorLevel.set(next.recipeId ?? next.id);
+          },
+        }),
+      );
+    }
+    slots.push(back);
+    return { title: t.cmd.title, context, status: 'ATN', slots };
+  }
+
+  private bodyLabelOf(world: WorldState, bodyId: BodyId): string {
+    return world.bodies.find((b) => b.id === bodyId)?.name ?? bodyId;
   }
 
   private mothershipCard(world: WorldState, catalog: CatalogView): CardModel {
@@ -339,7 +356,7 @@ export class CommandsService {
         const nextRecipe = def!.recipes[(i + 1) % def!.recipes.length]!;
         slots.push(this.slot('recipe', c.recipe.label(nextRecipe), 'P', 'repeat', { description: c.recipe.note, run: () => void this.game.command({ type: 'SET_RECIPE', structureId: s.id, recipe: nextRecipe }) }));
       }
-      if (s.kind === 'ATN') slots.push(this.slot('atanor', c.atanor.label, 'A', 'research', { description: c.atanor.note, run: () => this.ui.view.set('atanor') }));
+      if (s.kind === 'ATN') slots.push(this.slot('atanor', c.atanor.label, 'A', 'research', { variant: 'primary', description: c.atanor.note, run: () => this.ui.openAtanor(s.id) }));
       slots.push(this.slot('demolish', c.demolish.label, 'X', 'cancel', { variant: 'danger', description: c.demolish.note, run: () => void this.game.command({ type: 'DEMOLISH', structureId: s.id }) }));
     } else {
       const idle = world.rovers.find((r) => r.bodyId === s.bodyId && r.state === 'IDLE' && !r.job);

@@ -13,7 +13,7 @@ import { diffPct, num, pct } from './series';
     <p class="note">{{ t.intro }}</p>
     <p class="note" data-atanor-now>{{ now() }}</p>
     <div class="actions">
-      <button type="button" class="btn" data-action="open-atanor" (click)="ui.view.set('atanor')">{{ t.open }}</button>
+      <button type="button" class="btn" data-action="open-atanor" (click)="ui.openSandbox()">{{ t.open }}</button>
       <button type="button" class="btn btn--primary" data-action="use-measured" [disabled]="!measuredCount()" [title]="t.useNote" (click)="d.useMeasuredAtanor()">{{ t.use }}</button>
     </div>
     <table class="dtable" data-table="atanor">

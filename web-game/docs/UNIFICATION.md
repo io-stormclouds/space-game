@@ -313,6 +313,18 @@ Na prośbę „decyzje wg rekomendacji” rozstrzygam pytania P1–P6 i kwestie 
 | D34 | Pole na planecie (3D PoC `tile-panel` + pasek budowy) | Zaznaczone pole ma własny panel: numer, sześciokąt lub pięciokąt, złoże z pozostałą ilością, budowla stojąca na polu, lista „Tu można postawić” ze sprawdzenia serwera (nowe zapytanie `GameApi.tileInfo`). Karta pola: „Postaw: [wydobywarka złoża]” (Enter), „Lądowisko tutaj” (D), oba od razu; „Buduj tutaj…” (B) otwiera katalog wycelowany w pole (duch startuje na polu, Enter stawia); „Wyślij łazik” (J). |
 | D35 | Łazik | „Jedź do” (J), potem pole; albo prawy przycisk na polu przy zaznaczonym łaziku (jak w PoC). „Wróć do portu” (H). Panel pokazuje długość trasy. |
 | D36 | Rozkazy statku | Rozkaz lotu (prawy przycisk, „Leć do…”, mapa) idzie do zaznaczonego statku, a bez zaznaczenia do Arki. Statek transportowy ma własną kartę: „Leć do…” (E), „Wróć do bazy” (H). Panel statku w locie pokazuje cel i czas do przylotu. Zamyka K5. |
+| A15 | „Fabryka” w widoku budynku (rozbudowa Atanora, `docs/atanor-expansion-design.md`, pyt. 1) | Edytor maszyny ma tylko Fabryka atanorowa. Zwykłe budynki przetwórcze dostają panel „Produkcja”: sztuki na godzinę, wejścia, wąskie gardło (Z2). |
+| A16 | Czwarta zakładka „Atanor” (pyt. 2) | Znika z przełącznika widoków i klawisza `4`. Widok otwiera rozkaz „Maszyna” (A) na karcie Fabryki atanorowej. Lekcje PoC i receptury bez budynku są w „Piaskownicy” panelu projektanta (F2). Zmienia D13 i P1. |
+| A17 | Kto liczy produkcję Fabryki atanorowej (pyt. 3) | Silnik Atanora w workerze mocka, osobno dla każdej wdrożonej maszyny. Liczby §8.3 zostają wzorcem wyceny (wartość bazowa NPC). Zmienia G6 i G7; A3 i D25 dotyczą odtąd tylko wyceny. |
+| A18 | Zwrot materiałów za usunięty element maszyny (pyt. 4) | 100 %. Kosztem zmiany jest przestój na wdrożenie. |
+| A19 | Czas wdrożenia maszyny (pyt. 5) | Proporcjonalny do wartości materiałów maszyny: parametr `atanorDeployMinPerKr` w parametrach ekonomii. |
+| A20 | Porty maszyny (pyt. 6) | Ustala receptura (jak A6). |
+| A21 | Start projektu (pyt. 7, POC-4) | A_NAD startuje z podpowiedzią (ramiona wzorca bez programu), kolejne receptury z pustej planszy. Wzorzec można obejrzeć w Piaskownicy. Zmienia start z A6. |
+| A22 | Tempo widoku (pyt. 8) | W produkcji tempo gry (×60 ≈ 1× z PoC), w próbie własne tempo widoku (0,5–4× jak w PoC). |
+| A23 | Atomy na portach przy zatrzymaniu (pyt. 9) | Wracają do magazynu. |
+| A24 | Histogramy (pyt. 10) | Na razie tabela wariantów projektu. Histogramy po decyzji SOC-4. |
+| A25 | Produkty uboczne i zlecenia NPC (pyt. 11) | Później, po kroku AT4. |
+| D37 | Karta rozkazów (K4) | Komórki karty w doku zmniejszone tak, żeby oba rzędy mieściły się z podpisem (rekomendacja K4: ok. 58 px). |
 | D32 | Budowa z karty ciała | Karta skanera planety ma „Buduj” (B): aktywne na ciele z portem kosmicznym, na pozostałych zablokowane z powodem „Najpierw postaw port kosmiczny”. Główna akcja karty (wybór miejsca albo budowa) jest w pierwszym rzędzie. |
 
 ## 5a. Znane problemy

@@ -9,6 +9,8 @@ export interface AtanorReadout {
   recipeId: string | null;
   /** Minimum Fabryka atanorowa level for the recipe, null for PoC levels. */
   buildingLevel: number | null;
+  /** Level of the building the machine stands in; null in the sandbox (AT1). */
+  siteLevel: number | null;
   playing: boolean;
   ticksPerSecond: number;
   /** Ticks executed since reset (CYKLE; never wraps, W09). */
@@ -54,6 +56,7 @@ export interface ReadoutSource {
   metrics: Atanor.ThroughputMetrics | null;
   playing: boolean;
   ticksPerSecond: number;
+  siteLevel?: number | null;
 }
 
 export function toReadout(src: ReadoutSource): AtanorReadout {
@@ -65,6 +68,7 @@ export function toReadout(src: ReadoutSource): AtanorReadout {
     kind: Atanor.levelKind(level),
     recipeId: level.recipe?.recipeId ?? null,
     buildingLevel,
+    siteLevel: src.siteLevel ?? null,
     playing: src.playing,
     ticksPerSecond: src.ticksPerSecond,
     ticks: s.ticks,

@@ -16,7 +16,8 @@ import { TopBar } from '../hud/top-bar';
 import { TEXT } from '../i18n/pl';
 import { WorldView } from '../world/world-view';
 
-const VIEW_KEYS: Record<string, ViewKind> = { '1': 'planet', '2': 'system', '3': 'galaxy', '4': 'atanor' };
+/** View keys (P1). The Atanor opens from its building's card (A16), so `4` is free. */
+const VIEW_KEYS: Record<string, ViewKind> = { '1': 'planet', '2': 'system', '3': 'galaxy' };
 const TEMPOS = TEMPO_PRESETS.filter((t) => t !== 10);
 
 /** The game screen: shared HUD of the canvas (top bar 48 px, dock 240 px) over the world view. */
@@ -139,7 +140,8 @@ export class GamePage {
         // after the command card: it cancels placement itself when it has an Esc command
         queueMicrotask(() => {
           if (e.defaultPrevented) return;
-          if (this.ui.placement()) this.ui.placement.set(null);
+          if (this.ui.view() === 'atanor') this.ui.closeAtanor();
+          else if (this.ui.placement()) this.ui.placement.set(null);
           else if (this.ui.targeting()) this.ui.targeting.set(false);
           else if (this.ui.driveRover()) this.ui.driveRover.set(null);
           else if (this.ui.buildMenu()) this.ui.buildMenu.set(false);

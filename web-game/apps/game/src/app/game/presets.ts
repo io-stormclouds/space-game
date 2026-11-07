@@ -7,10 +7,13 @@ import type { GameService } from './game.service';
  * GameApi with the same commands a player would give, fast-forwarded while paused, so the game
  * state is genuine.
  */
-export const PRESETS = ['przybycie', 'skan', 'port', 'kolonia', 'planeta-matka', 'obciazenie-s', 'obciazenie-m', 'obciazenie-l'] as const;
+export const PRESETS = ['przybycie', 'skan', 'port', 'kolonia', 'planeta-matka', 'fabryka', 'obciazenie-s', 'obciazenie-m', 'obciazenie-l'] as const;
 
-/** F5 load levels by address: #/scenariusz-obciazenie-m. */
-const LOAD: Partial<Record<string, ScenarioId>> = { 'obciazenie-s': 'load-s', 'obciazenie-m': 'load-m', 'obciazenie-l': 'load-l' };
+/**
+ * Worlds the mock builds directly: F5 load levels (#/scenariusz-obciazenie-m) and the colony with
+ * a Fabryka atanorowa (#/scenariusz-fabryka, AT1), an era the playable catalogue does not reach.
+ */
+const DIRECT: Partial<Record<string, ScenarioId>> = { 'obciazenie-s': 'load-s', 'obciazenie-m': 'load-m', 'obciazenie-l': 'load-l', fabryka: 'fabryka' };
 export type PresetId = (typeof PRESETS)[number];
 
 export function isPreset(id: string): id is PresetId {
@@ -21,8 +24,8 @@ const STEPS = 60;
 const MAX_ROUNDS = 400;
 
 export async function runPreset(game: GameService, commands: CommandsService, id: PresetId): Promise<GameSnapshot> {
-  const load = LOAD[id];
-  if (load) return game.start(load);
+  const direct = DIRECT[id];
+  if (direct) return game.start(direct);
   const scenario: ScenarioId = id === 'planeta-matka' ? 'planeta-matka' : 'tau-ceti';
   let snap = await game.start(scenario);
   if (id === 'przybycie' || id === 'planeta-matka') return snap;

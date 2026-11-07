@@ -22,7 +22,7 @@ const round1 = (n: number) => (Math.round(n * 10) / 10).toLocaleString('pl-PL');
         @if (ui.atanorReadout(); as a) {
           <div class="head">
             <h2 class="hud-title sg">{{ a.levelName }}</h2>
-            <span class="hud-micro">{{ a.recipeId ?? '' }} · {{ t.atanor.building(a.buildingLevel) }}</span>
+            <span class="hud-micro" data-atanor="where">{{ a.recipeId ?? '' }} · {{ a.siteLevel ? t.atanor.building(a.siteLevel) : t.atanor.sandbox }}</span>
             <span class="tag" [class.tag--al]="!!a.jam" [class.tag--sg]="a.playing && !a.jam">{{ a.jam ? t.atanor.jam : a.playing ? t.atanor.running : t.atanor.stopped }}</span>
           </div>
           <dl class="kv">

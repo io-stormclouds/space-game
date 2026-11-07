@@ -1,6 +1,6 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
-import type { BodyId } from '@space-game/api';
-import type { AtanorControls, AtanorReadout, PickResult, Placement, Selection, ViewKind } from '@space-game/render';
+import type { BodyId, Structure } from '@space-game/api';
+import type { AtanorControls, AtanorReadout, AtanorViewInput, PickResult, Placement, Selection, ViewKind } from '@space-game/render';
 import { GameService } from './game.service';
 
 export interface PlacementMode {
@@ -26,10 +26,26 @@ export class UiState {
   readonly driveRover = signal<string | null>(null);
   readonly buildMenu = signal<boolean>(false);
   readonly perfVisible = signal<boolean>(true);
+  /** Level of the sandbox (designer F2); a building's machine follows the building's recipe. */
   readonly atanorLevel = signal<string>('A_NAD');
+  /** Fabryka atanorowa whose machine the Atanor view shows (AT1, A16); null = sandbox. */
+  readonly atanorSite = signal<string | null>(null);
   /** Controls of the mounted Atanor view (W08 A building view), and its readout at ~4 Hz. */
   readonly atanor = signal<AtanorControls | null>(null);
   readonly atanorReadout = signal<AtanorReadout | null>(null);
+
+  /** The building the Atanor view belongs to, while it stands. */
+  readonly atanorBuilding = computed<Structure | null>(() => {
+    const id = this.atanorSite();
+    return id ? (this.game.world()?.structures.find((s) => s.id === id) ?? null) : null;
+  });
+
+  /** What the Atanor view shows: the building's recipe and level, or the sandbox level. */
+  readonly atanorInput = computed<AtanorViewInput | null>(() => {
+    if (this.view() !== 'atanor') return null;
+    const s = this.atanorBuilding();
+    return s ? { level: s.recipe ?? 'A_NAD', buildingLevel: Math.max(1, s.level) } : { level: this.atanorLevel(), buildingLevel: null };
+  });
 
   /** Body the planet camera looks at and the build commands act on. */
   readonly focusBodyId = computed<BodyId | null>(() => {
@@ -77,6 +93,28 @@ export class UiState {
     } else {
       this.view.set('system');
     }
+  }
+
+  /** Opens the machine of a Fabryka atanorowa (card command "Maszyna"); the selection stays. */
+  openAtanor(structureId: string): void {
+    this.placement.set(null);
+    this.targeting.set(false);
+    this.driveRover.set(null);
+    this.buildMenu.set(false);
+    this.atanorSite.set(structureId);
+    this.view.set('atanor');
+  }
+
+  /** Opens the sandbox: PoC lessons and recipes without a building (designer F2). */
+  openSandbox(level?: string): void {
+    if (level) this.atanorLevel.set(level);
+    this.atanorSite.set(null);
+    this.view.set('atanor');
+  }
+
+  /** Back from the Atanor view: to the planet with the building, else to the system. */
+  closeAtanor(): void {
+    this.view.set(this.planetAvailable() ? 'planet' : 'system');
   }
 
   startPlacement(kind: string): void {

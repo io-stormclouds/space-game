@@ -40,8 +40,18 @@ export interface ViewInput {
   selection: Selection;
   hover: PickResult | null;
   placement: Placement | null;
-  /** Atanor view: recipe level id to show (e.g. 'A_NAD'). */
+  /** Atanor view (harness): recipe level id to show (e.g. 'A_NAD'). `atanor` takes precedence. */
   atanorLevel?: string;
+  /** Atanor view: the machine of one Fabryka atanorowa, or the sandbox (AT1, A16). */
+  atanor?: AtanorViewInput | null;
+}
+
+/** What the Atanor view shows. */
+export interface AtanorViewInput {
+  /** Recipe ('A_NAD') or level id ('level-1-dimer', 'L1'…). */
+  level: string;
+  /** Level of the building the machine stands in: board and limits (§8.1). Null in the sandbox. */
+  buildingLevel: number | null;
 }
 
 export interface RenderStats {

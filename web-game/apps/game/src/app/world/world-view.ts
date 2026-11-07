@@ -42,6 +42,8 @@ type DevWindow = Window & {
     screenOfUnit(id: string): Point | null;
     /** Tiles of the body's near side on the page, nearest to the camera first. */
     frontTiles(bodyId: string): Array<Point & { index: number }>;
+    /** Buildings of a kind: id, body and tile indices (for clicking them in e2e tests). */
+    structures(kind: string): Array<{ id: string; bodyId: string; tiles: number[] }>;
   };
 };
 
@@ -107,6 +109,10 @@ export class WorldView {
           screenOf: (id) => this.page(this.probe()?.screenOf(id)),
           screenOfUnit: (id) => this.page(this.probe()?.screenOfUnit(id)),
           frontTiles: (bodyId) => this.frontTiles(bodyId),
+          structures: (kind) =>
+            (this.game.world()?.structures ?? [])
+              .filter((s) => s.kind === kind)
+              .map((s) => ({ id: s.id, bodyId: s.bodyId, tiles: s.tiles.map((t) => Number(t.slice(t.lastIndexOf(':') + 1))) })),
         };
       }
       const loop = (now: number) => {
@@ -150,7 +156,7 @@ export class WorldView {
       selection: this.ui.selection(),
       hover: this.ui.hover(),
       placement: p?.preview ? { kind: p.kind, tiles: p.preview.tiles, valid: p.preview.valid } : null,
-      atanorLevel: this.ui.atanorLevel(),
+      atanor: this.ui.atanorInput(),
     };
   }
 

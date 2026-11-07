@@ -38,13 +38,15 @@ export function levelHexes(level: LevelConfig): HexCoord[] {
 }
 
 /**
- * Board radius: the building level's board (§8.1, e.g. L1 = 19 hexes = radius 2) for recipe
- * levels, but never smaller than what the level touches (PoC levels have no building level).
+ * Board radius: the building level's board (§8.1, e.g. L1 = 19 hexes = radius 2) — the level of
+ * the building the machine stands in, else the recipe's minimum — but never smaller than what the
+ * level touches (PoC levels have no building level).
  */
-export function boardRadius(level: LevelConfig): number {
+export function boardRadius(level: LevelConfig, buildingLevel: number | null = null): number {
   const origin = { q: 0, r: 0 };
   const content = Math.max(0, ...levelHexes(level).map((h) => Atanor.hexDistance(origin, h)));
-  const building = level.recipe ? Atanor.getAtanorBuildingLevel(level.recipe.buildingLevel)?.boardRadius ?? 0 : 0;
+  const at = buildingLevel ?? level.recipe?.buildingLevel ?? null;
+  const building = at !== null ? Atanor.getAtanorBuildingLevel(at)?.boardRadius ?? 0 : 0;
   return Math.max(2, building, content);
 }
 

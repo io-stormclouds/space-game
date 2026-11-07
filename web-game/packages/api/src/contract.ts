@@ -16,7 +16,7 @@ import type {
 // Everything that crosses it is plain, structured-clone-safe data.
 
 /** Playable scenarios and the load levels of F5 (generated from them, deterministic). */
-export type ScenarioId = 'tau-ceti' | 'planeta-matka' | 'load-s' | 'load-m' | 'load-l';
+export type ScenarioId = 'tau-ceti' | 'planeta-matka' | 'fabryka' | 'load-s' | 'load-m' | 'load-l';
 
 export const TEMPO_PRESETS = [1, 10, 60, 600] as const;
 export type Tempo = number;

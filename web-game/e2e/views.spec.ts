@@ -1,19 +1,32 @@
 import { expect, test, type Page } from '@playwright/test';
 
-// F4 acceptance: System, Galaxy and Atanor are reachable from the HUD; the overlay shows draw calls
-// and triangles for each; after 20 view switches the GPU counters return to the baseline; never
-// more than one WebGL context (W13 A).
+// F4 acceptance: System and Galaxy are reachable from the HUD, the Atanor from the designer's
+// sandbox (A16: a building's Atanor opens from its card, see atanor.spec.ts); the overlay shows draw
+// calls and triangles for each; after 20 view switches the GPU counters return to the baseline;
+// never more than one WebGL context (W13 A).
 
 const perf = async (page: Page) =>
   page.evaluate(() => Object.fromEntries([...document.querySelectorAll('[data-perf]')].map((e) => [e.getAttribute('data-perf')!, e.textContent!.trim()])));
 
 const KINDS: Record<string, string> = { Planeta: 'planet', 'Układ': 'system', Galaktyka: 'galaxy', Atanor: 'atanor' };
 
+/** The Atanor sandbox from the designer panel (F2 → Atanor → open), panel closed again. */
+async function openSandbox(page: Page): Promise<void> {
+  await page.keyboard.press('F2');
+  const p = page.locator('wg-designer-panel');
+  await p.locator('[data-tab="atanor"]').click();
+  await p.locator('[data-action="open-atanor"]').click();
+  await page.keyboard.press('F2');
+}
+
 /** Switches view and waits until the overlay reports that view with something drawn. */
 async function showView(page: Page, key: string, name: string): Promise<Record<string, string>> {
-  await page.keyboard.press(key);
-  const views = page.getByRole('navigation', { name: 'Przełącznik widoku' });
-  await expect(views.getByRole('button', { name })).toHaveAttribute('aria-current', 'page');
+  if (name === 'Atanor') await openSandbox(page);
+  else {
+    await page.keyboard.press(key);
+    const views = page.getByRole('navigation', { name: 'Przełącznik widoku' });
+    await expect(views.getByRole('button', { name })).toHaveAttribute('aria-current', 'page');
+  }
   await expect
     .poll(async () => {
       const p = await perf(page);
@@ -44,7 +57,9 @@ test.beforeEach(async ({ page }) => {
 test('each view is reachable from the HUD and reports its counters with one WebGL context', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
-  for (const [key, name] of [['1', 'Planeta'], ['2', 'Układ'], ['3', 'Galaktyka'], ['4', 'Atanor']] as const) {
+  // the switch has three views; `4` no longer opens anything (A16)
+  await expect(page.getByRole('navigation', { name: 'Przełącznik widoku' }).getByRole('button')).toHaveCount(3);
+  for (const [key, name] of [['1', 'Planeta'], ['2', 'Układ'], ['3', 'Galaktyka'], ['', 'Atanor']] as const) {
     const p = await showView(page, key, name);
     expect(Number(p['calls'])).toBeGreaterThan(0);
     expect(Number(p['calls'])).toBeLessThanOrEqual(150); // init.md budget
@@ -58,7 +73,7 @@ test('after 20 view switches the geometry and texture counts return to the basel
   test.setTimeout(120_000);
   // The baseline is the state after one full cycle: the planet view builds tile edges and building
   // models lazily, when the camera gets close, so the first visit allocates more than a quick glance.
-  const cycle: Array<[string, string]> = [['3', 'Galaktyka'], ['4', 'Atanor'], ['1', 'Planeta'], ['2', 'Układ']];
+  const cycle: Array<[string, string]> = [['3', 'Galaktyka'], ['', 'Atanor'], ['1', 'Planeta'], ['2', 'Układ']];
   for (const [key, name] of cycle) {
     await showView(page, key, name);
     await settledGpu(page);
@@ -74,15 +89,3 @@ test('after 20 view switches the geometry and texture counts return to the basel
   expect(await settledGpu(page)).toBe(baseline);
 });
 
-test('Atanor building view: the reference solution runs; pause and one step from the command card', async ({ page }) => {
-  await showView(page, '4', 'Atanor');
-  const ticks = page.locator('[data-atanor="ticks"]');
-  await expect.poll(async () => Number(await ticks.textContent()), { timeout: 15_000 }).toBeGreaterThan(2);
-  await page.keyboard.press('p'); // Wstrzymaj
-  const paused = Number(await ticks.textContent());
-  await page.waitForTimeout(1500);
-  expect(Number(await ticks.textContent())).toBe(paused);
-  await page.keyboard.press('k'); // Krok
-  await expect(ticks).toHaveText(String(paused + 1));
-  await expect(page.locator('wg-selection-panel')).toContainText('Nadprzewodnik');
-});

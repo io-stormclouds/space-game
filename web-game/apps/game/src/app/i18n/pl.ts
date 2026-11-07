@@ -94,7 +94,7 @@ export const PL = {
     tempoGroup: 'Tempo czasu',
     energy: 'Energia',
     crew: 'Załoga',
-    keysHint: 'Klawisze: 1–4 widoki · Spacja pauza · + / − tempo · Esc anuluj · ` wydajność',
+    keysHint: 'Klawisze: 1–3 widoki · Spacja pauza · + / − tempo · Esc anuluj · ` wydajność',
   },
   mission: {
     tab: 'Rozkaz misji',
@@ -187,7 +187,9 @@ export const PL = {
   },
   atanor: {
     tab: 'Fabryka atanorowa',
+    sandbox: 'Piaskownica',
     building: (l: number | null) => (l ? `budynek L${l}` : 'poziom szkoleniowy PoC'),
+    site: (body: string, level: number) => `${body} · Fabryka atanorowa L${level}`,
     ticks: 'Takty (CYKLE)',
     delivered: 'Dostarczone',
     cycles: 'Cykle na produkt',
@@ -234,7 +236,8 @@ export const PL = {
     demolish: { label: 'Rozbierz', note: 'Zwrot 50% materiałów' },
     addRover: { label: 'Dodaj łazik', note: 'Skraca czas budowy' },
     recipe: { label: (name: string) => `Proces: ${name}`, note: 'Następna receptura budynku' },
-    atanor: { label: 'Otwórz Atanor', note: 'Widok budynku: program maszyny' },
+    atanor: { label: 'Maszyna', note: 'Widok budynku: projekt i program maszyny' },
+    atanorBack: { label: 'Wróć', note: (where: string) => `Wraca do widoku ${where}` },
     build: { label: 'Buduj', note: 'Otwiera katalog budowy' },
     moveTo: { label: 'Jedź do', note: 'Wskaż pole w widoku · PPM na polu: jedź od razu' },
     home: { label: 'Wróć do portu', note: 'Łazik jedzie na pole portu kosmicznego' },
@@ -418,7 +421,7 @@ export const PL = {
     },
     atanor: {
       intro: 'A3: model ekonomii liczy receptury Atanora na liczbach dokumentu (§8.3). Pomiar pochodzi z widoku budynku: uruchom maszynę i poczekaj, aż takt się ustali. Oba wiersze liczone przy parametrach dokumentu, więc różnica to tylko pomiar.',
-      open: 'Otwórz widok Atanor',
+      open: 'Piaskownica: otwórz widok Atanor',
       use: 'Wstaw zmierzone do szkicu',
       useNote: 'Potem „Zastosuj” w Parametrach',
       now: (id: string, c: string, a: number, r: number) => `W widoku: ${id} · cykle na produkt ${c} · obszar ${a} · ramiona ${r}`,

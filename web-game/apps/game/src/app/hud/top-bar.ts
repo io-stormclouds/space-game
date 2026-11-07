@@ -58,7 +58,8 @@ export class TopBar {
   protected readonly ui = inject(UiState);
   protected readonly designer = inject(Designer);
   protected readonly tempos = TEMPO_PRESETS.filter((p) => p !== 10);
-  protected readonly views: ViewKind[] = ['planet', 'system', 'galaxy', 'atanor'];
+  /** The Atanor is the view of a building (A16): opened from its card, not from the switch. */
+  protected readonly views: ViewKind[] = ['planet', 'system', 'galaxy'];
   protected readonly tempo = computed(() => this.game.snapshot()?.tempo ?? 60);
   protected readonly paused = computed(() => this.game.snapshot()?.paused ?? false);
   /** The planet camera needs a body to look at: a selected body, the chosen site or a home base. */

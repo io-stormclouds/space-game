@@ -14,6 +14,7 @@ export function appViewFactories(): Partial<Record<ViewKind, ViewFactory>> {
     planet: async () => (await render()).createSystemView(),
     system: async () => (await render()).createSystemView(),
     galaxy: async () => (await render()).createGalaxyView({ starName }),
-    atanor: async () => (await render()).loadAtanorView(),
+    // the board stays clear of the HUD: top bar 48 px, dock 240 px, floating panels on both sides
+    atanor: async () => (await render()).loadAtanorView({ insets: { top: 64, bottom: 256, left: 300, right: 300 } }),
   };
 }

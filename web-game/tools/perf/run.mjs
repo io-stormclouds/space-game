@@ -26,7 +26,16 @@ const SCENARIOS = [
   { id: 'L', preset: 'obciazenie-l', views: ['planet', 'system', 'galaxy'] },
   { id: 'Atanor', preset: 'kolonia', views: ['atanor'] },
 ];
-const KEYS = { planet: '1', system: '2', galaxy: '3', atanor: '4' };
+const KEYS = { planet: '1', system: '2', galaxy: '3' };
+
+/** The Atanor has no view key (A16): the sandbox opens from the designer panel (F2). */
+async function openView(page, view) {
+  if (view !== 'atanor') return page.keyboard.press(KEYS[view]);
+  await page.keyboard.press('F2');
+  await page.click('wg-designer-panel [data-tab="atanor"]');
+  await page.click('wg-designer-panel [data-action="open-atanor"]');
+  await page.keyboard.press('F2');
+}
 
 // Budgets: init.md (download, draw calls, triangles) and W18 B (FPS: 60 in S, 30 in M; L measured only).
 const BUDGETS = {
@@ -131,7 +140,7 @@ async function main() {
     await page.waitForSelector('.game[data-ready="true"]', { timeout: 120_000 });
     const startMs = Date.now() - t0;
     for (const view of sc.views) {
-      await page.keyboard.press(KEYS[view]);
+      await openView(page, view);
       await page.waitForTimeout(WARMUP_MS);
       const tracing = sc.id === 'M' && view === 'system';
       if (tracing) await browser.startTracing(page, { path: join(results, 'trace-M-system.json'), screenshots: false });

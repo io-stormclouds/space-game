@@ -18,6 +18,11 @@
 .game__float > * { pointer-events: auto; }
 .game__dock { grid-row: 3; grid-column: 1; z-index: 2; display: grid; grid-template-columns: 220px minmax(0, 1fr) auto; grid-template-rows: minmax(0, 1fr); gap: var(--hud-space-5); padding: var(--hud-space-3) var(--hud-space-6) var(--hud-space-6); align-items: stretch; min-height: 0; }
 .game__dock > * { min-height: 0; }
+/* D37 (K4): both rows of the 4×2 command card fit the 240 px dock with their labels
+   (the DS cell is 72 px high; the grid used to shrink and clip the second row). */
+.game__dock .hud-cmd { --hud-size-cell-h: 56px; }
+.game__dock .hud-cmd__grid { flex-shrink: 0; }
+.game__dock .hud-cmd__inspector { min-height: 0; }
 
 .panel { padding: var(--hud-space-6) var(--hud-space-5) var(--hud-space-5); display: flex; flex-direction: column; gap: var(--hud-space-3); min-width: 0; }
 .panel h2, .panel h3 { margin: 0; }

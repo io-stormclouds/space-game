@@ -140,6 +140,8 @@ export class AtanorView implements View, AtanorControls {
   private playing = false;
   private tps: number;
   private lastInputLevel: string | undefined | null = null;
+  /** Level of the building the machine stands in (AT1); null in the sandbox. */
+  private siteLevel: number | null = null;
   private dirty = true;
 
   constructor(
@@ -222,11 +224,16 @@ export class AtanorView implements View, AtanorControls {
   }
 
   update(input: ViewInput, dtSeconds: number): void {
-    const wanted = input.atanorLevel;
+    const wanted = input.atanor?.level ?? input.atanorLevel;
     if (wanted !== this.lastInputLevel) {
       this.lastInputLevel = wanted;
       const level = resolveAtanorLevel(wanted ?? DEFAULT_ATANOR_LEVEL);
       if (level && level.id !== this.level.id) this.setLevel(level.id);
+    }
+    const site = input.atanor?.buildingLevel ?? null;
+    if (site !== this.siteLevel) {
+      this.siteLevel = site;
+      this.relayout();
     }
     this.advance(dtSeconds);
     if (!this.app || !this.dirty) return;
@@ -337,6 +344,7 @@ export class AtanorView implements View, AtanorControls {
       metrics: this.metrics,
       playing: this.playing,
       ticksPerSecond: this.tps,
+      siteLevel: this.siteLevel,
     });
   }
 
@@ -394,7 +402,7 @@ export class AtanorView implements View, AtanorControls {
   }
 
   private relayout(): void {
-    this.layout = fitHexLayout(this.width, this.height, boardRadius(this.level), this.insets);
+    this.layout = fitHexLayout(this.width, this.height, boardRadius(this.level, this.siteLevel), this.insets);
     this.drawStatic();
     this.dirty = true;
   }
