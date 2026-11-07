@@ -228,6 +228,9 @@ export class Simulation {
     const w = this.world;
     const ship = w.ships.find((s) => s.id === shipId);
     if (!ship) return { type: 'COMMAND_REJECTED', reason: 'NO_SHIP' };
+    // a star is no destination: nothing to dock at or land on
+    const target = w.bodies.find((b) => b.id === to);
+    if (target?.kind === 'STAR') return { type: 'COMMAND_REJECTED', shipId, reason: 'NOT_LANDABLE', detail: target.name };
     if (ship.state === 'IN_TRANSIT' || !ship.currentBodyId) return { type: 'COMMAND_REJECTED', shipId, reason: 'IN_TRANSIT' };
     if (ship.currentBodyId === to) return { type: 'COMMAND_REJECTED', shipId, reason: 'ALREADY_THERE' };
     if (w.scan.state === 'RUNNING' && w.scan.shipId === shipId) return { type: 'COMMAND_REJECTED', shipId, reason: 'SCAN_RUNNING' };

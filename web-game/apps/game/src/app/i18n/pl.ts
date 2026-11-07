@@ -268,6 +268,7 @@ export const PL = {
     NO_MOTHERSHIP: 'Brak statku-matki',
     NO_SHUTTLE: 'Brak wolnego promu',
     NO_COLONY: 'Najpierw postaw port kosmiczny',
+    NOT_LANDABLE: 'Na gwieździe nie można wylądować',
   } satisfies Record<RejectReason, string>,
   events: {
     SCAN_STARTED: () => 'Skan pasywny układu rozpoczęty',

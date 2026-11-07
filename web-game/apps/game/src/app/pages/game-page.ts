@@ -111,7 +111,7 @@ export class GamePage {
     if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
     const view = VIEW_KEYS[e.key];
     if (view) {
-      if (view === 'planet' && this.game.colonyBodyId() === null) return;
+      if (view === 'planet' && !this.ui.planetAvailable()) return;
       e.preventDefault();
       this.ui.view.set(view);
       return;

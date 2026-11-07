@@ -7,6 +7,7 @@ import {
   computed,
   effect,
   inject,
+  isDevMode,
   signal,
   untracked,
   viewChild,
@@ -24,6 +25,8 @@ export { VIEW_FACTORIES };
 
 /** Real pixels a pointer may move between down and up and still count as a click (PoC: 5 px). */
 const DRAG_PX = 5;
+
+type DevWindow = Window & { wgWorld?: { screenOf(id: string): { x: number; y: number } | null } };
 
 /**
  * The world view: hosts the scenes (RenderHost), runs the animation loop, turns clicks into
@@ -81,6 +84,8 @@ export class WorldView {
         this.render = new RenderHost(this.hostEl().nativeElement, { views: this.factories, assetsBase: 'assets/' });
         this.ready.set(true);
       }
+      // dev builds only: where a body is on the page, for the e2e tests (like the harness's screenOf)
+      if (isDevMode()) (window as DevWindow).wgWorld = { screenOf: (id) => this.screenOf(id) };
       const loop = (now: number) => {
         this.raf = requestAnimationFrame(loop);
         this.frame(now);
@@ -105,6 +110,7 @@ export class WorldView {
     inject(DestroyRef).onDestroy(() => {
       cancelAnimationFrame(this.raf);
       window.removeEventListener('resize', onResize);
+      delete (window as DevWindow).wgWorld;
       this.render?.dispose();
       this.render = null;
     });
@@ -169,6 +175,15 @@ export class WorldView {
     });
   }
 
+  /** Page position of a body centre in the planet/system scene, or null when not visible. */
+  private screenOf(id: string): { x: number; y: number } | null {
+    const scene = (this.render?.currentView as { internals?: { screenOf(id: string): { x: number; y: number; visible: boolean } | null } } | null)?.internals;
+    const p = scene?.screenOf(id);
+    if (!p?.visible) return null;
+    const r = this.hostEl().nativeElement.getBoundingClientRect();
+    return { x: r.left + p.x, y: r.top + p.y };
+  }
+
   private pickAt(e: PointerEvent): PickResult | null {
     const input = this.input();
     if (!this.render || !input) return null;
@@ -192,7 +207,16 @@ export class WorldView {
     const bodyOf = (p: PickResult) => (p.kind === 'BODY' || p.kind === 'TILE' || p.kind === 'STRUCTURE' ? p.bodyId : null);
     if ((this.ui.targeting() || secondary) && ship && bodyOf(pick)) {
       this.ui.targeting.set(false);
+      // the domain refuses a star (NOT_LANDABLE); the rejection shows in the log
       await this.game.command({ type: 'MOVE_SHIP', shipId: ship.id, to: bodyOf(pick)! });
+      return;
+    }
+    // Układ: choosing a planet or moon (a body with a surface grid) zooms in on it in the planet
+    // view, where the colony is built; the star and the belt stay selected in the overview
+    const chosen = this.ui.view() === 'system' ? bodyOf(pick) : null;
+    if (chosen && world.bodies.find((b) => b.id === chosen)?.surfaceGrid) {
+      this.ui.select({ kind: 'BODY', bodyId: chosen });
+      this.ui.view.set('planet');
       return;
     }
     switch (pick.kind) {

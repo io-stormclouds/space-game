@@ -163,14 +163,24 @@ export class CommandsService {
     const c = t.commands;
     const body = world.bodies.find((b) => b.id === bodyId)!;
     const canChoose = !world.colony.siteBodyId && !!body.profile && body.kind !== 'BELT';
+    // infrastructure grows from the port: building is ordered on the body that has one
+    const hasPort = world.structures.some((s) => s.kind === 'HQ' && s.bodyId === bodyId);
+    const choose = canChoose
+      ? this.slot('choose', t.scan.choose, 'Enter', 'rally', { variant: 'primary', description: t.scan.final, run: () => void this.chooseSite(bodyId) })
+      : null;
+    const build = body.surfaceGrid
+      ? hasPort
+        ? this.slot('build', c.build.label, 'B', 'build', { variant: 'primary', description: c.build.note, run: () => this.ui.buildMenu.set(true) })
+        : this.locked('build', c.build.label, 'B', t.reject.NO_COLONY, 'build')
+      : null;
+    // the main action first: choosing the site during the scan, building once there is a port
     const slots: Array<CommandSlot | null> = [
-      this.locked('probe', c.probe.label, 'W', t.cmd.notYet),
+      choose ?? build,
       this.slot('zoom', c.zoom.label, 'Z', 'research', { description: c.zoom.note, run: () => this.ui.view.set('planet') }),
+      this.locked('probe', c.probe.label, 'W', t.cmd.notYet),
       this.locked('compare', c.compare.label, 'V', t.cmd.notYet),
       this.locked('mark', c.mark.label, 'M', t.cmd.notYet),
-      canChoose
-        ? this.slot('choose', t.scan.choose, 'Enter', 'rally', { variant: 'primary', description: t.scan.final, run: () => void this.chooseSite(bodyId) })
-        : null,
+      choose ? build : null,
     ];
     return { title: t.cmd.title, context: `Skaner · ${body.name}`, status: 'CC-02', slots };
   }

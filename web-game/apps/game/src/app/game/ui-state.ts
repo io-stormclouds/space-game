@@ -36,9 +36,14 @@ export class UiState {
     return this.game.colonyBodyId();
   });
 
+  /** The planet view needs a body to look at: a selected body, else the colony or home base. */
+  readonly planetAvailable = computed(() => this.focusBodyId() !== null);
+
   select(s: Selection): void {
     this.selection.set(s);
     this.buildMenu.set(false);
+    // e.g. a planet chosen in the overview before there is a colony, then deselected
+    if (this.view() === 'planet' && !this.planetAvailable()) this.view.set('system');
   }
 
   clear(): void {

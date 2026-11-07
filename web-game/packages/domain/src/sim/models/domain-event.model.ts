@@ -43,6 +43,8 @@ export const REJECT_CODES = [
   'NO_MOTHERSHIP',
   'NO_SHUTTLE',
   'NO_COLONY',
+  // flight targets
+  'NOT_LANDABLE',
 ] as const;
 
 export type RejectReason = (typeof REJECT_CODES)[number];

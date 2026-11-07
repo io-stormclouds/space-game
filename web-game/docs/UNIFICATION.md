@@ -307,6 +307,9 @@ Na prośbę „decyzje wg rekomendacji” rozstrzygam pytania P1–P6 i kwestie 
 | D27 | Telemetria | Zbiera od startu każdej gry, także przy zamkniętym panelu (wykres ma historię). Sygnały aktualizowane z migawkami (~10 Hz), nie przy każdym zdarzeniu. |
 | D28 | Równoległość e2e | 6 przeglądarek naraz (CI: 2). Przy 12 WebGL programowy (SwiftShader) przeciążał procesor i testy widoków przekraczały czas. |
 | D29 | Zwrot E0 | Nie jest parametrem w panelu: k ery E0 = 1 z definicji modelu. |
+| D30 | Gwiazda jako cel lotu | Na prośbę użytkownika: nie da się na niej wylądować ani do niej polecieć. Domena odrzuca `MOVE_SHIP` do gwiazdy kodem `NOT_LANDABLE` („Na gwieździe nie można wylądować”). Arka startuje przy gwieździe i może z niej odlecieć. |
+| D31 | Wybór planety w widoku Układ | Na prośbę użytkownika: kliknięcie planety lub księżyca z siatką zaznacza ciało i przełącza na widok Planeta ze zbliżeniem. Gwiazda i pas zostają zaznaczone w przeglądzie. Mapa w doku i lista skanu zaznaczają bez zmiany widoku. Widok Planeta jest dostępny, gdy jest ciało w fokusie (zaznaczone albo kolonia). |
+| D32 | Budowa z karty ciała | Karta skanera planety ma „Buduj” (B): aktywne na ciele z portem kosmicznym, na pozostałych zablokowane z powodem „Najpierw postaw port kosmiczny”. Główna akcja karty (wybór miejsca albo budowa) jest w pierwszym rzędzie. |
 
 ## 5a. Znane problemy
 
@@ -315,6 +318,8 @@ Na prośbę „decyzje wg rekomendacji” rozstrzygam pytania P1–P6 i kwestie 
 | K1 | Łuk Béziera między ciałami może przejść przez gwiazdę | domena: `TransferSystem` / `BezierPath.arc` |
 | K2 | Nakładka 2D w widoku układu to drugi przebieg renderowania; `renderer.info` widzi tylko ostatni, więc liczniki pochodzą ze `stats()` widoku | `packages/render/src/system` |
 | K3 | Przy wczytaniu zapisu łazik w drodze zaczyna bieżący odcinek od nowa | domena: `RoverSystem` |
+| K4 | Drugi rząd karty rozkazów jest ucięty o 27 px (widać ikonę i klawisz, bez podpisu). Siatka potrzebuje 2 × 72 px, a w doku 240 px dostaje 118 px; `overflow-x: auto` pozwala jej się skurczyć. Dotyczy wszystkich kart, np. „Załóż kolonię” Arki. | `design-system` `CommandCard.css` + dok 240 px w `game-hud.css` |
+| K5 | Prawy przycisk i „Leć do…” zawsze wysyłają Arkę (albo pierwszy statek), nie zaznaczony statek; zaznaczony frachtowiec dostaje kartę Arki | `world-view.ts`, `commands.ts` |
 
 ## 6. Pytania otwarte
 

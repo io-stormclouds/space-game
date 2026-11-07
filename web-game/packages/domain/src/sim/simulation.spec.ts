@@ -92,6 +92,18 @@ describe('Canvas flow on the unified domain (W06 A: Tau Ceti)', () => {
     expect(f.sim.grids.has(TC_BELT)).toBe(false);
   });
 
+  it('a star is no flight target: the order is rejected and the ship stays where it is', () => {
+    const f = playFirstSession(true);
+    const ark = () => f.world.ships.find((s) => s.id === ARK_ID)!;
+    expect(ark()).toMatchObject({ state: 'DOCKED', currentBodyId: TC_E });
+    expect(f.send({ type: 'MOVE_SHIP', shipId: ARK_ID, to: TAU_CETI_ID })).toEqual([
+      { type: 'COMMAND_REJECTED', shipId: ARK_ID, reason: 'NOT_LANDABLE', detail: 'Tau Ceti' },
+    ]);
+    const t0 = f.sim.time;
+    f.runUntil(() => f.sim.time >= t0 + 5, 6);
+    expect(ark()).toMatchObject({ state: 'DOCKED', currentBodyId: TC_E });
+  });
+
   it('enforces the order of the flow: scan before choosing, the Ark in orbit before the port', () => {
     const f = new Flow();
     expect(f.send({ type: 'CHOOSE_COLONY_SITE', bodyId: TC_E })[0]).toMatchObject({ reason: 'NOT_SCANNED' });
