@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { StructureKind } from '../game/models/structure.model';
 import { BodyId, RoverId, ShipId } from '../shared/ids';
 import { AsteroidView } from './asteroid-view';
+import { ModelTheme } from './model-registry';
 import { PlanetGridView } from './planet-grid-view';
 import { StructureView } from './structure-view';
 
@@ -21,6 +22,10 @@ export interface BodyView {
   structures: Map<StructureKind, StructureView>;
   /** Deposit markers (rocks), instanced. */
   decor: StructureView | null;
+  /** Art style of this body's models. */
+  theme: ModelTheme;
+  /** Showcase-colony dressing: one instanced mesh per model file (buildings, props, connectors). */
+  dressing: Map<string, StructureView>;
 }
 
 export interface ShipView {

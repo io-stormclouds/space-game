@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import { DRESS_INFO } from '../game/colony/colony-layout';
 import { RESOURCE_INFO } from '../game/models/resource.model';
 import { STRUCTURE_INFO } from '../game/models/structure.model';
 import { CommandService } from '../state/command.service';
@@ -40,7 +41,14 @@ import { SimulationService } from '../state/simulation.service';
             }
             <div class="text-[11px] text-emerald-100/60 mt-1">zbudowano w t = {{ s.builtAt.toFixed(0) }} s</div>
           </div>
-        } @else if (state.placementKind(); as kind) {
+        } @else if (dressing(); as d) {
+          <div class="rounded border border-sky-800 bg-sky-950/40 px-3 py-2 text-sky-200">
+            <div class="font-semibold">{{ d.name }}</div>
+            <div class="text-xs text-sky-100/80">{{ d.description }}</div>
+            <div class="text-[11px] text-sky-100/60 mt-1">Makieta kolonii pokazowej: bez kosztu, mocy i wydobycia. Budowa tutaj ją zastąpi.</div>
+          </div>
+        }
+        @if (state.selectedTileStructure() ? null : state.placementKind(); as kind) {
           <button
             class="w-full rounded bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-500 px-3 py-1.5 font-medium"
             [disabled]="!canBuildHere()"
@@ -50,7 +58,7 @@ import { SimulationService } from '../state/simulation.service';
           @if (!canBuildHere()) {
             <div class="text-xs text-amber-300">{{ reason() }}</div>
           }
-        } @else {
+        } @else if (!state.selectedTileStructure()) {
           <div class="text-xs text-slate-500">Wybierz budowlę w menu na dole, aby ją tu postawić.</div>
         }
         <div class="text-[11px] text-slate-500">Budowle: {{ bodyStructureCount() }} na tym ciele · {{ state.structures().length }} łącznie</div>
@@ -71,6 +79,14 @@ export class TilePanel {
   protected readonly bodyName = computed(() => {
     const sel = this.state.selectedTile();
     return sel ? this.state.body(sel.bodyId)?.name ?? sel.bodyId : '';
+  });
+
+  /** Showcase-colony dressing on this tile (only while no real structure stands there). */
+  protected readonly dressing = computed(() => {
+    const sel = this.state.selectedTile();
+    const b = sel ? this.sim.colonies.get(sel.bodyId)?.tiles.get(sel.tileIndex)?.building : null;
+    if (!b) return null;
+    return b in DRESS_INFO ? DRESS_INFO[b as keyof typeof DRESS_INFO] : STRUCTURE_INFO[b as keyof typeof STRUCTURE_INFO];
   });
 
   protected readonly kindLabel = computed(() => (this.tile()?.kind === 'PENT' ? 'pięciokąt' : 'sześciokąt'));

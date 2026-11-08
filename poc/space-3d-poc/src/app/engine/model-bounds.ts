@@ -1,0 +1,61 @@
+/**
+ * Bounds of every recentred model (Kenney, composites, new KayKit specs) as the library flattens them.
+ * Generated from the files; `model-library.spec.ts` fails if a number drifts from its file.
+ */
+export const MODEL_BOUNDS: Readonly<Record<string, { footprint: number; height: number; triangles: number }>> = {
+  astronautA: { footprint: 0.483, height: 0.793, triangles: 296 }, // x 0.48 z 0.33
+  astronautB: { footprint: 0.483, height: 0.793, triangles: 314 }, // x 0.48 z 0.33
+  barrel: { footprint: 0.200, height: 0.250, triangles: 56 }, // x 0.20 z 0.17
+  barrels: { footprint: 0.550, height: 0.350, triangles: 268 }, // x 0.55 z 0.50
+  basemodule_B: { footprint: 2.317, height: 1.000, triangles: 620 }, // x 2.08 z 2.32
+  basemodule_D: { footprint: 2.444, height: 1.000, triangles: 780 }, // x 2.44 z 2.14
+  basemodule_garage: { footprint: 2.374, height: 1.000, triangles: 770 }, // x 2.00 z 2.37
+  cargo_A_packed: { footprint: 0.521, height: 0.530, triangles: 176 }, // x 0.52 z 0.52
+  cargo_A_stacked: { footprint: 1.020, height: 1.021, triangles: 488 }, // x 1.02 z 1.02
+  cargodepot_B: { footprint: 2.178, height: 1.020, triangles: 966 }, // x 2.08 z 2.18
+  containers_A: { footprint: 0.500, height: 0.200, triangles: 280 }, // x 0.50 z 0.50
+  containers_B: { footprint: 0.500, height: 0.200, triangles: 280 }, // x 0.50 z 0.50
+  corridor: { footprint: 1.000, height: 1.000, triangles: 84 }, // x 1.00 z 1.00
+  crater: { footprint: 0.826, height: 0.118, triangles: 60 }, // x 0.71 z 0.83
+  craterLarge: { footprint: 0.886, height: 0.120, triangles: 60 }, // x 0.89 z 0.89
+  eco_module: { footprint: 2.000, height: 2.000, triangles: 1841 }, // x 2.00 z 2.00
+  hangar_largeA: { footprint: 3.000, height: 1.000, triangles: 412 }, // x 2.00 z 3.00
+  hangar_largeB: { footprint: 3.000, height: 1.100, triangles: 360 }, // x 2.20 z 3.00
+  hangar_roundA: { footprint: 3.271, height: 1.500, triangles: 166 }, // x 3.27 z 2.83
+  hangar_roundB: { footprint: 3.271, height: 1.800, triangles: 166 }, // x 3.27 z 2.83
+  hangar_roundGlass: { footprint: 3.271, height: 1.400, triangles: 113 }, // x 3.27 z 2.83
+  hangar_smallA: { footprint: 2.000, height: 1.000, triangles: 280 }, // x 2.00 z 2.00
+  hangar_smallB: { footprint: 2.000, height: 1.000, triangles: 284 }, // x 2.00 z 2.00
+  kaykit_launch: { footprint: 1.422, height: 1.542, triangles: 2102 }, // x 1.37 z 1.42
+  kenney_command: { footprint: 3.271, height: 2.055, triangles: 730 }, // x 3.27 z 2.83
+  kenney_ice: { footprint: 2.213, height: 0.840, triangles: 868 }, // x 2.21 z 1.36
+  kenney_launch: { footprint: 2.000, height: 3.100, triangles: 634 }, // x 2.00 z 2.00
+  kenney_mine: { footprint: 1.500, height: 2.220, triangles: 568 }, // x 1.50 z 1.50
+  kenney_pad: { footprint: 2.000, height: 0.160, triangles: 152 }, // x 2.00 z 2.00
+  kenney_power: { footprint: 1.600, height: 2.400, triangles: 952 }, // x 1.60 z 1.15
+  kenney_silicite: { footprint: 1.938, height: 2.200, triangles: 1080 }, // x 1.94 z 1.29
+  kenney_storage: { footprint: 1.177, height: 0.350, triangles: 964 }, // x 1.18 z 1.05
+  lights: { footprint: 0.680, height: 0.998, triangles: 356 }, // x 0.68 z 0.68
+  machine_generatorLarge: { footprint: 1.300, height: 0.683, triangles: 126 }, // x 1.00 z 1.30
+  machine_wireless: { footprint: 0.750, height: 0.600, triangles: 174 }, // x 0.75 z 0.50
+  pipe_straight: { footprint: 1.000, height: 0.600, triangles: 80 }, // x 0.69 z 1.00
+  rock_A: { footprint: 0.533, height: 0.250, triangles: 30 }, // x 0.53 z 0.50
+  rock_B: { footprint: 0.803, height: 0.401, triangles: 36 }, // x 0.70 z 0.80
+  rock_crystals: { footprint: 0.851, height: 0.337, triangles: 364 }, // x 0.85 z 0.80
+  rock_crystalsLargeA: { footprint: 0.919, height: 0.541, triangles: 384 }, // x 0.83 z 0.92
+  rock_largeA: { footprint: 0.919, height: 0.500, triangles: 176 }, // x 0.92 z 0.83
+  rock_largeB: { footprint: 0.939, height: 0.500, triangles: 172 }, // x 0.93 z 0.94
+  rocks_B: { footprint: 1.881, height: 1.067, triangles: 160 }, // x 1.88 z 1.74
+  rocks_smallA: { footprint: 0.937, height: 0.105, triangles: 60 }, // x 0.94 z 0.87
+  rocks_smallB: { footprint: 0.729, height: 0.186, triangles: 48 }, // x 0.73 z 0.70
+  rover: { footprint: 0.350, height: 0.385, triangles: 172 }, // x 0.30 z 0.35
+  satelliteDish: { footprint: 0.688, height: 0.616, triangles: 274 }, // x 0.69 z 0.57
+  satelliteDish_large: { footprint: 0.849, height: 0.814, triangles: 186 }, // x 0.85 z 0.74
+  space_farm_large: { footprint: 2.000, height: 0.300, triangles: 328 }, // x 2.00 z 2.00
+  spacetruck: { footprint: 0.893, height: 0.566, triangles: 1118 }, // x 0.49 z 0.89
+  structure_low: { footprint: 1.750, height: 1.000, triangles: 422 }, // x 1.75 z 1.75
+  tunnel_straight_A: { footprint: 2.000, height: 0.600, triangles: 608 }, // x 2.00 z 0.93
+  tunnel_straight_B: { footprint: 2.000, height: 0.600, triangles: 284 }, // x 2.00 z 0.80
+  turret_double: { footprint: 0.900, height: 0.700, triangles: 876 }, // x 0.90 z 0.60
+  turret_single: { footprint: 0.722, height: 0.900, triangles: 576 }, // x 0.60 z 0.72
+};

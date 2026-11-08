@@ -1,18 +1,21 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { ModelLibrary } from './model-library';
-import { ALL_MODELS, SHIP_MODEL, STRUCTURE_MODELS } from './model-registry';
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { ModelLibrary, SceneSource } from './model-library';
+import { ALL_MODELS, ModelPart, SHIP_MODEL, STRUCTURE_MODELS, THEMES, isRecentred, packOf } from './model-registry';
 
-const ASSETS = join(process.cwd(), 'public', 'assets', 'kaykit');
+const ASSETS = join(process.cwd(), 'public', 'assets');
 
 /**
- * Loads a glTF from disk with its .bin embedded as a data URI and textures stripped,
+ * Loads a KayKit glTF from disk with its .bin embedded as a data URI and textures stripped,
  * so GLTFLoader.parse works in jsdom without network or image decoding.
  */
 function gltfForTest(file: string): string {
-  const json = JSON.parse(readFileSync(join(ASSETS, `${file}.gltf`), 'utf-8'));
+  const dir = join(ASSETS, 'kaykit');
+  const json = JSON.parse(readFileSync(join(dir, `${file}.gltf`), 'utf-8'));
   for (const buffer of json.buffers) {
-    const bin = readFileSync(join(ASSETS, buffer.uri));
+    const bin = readFileSync(join(dir, buffer.uri));
     buffer.uri = `data:application/octet-stream;base64,${bin.toString('base64')}`;
   }
   delete json.images;
@@ -21,8 +24,24 @@ function gltfForTest(file: string): string {
   return JSON.stringify(json);
 }
 
+/** Disk-backed scene source: KayKit via the data-URI glTF above, Kenney .glb as an ArrayBuffer (no textures). */
+const diskSource: SceneSource = (part: ModelPart) => {
+  const loader = new GLTFLoader();
+  const data: string | ArrayBuffer =
+    part.pack === 'kaykit'
+      ? gltfForTest(part.file)
+      : (() => {
+          const buf = readFileSync(join(ASSETS, 'kenney', `${part.file}.glb`));
+          // copy into this realm's ArrayBuffer: GLTFLoader checks `instanceof ArrayBuffer`
+          const ab = new ArrayBuffer(buf.length);
+          new Uint8Array(ab).set(buf);
+          return ab;
+        })();
+  return new Promise((resolve, reject) => loader.parse(data, '', (g) => resolve(g.scene), reject));
+};
+
 describe('ModelLibrary', () => {
-  const lib = new ModelLibrary();
+  const lib = new ModelLibrary(undefined, diskSource);
 
   afterAll(() => lib.dispose());
 
@@ -46,14 +65,45 @@ describe('ModelLibrary', () => {
     expect(asset.geometry.boundingBox!.min.y).toBeCloseTo(-spec.baseOffset, 1);
   });
 
-  it('every registry entry matches its file: triangles, footprint, height, base offset', async () => {
+  it('every registry entry matches its file(s): triangles, footprint, height, base offset', async () => {
     for (const spec of ALL_MODELS) {
-      const asset = await lib.parse(spec.file, gltfForTest(spec.file));
+      const asset = await lib.load(spec);
       expect(asset.triangles, spec.file).toBe(spec.triangles);
       const footprint = spec === SHIP_MODEL || spec.file === 'spacetruck' ? asset.size.z : Math.max(asset.size.x, asset.size.z);
       expect(footprint, spec.file).toBeCloseTo(spec.footprint, 1);
       expect(asset.size.y, spec.file).toBeCloseTo(spec.height, 1);
       expect(asset.geometry.boundingBox!.min.y, spec.file).toBeCloseTo(-spec.baseOffset, 1);
     }
+  });
+
+  it('recentres Kenney models and composites on their footprint with the base at y = 0', async () => {
+    for (const spec of ALL_MODELS.filter(isRecentred)) {
+      const box = (await lib.load(spec)).geometry.boundingBox!;
+      expect(box.min.y, spec.file).toBeCloseTo(0, 5);
+      expect((box.min.x + box.max.x) / 2, spec.file).toBeCloseTo(0, 5);
+      expect((box.min.z + box.max.z) / 2, spec.file).toBeCloseTo(0, 5);
+    }
+  });
+
+  it('Kenney models bake material colours into vertices and share one material; KayKit keeps its atlas', async () => {
+    const kenney = ALL_MODELS.filter((s) => packOf(s) === 'kenney');
+    expect(kenney.length).toBeGreaterThan(20);
+    const assets = await Promise.all(kenney.map((s) => lib.load(s)));
+    const material = assets[0].material as THREE.MeshStandardMaterial;
+    expect(material.vertexColors).toBe(true);
+    for (const a of assets) {
+      expect(a.material, a.file).toBe(material);
+      expect(a.geometry.getAttribute('color'), a.file).toBeDefined();
+    }
+    // a hangar is several colours, not one
+    const hangar = assets.find((a) => a.file === 'hangar_roundB')!;
+    const c = hangar.geometry.getAttribute('color');
+    const distinct = new Set<string>();
+    for (let i = 0; i < c.count; i++) distinct.add(`${c.getX(i).toFixed(2)},${c.getY(i).toFixed(2)},${c.getZ(i).toFixed(2)}`);
+    expect(distinct.size).toBeGreaterThanOrEqual(3);
+
+    const kaykit = await lib.load(THEMES.KAYKIT.dressing.FARM[0]);
+    expect((kaykit.material as THREE.MeshStandardMaterial).vertexColors).toBe(false);
+    expect(kaykit.geometry.getAttribute('uv')).toBeDefined();
   });
 });

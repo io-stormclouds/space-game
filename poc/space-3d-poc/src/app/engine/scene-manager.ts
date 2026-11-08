@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { FrameSnapshot, TRAJECTORY_SAMPLES } from '../game/frame-snapshot';
+import { ColonyLayout } from '../game/colony/colony-layout';
 import { AsteroidShape } from '../game/math/asteroid-shape';
 import { CelestialBody } from '../game/models/celestial-body.model';
 import { PlanetGrid, Tile } from '../game/models/planet-grid.model';
@@ -11,9 +12,9 @@ import { AssetCache } from './asset-cache';
 import { AsteroidView } from './asteroid-view';
 import { BodyView, EntityViewRegistry } from './entity-view-registry';
 import { ModelAsset, ModelLibrary } from './model-library';
-import { ROCK_MODEL, ROVER_MODEL, SHIP_MODEL, STRUCTURE_MODELS, baseLift, fitScale } from './model-registry';
+import { ALL_MODELS, ModelSpec, ROVER_MODEL, SHIP_MODEL, baseLift, fitScale, pickVariant, themeOf } from './model-registry';
 import { PlanetGridView } from './planet-grid-view';
-import { StructureView } from './structure-view';
+import { StructureView, tileCornerYaw } from './structure-view';
 
 const FORWARD = new THREE.Vector3(0, 0, 1);
 const UP = new THREE.Vector3(0, 1, 0);
@@ -24,6 +25,8 @@ const ROVER_COLOR = 0xfbbf24;
 const SHIP_LENGTH = 8;
 const GHOST_OK = 0x22c55e;
 const GHOST_BAD = 0xef4444;
+/** Connectors span this fraction of the distance between two tile centres (buildings overlap their ends). */
+const LINK_SPAN: Record<'CORRIDOR' | 'PIPE', number> = { CORRIDOR: 0.62, PIPE: 1.0 };
 
 export interface TileRef {
   bodyId: BodyId;
@@ -46,6 +49,8 @@ export interface WorldViews {
   shapes: ReadonlyMap<BodyId, AsteroidShape>;
   structures: ReadonlyArray<Structure>;
   rovers: ReadonlyArray<Rover>;
+  /** Showcase-colony dressing per body (visual only). */
+  colonies: ReadonlyMap<BodyId, ColonyLayout>;
   /** Docking point per body in its local frame. */
   dockingOffset: (bodyId: BodyId) => { x: number; y: number; z: number };
 }
@@ -124,6 +129,7 @@ export class SceneManager {
       this.addBody(body, views.grids.get(body.id) ?? null, views.shapes.get(body.id) ?? null, new THREE.Vector3(off.x, off.y, off.z));
     }
     for (const ship of ships) this.addShip(ship);
+    for (const [id, layout] of views.colonies) this.addColony(id, layout, views.structures);
     for (const s of views.structures) this.addStructure(s);
     for (const r of views.rovers) this.addRover(r);
   }
@@ -159,19 +165,19 @@ export class SceneManager {
         if (this.highlightedRover === view.id) material.emissive.copy(HIGHLIGHT);
       }
     });
-    const structures = (Object.keys(STRUCTURE_MODELS) as StructureKind[]).map((kind) =>
-      this.models.load(STRUCTURE_MODELS[kind]).then((asset) => {
-        this.loaded.set(kind, asset);
-        for (const view of this.registry.bodies.values()) view.structures.get(kind)?.useModel(asset, STRUCTURE_MODELS[kind]);
-      }),
+    // every structure, dressing, prop, connector and deposit model of every theme (both packs, ~2 MB)
+    const others = ALL_MODELS.filter((s) => s !== SHIP_MODEL && s !== ROVER_MODEL).map((spec) =>
+      this.models.load(spec).then(
+        (asset) => {
+          this.loaded.set(spec.file, asset);
+          for (const sv of this.structureViews()) if (sv.spec.file === spec.file) sv.useModel(asset);
+        },
+        (err) => console.warn(`Model ${spec.file} unavailable, keeping a placeholder box`, err),
+      ),
     );
-    const rocks = this.models.load(ROCK_MODEL).then((asset) => {
-      this.loaded.set('ROCK', asset);
-      for (const view of this.registry.bodies.values()) view.decor?.useModel(asset, ROCK_MODEL);
-    });
-    return Promise.all([ship, rover, rocks, ...structures]).then(
+    return Promise.all([ship, rover, ...others]).then(
       () => undefined,
-      (err) => console.warn('KayKit models unavailable, keeping placeholder meshes', err),
+      (err) => console.warn('Models unavailable, keeping placeholder meshes', err),
     );
   }
 
@@ -205,13 +211,14 @@ export class SceneManager {
       this.ghost.name = 'Ghost';
     }
     if (this.ghost.parent !== view.group) view.group.add(this.ghost);
-    const spec = STRUCTURE_MODELS[ref.kind];
-    const asset = this.loaded.get(ref.kind);
+    const spec = view.theme.structures[ref.kind];
+    const asset = this.loaded.get(spec.file);
     const width = this.grids.get(ref.bodyId)!.tileEdge * Math.sqrt(3);
     if (asset && this.ghost.geometry !== asset.geometry) this.ghost.geometry = asset.geometry;
     const s = asset ? fitScale(spec, width) : width * 0.35;
     const lift = asset ? baseLift(spec, s) : s / 2;
     this.placeOnTile(this.ghost, tile, lift, s);
+    if (asset && spec.alignCorner !== undefined) this.ghost.rotateY(tileCornerYaw(tile) - spec.alignCorner);
     this.ghostMaterial.color.setHex(ref.ok ? GHOST_OK : GHOST_BAD);
     this.ghost.visible = true;
     this.ghostRef = ref;
@@ -224,15 +231,66 @@ export class SceneManager {
     if (!view.grid || !tile) return;
     let sv = view.structures.get(structure.kind);
     if (!sv) {
-      sv = new StructureView(view.grid.tileEdge * Math.sqrt(3));
-      const asset = this.loaded.get(structure.kind);
-      if (asset) sv.useModel(asset, STRUCTURE_MODELS[structure.kind]);
+      sv = this.newInstances(view, view.theme.structures[structure.kind]);
       sv.mesh.name = `Structures_${structure.kind}`;
-      view.group.add(sv.mesh);
       view.structures.set(structure.kind, sv);
     }
     sv.add(tile);
     view.decor?.remove(tile.index);
+    // a real building clears the showcase dressing (and any corridor or pipe) on its tile
+    for (const d of view.dressing.values()) d.remove(tile.index);
+  }
+
+  /** Lays out a showcase colony in the body's art style. Tiles with a real structure are left to it. */
+  private addColony(bodyId: BodyId, layout: ColonyLayout, structures: ReadonlyArray<Structure>): void {
+    const view = this.registry.bodies.get(bodyId);
+    const grid = this.grids.get(bodyId);
+    if (!view || !grid) return;
+    const built = new Set<string>(structures.filter((s) => s.bodyId === bodyId).map((s) => s.tileId));
+    const theme = view.theme;
+    const dress = (spec: ModelSpec): StructureView => {
+      let sv = view.dressing.get(spec.file);
+      if (!sv) {
+        sv = this.newInstances(view, spec);
+        sv.mesh.name = `Dressing_${spec.file}`;
+        view.dressing.set(spec.file, sv);
+      }
+      return sv;
+    };
+    for (const ct of layout.tiles.values()) {
+      const tile = grid.tiles[ct.tileIndex];
+      if (ct.building && !ct.real && !built.has(tile.id)) {
+        const spec = pickVariant(theme.dressing[ct.building], tile.index);
+        if (spec) {
+          dress(spec).add(tile);
+          view.decor?.remove(tile.index);
+        }
+      }
+      for (const p of ct.props) {
+        const spec = pickVariant(theme.props[p.kind], tile.index, p.corner);
+        if (spec) dress(spec).addProp(tile, p.corner, p.radial, p.yaw, p.scale);
+      }
+    }
+    for (const link of layout.links) {
+      dress(theme.links[link.kind]).addLink(grid.tiles[link.a], grid.tiles[link.b], LINK_SPAN[link.kind]);
+    }
+  }
+
+  /** New instanced mesh of one model on a body, with the model swapped in if it is already loaded. */
+  private newInstances(view: BodyView, spec: ModelSpec): StructureView {
+    const sv = new StructureView(view.grid!.tileEdge * Math.sqrt(3), spec);
+    const asset = this.loaded.get(spec.file);
+    if (asset) sv.useModel(asset);
+    view.group.add(sv.mesh);
+    return sv;
+  }
+
+  private *structureViews(): IterableIterator<StructureView> {
+    for (const view of this.registry.bodies.values()) {
+      yield* view.structures.values();
+      yield* view.dressing.values();
+      if (view.decor) yield view.decor;
+    }
   }
 
   /** Moves the docking point of a body (a landing pad was built). */
@@ -377,10 +435,7 @@ export class SceneManager {
   dispose(): void {
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
-    for (const v of this.registry.bodies.values()) {
-      for (const sv of v.structures.values()) sv.dispose();
-      v.decor?.dispose();
-    }
+    for (const sv of this.structureViews()) sv.dispose();
     this.ghostMaterial.dispose();
     this.scene.traverse((obj) => {
       if (obj instanceof THREE.Mesh || obj instanceof THREE.Line || obj instanceof THREE.Points) {
@@ -406,14 +461,15 @@ export class SceneManager {
     let gridView: PlanetGridView | null = null;
     let asteroidView: AsteroidView | null = null;
     let decor: StructureView | null = null;
+    const theme = themeOf(body.id);
     if (grid) {
       gridView = new PlanetGridView(grid, body.color);
       mesh = gridView.mesh;
       group.add(gridView.edges);
-      decor = new StructureView(grid.tileEdge * Math.sqrt(3), 0x78716c);
+      decor = new StructureView(grid.tileEdge * Math.sqrt(3), theme.deposit, 0x78716c);
       decor.mesh.name = 'Deposits';
-      const rocks = this.loaded.get('ROCK');
-      if (rocks) decor.useModel(rocks, ROCK_MODEL);
+      const rocks = this.loaded.get(theme.deposit.file);
+      if (rocks) decor.useModel(rocks);
       for (const t of grid.tiles) if (t.deposit) decor.add(t);
       group.add(decor.mesh);
     } else if (shape) {
@@ -455,6 +511,8 @@ export class SceneManager {
       asteroid: asteroidView,
       structures: new Map(),
       decor,
+      theme,
+      dressing: new Map(),
     });
   }
 

@@ -52,6 +52,7 @@ export class GameLoopService {
       shapes: this.sim.shapes,
       structures: this.state.structures(),
       rovers: this.state.rovers(),
+      colonies: this.sim.colonies,
       dockingOffset: (id) => this.sim.dockingOffset(id),
     });
     this.scene = scene;
@@ -87,6 +88,19 @@ export class GameLoopService {
 
   setHighlightedRover(roverId: RoverId | null): void {
     this.scene?.setHighlightedRover(roverId);
+  }
+
+  /**
+   * Looks at a tile from above and a little to the side (colony switcher): the camera goes out along
+   * the tile normal, tilted towards world up, so the base faces the viewer.
+   */
+  viewTile(bodyId: BodyId, tileIndex: number, distance = 150): void {
+    const tile = this.sim.grids.get(bodyId)?.tiles[tileIndex];
+    if (!tile) return;
+    const n = new THREE.Vector3(tile.normal.x, tile.normal.y, tile.normal.z);
+    const side = new THREE.Vector3(0, 1, 0).addScaledVector(n, -n.y);
+    if (side.lengthSq() < 1e-6) side.set(0, 0, 1);
+    this.cameraCtl.viewFrom(n.addScaledVector(side.normalize(), 0.3).setLength(distance));
   }
 
   setSelectedTile(ref: TileRef | null): void {

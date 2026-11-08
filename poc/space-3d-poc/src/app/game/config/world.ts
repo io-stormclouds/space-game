@@ -1,4 +1,5 @@
 import { BodyId } from '../../shared/ids';
+import { ColonyLayout, colonyCenter, planColony } from '../colony/colony-layout';
 import { buildGoldbergGrid } from '../math/goldberg-grid';
 import { Vec3, scale, vec3 } from '../math/vec3';
 import { PlanetGrid, Tile, TileId, tileId } from '../models/planet-grid.model';
@@ -6,7 +7,7 @@ import { Rover } from '../models/rover.model';
 import { Structure } from '../models/structure.model';
 import { WorldState } from '../reducer';
 import { GAME_CONSTANTS } from './game-constants';
-import { INITIAL_BODIES, INITIAL_ROVER, INITIAL_SHIPS, INITIAL_STOCKPILE, PLANET_ID } from './initial-world';
+import { COLONY_IDS, INITIAL_BODIES, INITIAL_ROVER, INITIAL_SHIPS, INITIAL_STOCKPILE, PLANET_ID } from './initial-world';
 
 /** Surface grids of every body that has one, generated once per process (deterministic). */
 export const WORLD_GRIDS: ReadonlyMap<BodyId, PlanetGrid> = new Map(
@@ -25,13 +26,36 @@ function structure(kind: Structure['kind'], bodyId: BodyId, index: number): Stru
   return { id: `${kind}@${tileId(bodyId, index)}`, kind, bodyId, tileId: tileId(bodyId, index), builtAt: 0 };
 }
 
-/** Home base starts with a landing pad on the top tile and a solar panel next to it. */
+/**
+ * Showcase colonies, one layout per colony body, all centred on the SAME tile (their grids are
+ * identical) so the three layouts match tile for tile. That tile faces the sun (and a bit up) as seen
+ * from the middle colony at t = 0; the colonies orbit so slowly that the bases stay lit all session.
+ */
+export const COLONY_LAYOUTS: ReadonlyMap<BodyId, ColonyLayout> = (() => {
+  const middle = INITIAL_BODIES.find((b) => b.id === COLONY_IDS[Math.floor(COLONY_IDS.length / 2)]);
+  const middleGrid = middle && WORLD_GRIDS.get(middle.id);
+  if (!middle || !middleGrid) return new Map();
+  const towardsSun = vec3(-Math.cos(middle.initialAngle), 0.9, -Math.sin(middle.initialAngle));
+  const center = colonyCenter(middleGrid, towardsSun).index;
+  return new Map(
+    COLONY_IDS.flatMap((id) => {
+      const grid = WORLD_GRIDS.get(id);
+      return grid ? [[id, planColony(grid, center)] as const] : [];
+    }),
+  );
+})();
+
+/**
+ * Home base starts with a landing pad on the top tile and a solar panel next to it (always first).
+ * Each showcase colony adds its own pad and solar panel; the rest of a colony is dressing.
+ */
 export const INITIAL_STRUCTURES: ReadonlyArray<Structure> = (() => {
   const grid = WORLD_GRIDS.get(PLANET_ID);
   if (!grid) return [];
   const pad = topTile(grid);
   const solar = pad.neighbors.find((n) => !grid.tiles[n].deposit) ?? pad.neighbors[0];
-  return [structure('LANDING_PAD', PLANET_ID, pad.index), structure('SOLAR', PLANET_ID, solar)];
+  const colonies = [...COLONY_LAYOUTS.values()].flatMap((l) => l.realStructures);
+  return [structure('LANDING_PAD', PLANET_ID, pad.index), structure('SOLAR', PLANET_ID, solar), ...colonies];
 })();
 
 export const INITIAL_ROVERS: ReadonlyArray<Rover> = (() => {

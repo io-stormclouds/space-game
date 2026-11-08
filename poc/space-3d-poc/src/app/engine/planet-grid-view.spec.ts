@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { INITIAL_BODIES, PLANET_ID } from '../game/config/initial-world';
 import { buildGoldbergGrid } from '../game/math/goldberg-grid';
 import { EntityViewRegistry } from './entity-view-registry';
+import { THEMES } from './model-registry';
 import { PickingService } from './picking.service';
 import { PlanetGridView } from './planet-grid-view';
 
@@ -24,6 +25,8 @@ describe('PlanetGridView + PickingService', () => {
     asteroid: null,
     structures: new Map(),
     decor: null,
+    theme: THEMES.KAYKIT,
+    dressing: new Map(),
   });
   group.updateMatrixWorld(true);
   const picking = new PickingService();

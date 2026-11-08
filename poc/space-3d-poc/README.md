@@ -61,3 +61,5 @@ For more information on using the Angular CLI, including detailed command refere
 ## Assets
 
 3D models of the ship and the buildings come from **KayKit : Space Base Bits (1.0 EXTRA)** by [Kay Lousberg](https://www.kaylousberg.com), licensed CC0 (see `public/assets/kaykit/LICENSE-KayKit.txt`). The full pack is kept in `assets/`; only the files the game uses are copied to `public/assets/kaykit/`.
+
+The showcase colonies also use **Kenney Space Kit 2.0** by [Kenney](https://www.kenney.nl), licensed CC0 (see `public/assets/kenney/LICENSE-Kenney.txt`). The full pack lives in `../../resources/kenny_space/`; only the `.glb` files the game uses are copied to `public/assets/kenney/`.

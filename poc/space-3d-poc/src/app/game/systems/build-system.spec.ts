@@ -25,8 +25,8 @@ describe('BuildSystem', () => {
     expect(e.type).toBe('STRUCTURE_BUILT');
     const after = reduce(w, e);
     expect(after.stockpile.FERRITE).toBe(w.stockpile.FERRITE - 15);
-    expect(after.structures).toHaveLength(3);
-    expect(after.structures[2]).toMatchObject({ kind: 'MINE', bodyId: PLANET_ID, tileId: tile.id, builtAt: 12 });
+    expect(after.structures).toHaveLength(INITIAL_STRUCTURES.length + 1);
+    expect(after.structures.at(-1)).toMatchObject({ kind: 'MINE', bodyId: PLANET_ID, tileId: tile.id, builtAt: 12 });
   });
 
   it('rejects an extractor without a matching deposit', () => {

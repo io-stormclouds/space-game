@@ -29,7 +29,9 @@ describe('GameStateService', () => {
     expect(state.spacecraft()).toHaveLength(1);
     expect(state.homeBase().id).toBe(PLANET_ID);
     expect(state.stockpile()).toEqual(INITIAL_STOCKPILE);
-    expect(state.structures().map((s) => s.kind)).toEqual(['LANDING_PAD', 'SOLAR']);
+    expect(state.structures().filter((s) => s.bodyId === PLANET_ID).map((s) => s.kind)).toEqual(['LANDING_PAD', 'SOLAR']);
+    // each showcase colony brings its own landing pad and solar panel
+    expect(state.structures().filter((s) => s.bodyId !== PLANET_ID).map((s) => s.kind)).toEqual(['LANDING_PAD', 'SOLAR', 'LANDING_PAD', 'SOLAR', 'LANDING_PAD', 'SOLAR']);
     expect(state.rovers()).toHaveLength(1);
     expect(state.selectedShip()).toBeNull();
   });
