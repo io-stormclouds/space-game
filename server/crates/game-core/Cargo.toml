@@ -1,0 +1,19 @@
+[package]
+name = "game-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+description = "Framework-free game domain of Space Game: world model, rules, economy catalog, deterministic simulation. Port of web-game/packages/domain."
+
+[lib]
+crate-type = ["rlib"]
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+indexmap = { workspace = true }
+libm = { workspace = true }
+
+[lints.rust]
+unsafe_code = "forbid"

@@ -1,0 +1,19 @@
+[package]
+name = "conformance"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+description = "Golden replays and numeric vectors recorded from the TypeScript domain, replayed through game-core and compared."
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "conformance"
+path = "src/main.rs"
+
+[dependencies]
+game-core = { path = "../crates/game-core" }
+serde = { workspace = true }
+serde_json = { workspace = true }

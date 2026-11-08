@@ -20,7 +20,11 @@
     "perf": "ng build && node tools/perf/run.mjs",
     "econ:docs": "npm run docs -w @space-game/economy-model",
     "econ:check": "npm run docs:check -w @space-game/economy-model",
-    "format": "prettier --write apps packages e2e"
+    "format": "prettier --write apps packages e2e",
+    "conformance:catalog": "tsx tools/conformance/export-catalog.ts",
+    "conformance:stars": "tsx tools/conformance/export-stars.ts",
+    "conformance:vectors": "tsx tools/conformance/record-vectors.ts",
+    "conformance:replays": "tsx tools/conformance/record-replays.ts"
   },
   "dependencies": {
     "@angular/common": "^22.0.0",

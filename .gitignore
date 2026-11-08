@@ -16,3 +16,6 @@ web-game/tools/perf/results/trace-*.json
 *.log
 .DS_Store
 Thumbs.db
+
+# Rust (server/)
+server/target/
