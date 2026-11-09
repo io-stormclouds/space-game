@@ -39,7 +39,7 @@ interface GridCase {
   n: number;
   depositSeed: number;
   weights?: Readonly<Record<string, number>>;
-  /** Body phase φ; the second aim is (−cos φ, 0.9, −sin φ) like `buildWorldTerrain`. */
+  /** Body phase φ; the second aim is (−cos φ, 0.9, −sin φ) like `terrainAim`. */
   phi: number;
 }
 

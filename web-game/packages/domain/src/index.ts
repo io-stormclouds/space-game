@@ -63,5 +63,3 @@ export { scaleCost, scaleTime, siteTerrain, tileBuildable, tileTerrain, type Sit
 export { buildTileFrames, kitScale, KIT_CORNER_RADIUS, KIT_TOP, type TileFrame } from './sim/terrain/tile-frame';
 export { warpPoint } from './sim/terrain/tile-warp';
 export { ROAD_MASKS, SHORE_MASKS, chooseVariant } from './sim/terrain/tile-variant';
-/** @deprecated compatibility layer for the renderer (T8 B2 moves it to `dressTerrain`) */
-export { TERRAIN_CONFIG, buildWorldTerrain } from './sim/terrain/world-terrain';

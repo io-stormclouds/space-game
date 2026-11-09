@@ -8,7 +8,7 @@ import {
   ARK_ID,
   TC_C,
   TC_E,
-  buildWorldTerrain,
+  dressTerrain,
   footprintTiles,
   standingStructure,
   storageOf,
@@ -51,7 +51,7 @@ function ok(cmd: Command, quiet = false): boolean {
  * terrain not under a ruined building, so the colony stands next to the ruins rather than on them.
  */
 function siteOrder(grid: PlanetGrid, near: number): number[] {
-  const plan = buildWorldTerrain(sim.world.bodies, sim.grids).get(grid.bodyId);
+  const plan = grid.terrain ? dressTerrain(grid) : undefined;
   const ruins = new Set((plan?.decor ?? []).filter((d) => !d.model.startsWith('detail_') && d.model !== 'mountain').map((d) => d.tile));
   const c = grid.tiles[near]!.normal;
   const dot = (t: PlanetGrid['tiles'][number]) => t.normal.x * c.x + t.normal.y * c.y + t.normal.z * c.z;

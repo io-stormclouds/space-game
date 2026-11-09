@@ -9,7 +9,6 @@ import { TAU_CETI_BODIES, TC_C } from '../scenarios/tau-ceti';
 import { classifyTerrain, terrainAim } from './terrain-classify';
 import { dressTerrain, generateTerrain } from './terrain-generator';
 import { TerrainPlan } from './terrain-types';
-import { buildWorldTerrain } from './world-terrain';
 
 /*
  * Golden of the terrain split (T8 A1): `__fixtures__/terrain-golden.json` was recorded with the generator
@@ -72,13 +71,10 @@ describe('terrain golden (recorded before the classify/dress split)', () => {
     expect(asGolden(dressTerrain(grid))).toEqual(tc);
   });
 
-  it('generateTerrain and the compatibility buildWorldTerrain reproduce it too', () => {
+  it('generateTerrain reproduces it too; only Tau Ceti c carries terrain', () => {
     expect(asGolden(generateTerrain(freshGrid(tcBody), { biome: 'medieval', seed: 2, aim: terrainAim(tcBody) }))).toEqual(tc);
     const grids = buildWorldGrids(TAU_CETI_BODIES);
-    expect(asGolden(buildWorldTerrain(TAU_CETI_BODIES, grids).get(TC_C)!)).toEqual(tc);
-    expect(asGolden(buildWorldTerrain(TAU_CETI_BODIES, grids, new Map([[TC_C, { biome: 'medieval', seed: 2 }]])).get(TC_C)!)).toEqual(tc);
-    // only Tau Ceti c has terrain
-    expect([...buildWorldTerrain(TAU_CETI_BODIES, grids).keys()]).toEqual([TC_C]);
+    expect([...grids].filter(([, g]) => g.terrain).map(([id]) => id)).toEqual([TC_C]);
   });
 
   it('reproduces the PoC home planet as mixed/7 (no settlement)', () => {
@@ -86,13 +82,6 @@ describe('terrain golden (recorded before the classify/dress split)', () => {
     expect(asGolden(plan)).toEqual(poc);
     expect(poc.settlementCenter).toBeNull();
     expect(poc.road).toEqual([]);
-  });
-
-  it('a config map classifies afresh, ignoring the classes the grid carries', () => {
-    const grids = buildWorldGrids(TAU_CETI_BODIES);
-    const mixed = buildWorldTerrain(TAU_CETI_BODIES, grids, new Map([[TC_C, { biome: 'mixed', seed: 7 }]])).get(TC_C)!;
-    expect(mixed).toEqual(generateTerrain(freshGrid(tcBody), { biome: 'mixed', seed: 7 }));
-    expect(mixed.settlementCenter).toBeNull();
   });
 
   it('bodies without terrain keep plain grids', () => {

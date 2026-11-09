@@ -10,7 +10,8 @@ import {
   TC_E,
   TC_F,
   buildWorldGrids,
-  buildWorldTerrain,
+  generateTerrain,
+  terrainAim,
   type BodyId,
   type CelestialBody,
   type PlanetGrid,
@@ -73,7 +74,7 @@ function casesOf(bodies: ReadonlyArray<CelestialBody>, ids: ReadonlyArray<BodyId
   for (const id of ids) {
     const grid = grids.get(id)!;
     for (const [config, cfg] of CONFIGS) {
-      const plan = buildWorldTerrain(bodies, grids, new Map([[id, cfg]])).get(id)!;
+      const plan = generateTerrain(grid, { ...cfg, aim: terrainAim(bodies.find((b) => b.id === id)!) });
       out.push({ body: String(id), config, grid, plan, view: new TerrainView(grid, plan) });
     }
   }

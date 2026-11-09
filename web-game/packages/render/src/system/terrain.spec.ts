@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import * as THREE from 'three';
-import { TAU_CETI_BODIES, TC_C, buildWorldGrids, buildWorldTerrain, type TerrainPlan } from '@space-game/domain';
+import { TAU_CETI_BODIES, TC_C, buildWorldGrids, dressTerrain, type TerrainPlan } from '@space-game/domain';
 import { HexKit, hexKitUrl, type KitModel } from './hex-kit';
 import { TerrainDecor } from './terrain-decor';
 import { RUIN_FADE, RUIN_GREY, TONE, isRuinBuilding, objectTone, ruinTone } from './terrain-tones';
@@ -15,7 +15,7 @@ const fromDisk = async (url: string): Promise<ArrayBuffer> => {
 
 const grids = buildWorldGrids(TAU_CETI_BODIES);
 const grid = grids.get(TC_C)!;
-const plan: TerrainPlan = buildWorldTerrain(TAU_CETI_BODIES, grids).get(TC_C)!;
+const plan: TerrainPlan = dressTerrain(grid);
 const R = grid.radius;
 
 function idsOf(p: TerrainPlan): Set<string> {

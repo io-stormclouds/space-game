@@ -4,7 +4,7 @@ import {
   OrbitSolver,
   asteroidShape,
   buildWorldGrids,
-  buildWorldTerrain,
+  dressTerrain,
   isWorking,
   tileIndexOf,
   vec3,
@@ -488,7 +488,8 @@ export class SystemScene {
     this.clearWorld();
     this.bodySig = sig;
     this.grids = buildWorldGrids(bodies);
-    this.terrainPlans = buildWorldTerrain(bodies, this.grids);
+    // hex-kit dressing of every grid that carries terrain (its classes come from the domain, T8)
+    this.terrainPlans = new Map([...this.grids].filter(([, g]) => g.terrain).map(([id, g]) => [id, dressTerrain(g)]));
     this.hexModels = null;
     this.solver = new OrbitSolver(bodies);
     this.extent = systemExtent(bodies);
