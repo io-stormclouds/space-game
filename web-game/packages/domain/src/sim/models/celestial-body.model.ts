@@ -1,4 +1,5 @@
 import { BodyId } from '../../shared/ids';
+import type { TerrainConfig } from '../terrain/terrain-types';
 import { Cost } from './resource.model';
 
 export type BodyKind = 'STAR' | 'PLANET' | 'MOON' | 'ASTEROID' | 'BELT';
@@ -44,6 +45,11 @@ export interface CelestialBody {
     depositSeed?: number;
     /** Relative weights of deposit materials; default FER, KRI and SIL equally (PoC). */
     depositWeights?: Readonly<Record<string, number>>;
+    /**
+     * Hex-kit terrain: tile classes and settlement roads generated from this style (`buildWorldGrids`),
+     * which change what building costs and how long it takes (`TERRAIN_RULES`). Absent = plain tiles.
+     */
+    terrain?: TerrainConfig;
   };
   /** Irregular, seeded mesh instead of a sphere (asteroids). */
   shape?: { seed: number; roughness: number };

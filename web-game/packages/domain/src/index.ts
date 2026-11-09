@@ -46,10 +46,22 @@ export { POC_SCENARIO } from './sim/scenarios/poc';
 export * from './sim/scenarios/tau-ceti';
 export * from './sim/config/initial-world';
 
-// hex-kit terrain: classes, kit tile per hexagon, settlement, decor (pure, deterministic)
+// hex-kit terrain: classes and settlement roads (gameplay), kit tile per hexagon and decor (render);
+// pure, deterministic
 export * from './sim/terrain/terrain-types';
-export { generateTerrain, MAX_TREES, MAX_ROCKS, type TerrainOptions } from './sim/terrain/terrain-generator';
+export {
+  classifyTerrain,
+  gridClassification,
+  terrainAim,
+  withTerrain,
+  type ClassifyOptions,
+  type SettlementRings,
+  type TerrainClassification,
+} from './sim/terrain/terrain-classify';
+export { generateTerrain, dressTerrain, MAX_TREES, MAX_ROCKS, type TerrainOptions } from './sim/terrain/terrain-generator';
+export { scaleCost, scaleTime, siteTerrain, tileBuildable, tileTerrain, type SiteTerrain, type TileTerrain } from './sim/terrain/terrain-rules';
 export { buildTileFrames, kitScale, KIT_CORNER_RADIUS, KIT_TOP, type TileFrame } from './sim/terrain/tile-frame';
 export { warpPoint } from './sim/terrain/tile-warp';
 export { ROAD_MASKS, SHORE_MASKS, chooseVariant } from './sim/terrain/tile-variant';
-export { TERRAIN_CONFIG, buildWorldTerrain, type TerrainConfig } from './sim/terrain/world-terrain';
+/** @deprecated compatibility layer for the renderer (T8 B2 moves it to `dressTerrain`) */
+export { TERRAIN_CONFIG, buildWorldTerrain } from './sim/terrain/world-terrain';

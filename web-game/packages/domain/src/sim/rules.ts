@@ -1,10 +1,12 @@
 import {
   STORAGE_CLASSES,
+  TERRAIN_RULES,
   computeEconomy,
   type BuildingDef,
   type Economy,
   type Recipe,
   type StorageClass,
+  type TerrainRules,
 } from '../economy';
 import { Cost } from './models/resource.model';
 import { StructureKind } from './models/structure.model';
@@ -165,6 +167,11 @@ export class Rules {
 
   recipe(id: string): Recipe {
     return this.economy.recipe(id);
+  }
+
+  /** What terrain does to building: buildable classes, cost and time in % (catalog data). */
+  terrain(): TerrainRules {
+    return TERRAIN_RULES;
   }
 
   /** Construction rover (ROV) or another vehicle at L1. */

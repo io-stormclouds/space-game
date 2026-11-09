@@ -7,9 +7,18 @@ import { Cost, addStock, canAfford, formatCost, missingFor, scaleStock } from '.
 import { Structure, StructureKind } from '../models/structure.model';
 import { WorldState, storageOf } from '../reducer';
 import { Rules } from '../rules';
+import { scaleCost, siteTerrain } from '../terrain/terrain-rules';
 
-export type BuildCheck = { ok: true; tiles: TileId[] } | { ok: false; reason: RejectReason; detail?: string };
 type Fail = { ok: false; reason: RejectReason; detail?: string };
+
+/**
+ * Result of the BUILD check. Past the terrain stage (the footprint fits on free, buildable tiles) it
+ * carries the terrain-adjusted `cost` and `timePct`, also when a later stage rejects (NO_DEPOSIT,
+ * NO_ATMOSPHERE, NO_RESOURCES, NO_POWER…), so the placement ghost can show the price.
+ */
+export type BuildCheck =
+  | { ok: true; tiles: TileId[]; cost: Cost; timePct: number }
+  | (Fail & { cost?: Cost; timePct?: number });
 
 /** Share of the paid materials returned (doc 5.1): cancelled construction 75%, demolition 50%. */
 export const CANCEL_REFUND = 0.75;
@@ -37,8 +46,11 @@ export class BuildSystem {
     return this.grids.get(bodyId)?.tiles.find((t) => t.id === id);
   }
 
-  /** Checks that do not depend on the tile: era, level cap, materials, power, crew, rover. Drives menu cards. */
-  availability(world: WorldState, bodyId: BodyId, kind: StructureKind, level = 1): { ok: true } | Fail {
+  /**
+   * Checks that do not depend on the tile: era, level cap, materials, power, crew, rover. Drives menu
+   * cards. `cost` replaces the catalog cost in the materials check (the terrain-adjusted cost of a site).
+   */
+  availability(world: WorldState, bodyId: BodyId, kind: StructureKind, level = 1, cost?: Cost): { ok: true } | Fail {
     if (!this.rules.has(kind)) return { ok: false, reason: 'NOT_BUILDABLE' };
     const spec = this.rules.spec(kind, level);
     if (level === 1 && !this.rules.isBuildable(kind)) return { ok: false, reason: 'NOT_BUILDABLE' };
@@ -47,8 +59,9 @@ export class BuildSystem {
     if (level > cap && kind !== 'HQ') return { ok: false, reason: 'LEVEL_CAP', detail: `port L${cap}` };
     if (!world.rovers.some((r) => r.bodyId === bodyId)) return { ok: false, reason: 'NO_ROVER' };
     const store = storageOf(world, bodyId);
-    if (!canAfford(store, spec.cost)) {
-      return { ok: false, reason: 'NO_RESOURCES', detail: `brakuje ${formatCost(missingFor(store, spec.cost))}` };
+    const need = cost ?? spec.cost;
+    if (!canAfford(store, need)) {
+      return { ok: false, reason: 'NO_RESOURCES', detail: `brakuje ${formatCost(missingFor(store, need))}` };
     }
     const power = powerShortfall(world, this.rules, bodyId, kind, level);
     if (power > 0) return { ok: false, reason: 'NO_POWER', detail: `brakuje ${fmt(power)} MW` };
@@ -57,7 +70,10 @@ export class BuildSystem {
     return { ok: true };
   }
 
-  /** Full check for one anchor tile. */
+  /**
+   * Full check for one anchor tile. Order (the same in Rust): NO_GRID → NOT_BUILDABLE → NO_FOOTPRINT →
+   * TILE_OCCUPIED → BAD_TERRAIN → NO_DEPOSIT → NO_ATMOSPHERE → availability with the terrain cost.
+   */
   check(world: WorldState, bodyId: BodyId, anchor: TileId, kind: StructureKind, rotation = 0): BuildCheck {
     const grid = this.grids.get(bodyId);
     const tile = grid?.tiles.find((t) => t.id === anchor);
@@ -69,26 +85,30 @@ export class BuildSystem {
     const tiles = indices.map((i) => tileId(bodyId, i));
     const occupied = new Set(world.structures.filter((s) => s.bodyId === bodyId).flatMap((s) => s.tiles));
     if (tiles.some((t) => occupied.has(t))) return { ok: false, reason: 'TILE_OCCUPIED' };
+    const rules = this.rules.terrain();
+    const terrain = siteTerrain(grid, indices, rules);
+    if (!terrain.buildable) return { ok: false, reason: 'BAD_TERRAIN', detail: rules.kinds[terrain.badKind!].name };
+    const cost = scaleCost(spec.cost, terrain.costPct);
+    const timePct = terrain.timePct;
     const deposit = this.depositCheck(world, tile, kind);
-    if (deposit) return deposit;
+    if (deposit) return { ...deposit, cost, timePct };
     if (spec.needsAtmosphere) {
       const body = world.bodies.find((b) => b.id === bodyId);
-      if (body?.atmosphere !== 'dense') return { ok: false, reason: 'NO_ATMOSPHERE' };
+      if (body?.atmosphere !== 'dense') return { ok: false, reason: 'NO_ATMOSPHERE', cost, timePct };
     }
-    const avail = this.availability(world, bodyId, kind);
-    return avail.ok ? { ok: true, tiles } : avail;
+    const avail = this.availability(world, bodyId, kind, 1, cost);
+    return avail.ok ? { ok: true, tiles, cost, timePct } : { ...avail, cost, timePct };
   }
 
-  /** Returns CONSTRUCTION_ORDERED (materials taken from the body's storage) or COMMAND_REJECTED. */
+  /** Returns CONSTRUCTION_ORDERED (terrain-adjusted materials taken from the body's storage) or COMMAND_REJECTED. */
   build(world: WorldState, bodyId: BodyId, anchor: TileId, kind: StructureKind, time: number, rotation = 0): DomainEvent {
     const check = this.check(world, bodyId, anchor, kind, rotation);
     if (!check.ok) return { type: 'COMMAND_REJECTED', reason: check.reason, detail: check.detail };
-    const cost = this.rules.spec(kind, 1).cost;
-    return { type: 'CONSTRUCTION_ORDERED', structure: this.site(kind, bodyId, check.tiles, cost, time), cost };
+    return { type: 'CONSTRUCTION_ORDERED', structure: this.site(kind, bodyId, check.tiles, check.cost, time, check.timePct), cost: check.cost };
   }
 
-  /** A new construction site at level 0. */
-  site(kind: StructureKind, bodyId: BodyId, tiles: TileId[], cost: Cost, time: number): Structure {
+  /** A new construction site at level 0; `timePct` (terrain, % of the catalog time) is stored only when ≠ 100. */
+  site(kind: StructureKind, bodyId: BodyId, tiles: TileId[], cost: Cost, time: number, timePct = 100): Structure {
     const recipe = this.rules.processes(kind)[0]?.id;
     return {
       id: `${kind}@${tiles[0]}`,
@@ -102,6 +122,7 @@ export class BuildSystem {
       progress: 0,
       paid: cost,
       builtAt: time,
+      ...(timePct !== 100 ? { timePct } : {}),
       ...(recipe ? { recipe, batch: null } : {}),
     };
   }

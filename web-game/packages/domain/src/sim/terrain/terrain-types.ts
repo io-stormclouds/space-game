@@ -5,6 +5,12 @@ export type TerrainBiome = 'mixed' | 'medieval';
 
 export type TerrainKind = 'grass' | 'forest' | 'rock' | 'snow' | 'water';
 
+/** Terrain style of one body (`CelestialBody.surfaceGrid.terrain`): biome and noise seed. */
+export interface TerrainConfig {
+  biome: TerrainBiome;
+  seed: number;
+}
+
 /** Which kit tile (`hex_forest_*`, `hex_water`) a hexagonal tile uses and how it is turned (whole sides). */
 export interface TileVariant {
   id: string;
@@ -27,7 +33,8 @@ export interface DecorItem {
 
 /**
  * Everything the renderer needs to dress one body, computed once from the grid and a seed
- * (deterministic, no I/O). Tiles are indexed like `PlanetGrid.tiles`.
+ * (deterministic, no I/O). Tiles are indexed like `PlanetGrid.tiles`. `kinds`, `road` and
+ * `settlementCenter` are the gameplay classification (`classifyTerrain`); the rest is render-only.
  */
 export interface TerrainPlan {
   bodyId: BodyId;

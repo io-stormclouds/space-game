@@ -417,6 +417,7 @@ export const PL = {
     NOT_LANDABLE: 'Na gwieździe nie można wylądować',
     MACHINE_INVALID: 'Maszyna nie mieści się w limitach budynku albo program ma błędne rozkazy',
     MACHINE_NOT_PRODUCING: 'Maszyna nie produkuje: próba nie znalazła powtarzalnego cyklu z dostawami',
+    BAD_TERRAIN: 'Teren nie nadaje się pod budowę',
   } satisfies Record<RejectReason, string>,
   events: {
     SCAN_STARTED: () => 'Skan pasywny układu rozpoczęty',

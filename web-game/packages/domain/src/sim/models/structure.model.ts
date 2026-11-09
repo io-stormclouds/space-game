@@ -36,6 +36,11 @@ export interface Structure {
   paid: Cost;
   /** Game time when it was ordered. */
   builtAt: number;
+  /**
+   * Build time of the first construction in % of the catalog time, from the terrain under the footprint
+   * (integer; set only when ≠ 100, dropped when the building is finished; upgrades ignore it).
+   */
+  timePct?: number;
   /** Selected production recipe (buildings with several). */
   recipe?: string;
   /** Production in progress. */

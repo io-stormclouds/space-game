@@ -51,6 +51,8 @@ export const REJECT_CODES = [
   // produce (no repeating cycle with deliveries)
   'MACHINE_INVALID',
   'MACHINE_NOT_PRODUCING',
+  // terrain (T8): a footprint tile cannot be built on (water); `detail` names its class
+  'BAD_TERRAIN',
 ] as const;
 
 export type RejectReason = (typeof REJECT_CODES)[number];

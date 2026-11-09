@@ -91,7 +91,9 @@ export class Simulation {
   ) {
     this.rules = new Rules(opts.economy, scenario.overrides);
     this.cfg = scenarioConstants(scenario);
-    this.grids = buildWorldGrids(scenario.bodies);
+    // grids (and their terrain) from the bodies of the save when continuing one: a world saved before a
+    // body got terrain keeps plain tiles, so the sim and the renderer see the same surface
+    this.grids = buildWorldGrids(opts.world?.bodies ?? scenario.bodies);
     this.shapes = new Map(scenario.bodies.filter((b) => b.shape).map((b) => [b.id, asteroidShape(b)]));
     this.solver = new OrbitSolver(scenario.bodies);
     this.snapshot = createSnapshot(scenario.bodies.map((b) => b.id));

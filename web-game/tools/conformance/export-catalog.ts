@@ -15,6 +15,7 @@ import {
   STARSHIP_MODULES,
   STARSHIP_UPGRADES,
   STORAGE_CLASSES,
+  TERRAIN_RULES,
   VEHICLES,
 } from '@space-game/domain';
 
@@ -31,6 +32,8 @@ const catalog = {
   fuelPerLy: FUEL_PER_LY,
   starshipModules: STARSHIP_MODULES,
   starshipUpgrades: STARSHIP_UPGRADES,
+  // T8: buildable classes, cost and time in % (Rules.terrain())
+  terrain: TERRAIN_RULES,
 };
 
 mkdirSync(dirname(out), { recursive: true });

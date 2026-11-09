@@ -7,6 +7,7 @@ import {
   shipId as toShipId,
   roverId as toRoverId,
   standingStructure,
+  tileBuildable,
   type BodyId,
   type Economy,
   type Rover,
@@ -69,11 +70,12 @@ export function buildLoad(level: LoadLevel, economy: Economy, seed = 5150): Simu
     };
   }
 
-  // buildings on free tiles, bodies in turn
+  // buildings on free tiles, bodies in turn; never on terrain that cannot be built on (water, T8)
   const bodies = [...sim.grids.keys()];
   const used = new Set(w.structures.flatMap((s) => s.tiles));
+  const terrain = sim.rules.terrain();
   const free = new Map<BodyId, number[]>(
-    bodies.map((b) => [b, sim.grids.get(b)!.tiles.filter((t) => !used.has(t.id)).map((t) => t.index)]),
+    bodies.map((b) => [b, sim.grids.get(b)!.tiles.filter((t) => !used.has(t.id) && tileBuildable(t, terrain)).map((t) => t.index)]),
   );
   const structures: Structure[] = [...w.structures];
   for (let i = structures.length, guard = 0; i < spec.structures && guard < spec.structures * 4; guard++) {
