@@ -69,7 +69,12 @@ Bezpośredni port liczył krok L w 2,7 ms; tabela specyfikacji budynków w `Rule
   - tempa, pauza, krok, rozkazy z odmowami, zapis;
   - **8 złotych powtórek** przez `replay`, dalsze kroki, `load` i znów dalsze kroki;
   - pętla z `tick`.
-- e2e: projekt Playwright `chromium-wasm` (`npm run e2e:wasm`) uruchamia te same testy z `sg.api=wasm`. Na tym komputerze pełny przebieg równoległy pada także na `mock-ts` (limity czasu przy programowym WebGL). Dlatego porównanie robiono na wybranych testach, pojedynczo.
+- e2e: projekt Playwright `chromium-wasm` (`npm run e2e:wasm`) uruchamia te same testy z `sg.api=wasm`. Wynik na tym komputerze (2026-11-09, Chrome, 2 workery, `flow.spec.ts`):
+  - test presetu przechodzi na `mock-ts`, `wasm` i `remote`;
+  - „Play flow” (logowanie → kolonia) przechodzi na `mock-ts` (50 s) i `remote` (13 s), a na `wasm` jest **niestabilny** (1 z 2 przebiegów, 2,2 min). Pada limit 5 s na kliknięcie portu w pętli budowy.
+  - Logika jest ta sama co w `remote` (ten sam `game-session`), więc to wydajność w przeglądarce: worker serializuje cały świat do JSON co 100 ms, a strona go parsuje.
+  - Do zrobienia: migawki rzadziej lub przyrostowo, `postMessage` z obiektem zamiast tekstu, `wasm-opt`.
+  - Pełnego zestawu e2e nie przepuszczono na żadnym trybie; wcześniejsze masowe porażki dawał zawieszony `ng serve` na porcie testów.
 - Zmienne Playwrighta: `E2E_CHANNEL=chrome` uruchamia zainstalowanego Chrome'a (przeglądarka Playwrighta 1248 nie jest tu pobrana), a `E2E_PORT` pozwala ominąć działający już `ng serve` na 4420, który Playwright użyłby ponownie.
 
 ## B4: serwer sieciowy, MVP (2026-11-09)
