@@ -70,18 +70,28 @@ describe('ModelLibrary (KayKit flattening, PoC model-library.spec)', () => {
     }
   });
 
-  it('recolours vertices only with palette tones times the swatch shade', async () => {
-    const asset = (await lib.load('windturbine_tall'))!;
-    const color = asset.geometry.getAttribute('color');
+  it('every model shares the one Space Base Bits atlas (its UVs drive the recolouring)', () => {
+    for (const id of ALL_MODEL_IDS) {
+      const images = (gltfJson(id).images ?? []) as Array<{ uri?: string }>;
+      expect(images.map((i) => i.uri), id).toEqual(['spacebits_texture.png']);
+    }
+  });
+
+  it('recolours vertices of every model only with palette tones times the swatch shade', async () => {
     const c = new THREE.Color();
     const tones = Object.values(MODEL_TONES).map((h) => new THREE.Color(h));
-    for (let i = 0; i < color.count; i += 7) {
-      c.setRGB(color.getX(i), color.getY(i), color.getZ(i));
-      const ok = tones.some((t) => {
-        const k = t.g > 0 ? c.g / t.g : 1;
-        return k >= 0.79 && k <= 1.16 && Math.abs(t.r * k - c.r) < 1e-4 && Math.abs(t.b * k - c.b) < 1e-4;
-      });
-      expect(ok, `vertex ${i}`).toBe(true);
+    for (const id of ALL_MODEL_IDS) {
+      const asset = (await lib.load(id))!;
+      expect(Object.keys(asset.geometry.attributes).sort(), id).toEqual(['color', 'normal', 'position']);
+      const color = asset.geometry.getAttribute('color');
+      for (let i = 0; i < color.count; i += 7) {
+        c.setRGB(color.getX(i), color.getY(i), color.getZ(i));
+        const ok = tones.some((t) => {
+          const k = t.g > 0 ? c.g / t.g : 1;
+          return k >= 0.79 && k <= 1.16 && Math.abs(t.r * k - c.r) < 1e-4 && Math.abs(t.b * k - c.b) < 1e-4;
+        });
+        expect(ok, `${id} vertex ${i}`).toBe(true);
+      }
     }
   });
 

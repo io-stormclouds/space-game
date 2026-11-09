@@ -15,7 +15,9 @@ import {
   TC_C,
   TC_E,
   footprintTiles,
+  standingStructure,
   tileIndexOf,
+  type Structure,
   type WorldState,
 } from '@space-game/domain';
 import type { PickResult, Placement, Selection, ViewInput } from '../view';
@@ -327,6 +329,60 @@ describe('SystemView (planet + system kinds, one scene)', () => {
     drill().getMatrixAt(0, m);
     expect(new THREE.Vector3().setFromMatrixColumn(m, 1).length()).toBeCloseTo(fy, 6);
     expect(sites().visible).toBe(false);
+  });
+
+  it('an upgrade across a level tier moves the structure to that tier\'s model batch (L2 → L3 → L5), and it all disposes', async () => {
+    const world = structuredClone(sim.world);
+    h = mount(snapshotOf(world), { loadModels: true });
+    await h.view.ready;
+    h.frames(2);
+    const s = scene(h);
+    const tile = facingTile(h, PLANET_ID, world);
+    const hab = standingStructure('HAB', PLANET_ID, [tile.index], 2);
+    const show = (x: Structure) => {
+      h.input = { ...h.input, snapshot: snapshotOf({ ...world, structures: [...world.structures, x] }) };
+      h.frames(1);
+    };
+    const layer = () => s.bodyParts(PLANET_ID)!.structures!;
+    const batch = (model: string) => layer().group.children.find((o) => o.name === `${PLANET_ID}_${model}`) as THREE.InstancedMesh | undefined;
+    const drawn = (model: string) => (batch(model)?.visible ? batch(model)!.count : 0);
+    const models = () => layer().partsOf(hab.id).map((p) => p.model);
+
+    show(hab);
+    expect(models()).toEqual(['basemodule_A']);
+    expect(drawn('basemodule_A')).toBe(1);
+    // upgrading to L3: still the L2 look, with the scaffold outline
+    show({ ...hab, state: 'UPGRADING', targetLevel: 3, progress: 0.5 });
+    expect(models()).toEqual(['basemodule_A']);
+    expect(drawn('basemodule_A')).toBe(1);
+    expect(drawn('basemodule_B')).toBe(0);
+    expect((layer().group.children.find((o) => o.name === `${PLANET_ID}_basemodule_A_Sites`) as THREE.LineSegments).visible).toBe(true);
+    // done: the instance moved to the L3 batch, the L2 batch is empty (no draw call)
+    show({ ...hab, level: 3, targetLevel: 3 });
+    expect(models()).toEqual(['basemodule_B']);
+    expect(drawn('basemodule_A')).toBe(0);
+    expect(batch('basemodule_A')!.visible).toBe(false);
+    expect(drawn('basemodule_B')).toBe(1);
+    expect(batch('basemodule_B')!.geometry.index!.count / 3).toBe(MODELS.basemodule_B.triangles);
+    // a level change alone (no state change, e.g. a loaded world) re-renders too
+    show({ ...hab, level: 5, targetLevel: 5 });
+    expect(models()).toEqual(['basemodule_E']);
+    expect(drawn('basemodule_B')).toBe(0);
+    expect(drawn('basemodule_E')).toBe(1);
+    // within a tier nothing is rebuilt: the same part objects
+    const parts = layer().partsOf(hab.id);
+    show({ ...hab, level: 6, targetLevel: 6 });
+    expect(layer().partsOf(hab.id)).toEqual(parts);
+    expect(layer().partsOf(hab.id)[0]).toBe(parts[0]);
+    // picking and tile ownership follow
+    expect(layer().tileOwner.get(tile.index)?.id).toBe(hab.id);
+    expect(h.pickAt(s.screenOfLocal(PLANET_ID, parts[0]!.center))).toMatchObject({ kind: 'STRUCTURE', bodyId: PLANET_ID, structureId: hab.id });
+
+    const owned = new Set([...resources(s.scene), ...resources(s.overlay.scene)]);
+    const disposed = new Set<unknown>();
+    for (const r of owned) r.addEventListener('dispose', () => disposed.add(r));
+    h.view.dispose();
+    expect([...owned].filter((r) => !disposed.has(r)).map((r) => r.type)).toEqual([]);
   });
 
   it('a ship in transit flies the plan curve with its flight path drawn; the selected one in signal', () => {

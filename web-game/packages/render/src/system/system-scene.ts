@@ -26,12 +26,12 @@ import { HexKit, type KitModel } from './hex-kit';
 import { LabelLayer } from './labels';
 import { ModelKit } from './model-kit';
 import type { FetchBytes } from './model-library';
-import { partsForKind, type ModelId } from './model-registry';
+import { partsFor, type ModelId } from './model-registry';
 import { SCENE, muteBodyColor, muteStarColor } from './palette';
-import { createFrame, defaultFocus, dockingOffsetOf, fitDistance, footprintFrame, nearestTile, rootBody, systemExtent } from './placement';
+import { createFrame, defaultFocus, dockingOffsetOf, fitDistance, nearestTile, rootBody, systemExtent } from './placement';
 import { PlanetGridView } from './planet-grid-view';
 import { ScreenOverlay, pixelRadius, projectPoint, ringHit, type ScreenPoint } from './screen-overlay';
-import { StructureLayer, partMatrix } from './structure-layer';
+import { StructureLayer, partFrame, partMatrix } from './structure-layer';
 import { TerrainDecor } from './terrain-decor';
 import { TerrainView } from './terrain-view';
 import { UnitsLayer, type UnitContext } from './units-layer';
@@ -188,14 +188,7 @@ export class SystemScene {
     this.loadModels = opts.loadModels !== false;
     this.units = new UnitsLayer(this.kit);
     this.scene.add(this.units.group);
-    for (let i = 0; i < 2; i++) {
-      const g = new THREE.LineSegments(this.kit.edges('structure_tall'), this.ghostOk);
-      g.name = `PlacementGhost${i}`;
-      g.matrixAutoUpdate = false;
-      g.visible = false;
-      g.renderOrder = 20;
-      this.ghosts.push(g);
-    }
+    for (let i = 0; i < 2; i++) this.ghost(i);
 
     this.rig = new CameraRig(opts.renderer.domElement ?? null);
     this.rig.setAspect(this.width / this.height);
@@ -733,18 +726,32 @@ export class SystemScene {
     const bv = this.placeFocus ? this.bodies.get(this.placeFocus) : undefined;
     const grid = bv?.grid?.grid;
     if (!p || !bv || !grid || p.tiles.length === 0) return;
-    partsForKind(p.kind).forEach((part, i) => {
-      const g = this.ghosts[i];
-      if (!g) return;
-      const own = part.at && part.at.every((k) => k < p.tiles.length) ? part.at.map((k) => p.tiles[k]!) : p.tiles;
-      footprintFrame(grid, own, this.frame);
-      partMatrix(this.frame, part.model, g.matrix, this.basis);
+    // a new building: the L1 look; parts sunk into the ground (a pit) stay out, the ghost draws through it
+    const parts = partsFor(p.kind, 1);
+    const above = parts.filter((part) => (part.offset?.y ?? 0) >= 0);
+    (above.length ? above : parts).forEach((part, i) => {
+      const g = this.ghost(i);
+      partMatrix(partFrame(grid, p.tiles, part, this.frame), part, g.matrix, this.basis);
       g.geometry = this.kit.edges(part.model);
       g.material = p.valid ? this.ghostOk : this.ghostBad;
       if (g.parent !== bv.group) bv.group.add(g);
       g.matrixWorldNeedsUpdate = true;
       g.visible = true;
     });
+  }
+
+  /** Placement ghost line object `i` (one per part of the placed kind), made on first use. */
+  private ghost(i: number): THREE.LineSegments {
+    let g = this.ghosts[i];
+    if (!g) {
+      g = new THREE.LineSegments(this.kit.edges('structure_tall'), this.ghostOk);
+      g.name = `PlacementGhost${i}`;
+      g.matrixAutoUpdate = false;
+      g.visible = false;
+      g.renderOrder = 20;
+      this.ghosts[i] = g;
+    }
+    return g;
   }
 
   private tilesOf(structureId: string): number[] {

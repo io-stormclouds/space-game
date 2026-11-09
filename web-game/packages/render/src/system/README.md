@@ -40,7 +40,7 @@ host.pick(x, y, input);         // piksele względem kontenera
 | `entity-view-registry.ts`, `picking.service.ts` | `system-scene.ts` (`pick`), `screen-overlay.ts` | jednostki w przestrzeni ekranu, test pudełek modeli, pierścień pasa |
 | `camera-controller.ts` | `camera-rig.ts` | dwa ujęcia, przelot 0,7 s, pamięć ujęcia gracza na tryb |
 | `model-library.ts` (+spec) | `model-library.ts` (+spec), `model-kit.ts` | GLB składany w pamięci, kolory z UV atlasu zamiast tekstury, placeholdery |
-| `model-registry.ts` (+spec) | `model-registry.ts` (+spec) | 14 plików, mapowanie rodzajów z katalogu, części (HQ = wieża + lądowisko) |
+| `model-registry.ts` (+spec) | `model-registry.ts` (+spec) | 36 plików, rodzaje z katalogu × progi poziomu (`partsFor`), części z `at` / `fill` / `offset` / `yaw` |
 | `asset-cache.ts` | pamięci podręczne w `system-scene.ts` | — |
 | — | `placement.ts`, `belt-view.ts`, `units-layer.ts`, `labels.ts`, `palette.ts` | nowe |
 
@@ -57,8 +57,9 @@ host.pick(x, y, input);         // piksele względem kontenera
 - **Stany budowli:**
   - PLANNED: obrys krawędzi modelu w `textDim`;
   - CONSTRUCTING: bryła rosnąca z `progress` (od 8%) i obrys docelowej sylwetki;
-  - UPGRADING: pełna bryła i obrys;
+  - UPGRADING: pełna bryła i obrys, nadal w wyglądzie obecnego poziomu;
   - ACTIVE: sama bryła.
+  - Wygląd zależy od progu poziomu (niżej, „Modele budowli i poziomy”). Plac budowy (L0) wygląda jak L1. Przejście progu przebudowuje warstwę: sygnatura układu zawiera próg, instancja przechodzi do innego `InstancedMesh`, a opustoszały batch jest ukryty i nie kosztuje draw calla.
 - **Nakładki (bez poświat):**
   - orbity w kolorze `metal`, orbita ciała w fokusie w `textFaint`;
   - przerywana ścieżka lotu: pozostała część, zaznaczony statek w `signal`;
@@ -94,7 +95,7 @@ host.pick(x, y, input);         // piksele względem kontenera
 
 ## Testy i harness
 
-- **Testy:** `npx vitest run packages/render/src/system`, 63 testy w 7 plikach.
+- **Testy:** `npx vitest run packages/render/src/system`, 85 testów w 9 plikach (po T7A).
   - `system-view.spec.ts` działa w jsdom z atrapą renderera. Sprawdza:
     - pick: kafelek, budowla, statek, łazik, `EMPTY`, małe ciało w układzie;
     - przełączenie bez nowych zasobów;
@@ -102,6 +103,10 @@ host.pick(x, y, input);         // piksele względem kontenera
     - odkrycie po skanie;
     - `dispose`: każda geometria i materiał, nasłuchy canvasu, DOM, 20 cykli.
   - Pozostałe pliki działają w zwykłym node: rejestr i pliki glTF z dysku, siatka, położenie stóp, krzywa lotu, paleta, pas i kamera.
+  - `model-registry.spec.ts`: każdy z 18 budowalnych rodzajów i HQ ma części na L1, L3 i L5, nigdy samo `structure_tall`; progi różnią się tam, gdzie mówi plan; każda część mieści się w swojej ramce na każdym ciele z siatką.
+  - `model-library.spec.ts`: każdy wpis rejestru zgadza się z plikiem (trójkąty, stopa, wysokość, przesunięcie podstawy), każdy plik wskazuje wspólny atlas, każdy wierzchołek dostaje odcień palety.
+  - `system-view.spec.ts`: ulepszenie L2 → L3 → L5 przenosi budowlę do batcha modelu danego progu, `dispose` zwalnia wszystko.
+- **Stykówka modeli:** `npx vite packages/render/harness/models --port 4432`, potem `node packages/render/harness/models/shot.mjs` zapisuje `docs/img/structures/t7a-sheet.png`. Każdy rodzaj × L1/L3/L5 przez prawdziwe `StructureLayer` i `ModelKit` na płaskich heksach (czasza bardzo dużej sfery). `?only=HQ,LAND&blocks=1` daje zbliżenie wybranych rodzajów.
 - **Harness:** `npx vite packages/render/harness/system --port 4431`.
   - Domyślnie gra przepływ kanwy: skan, port, prom, place. Z `?arrival` pokazuje stan przed skanem.
   - Klawisze: `1` i `2` zmieniają widok, `P` włącza ducha HQ, `F` ustawia fokus, `Esc` czyści zaznaczenie.
@@ -109,11 +114,10 @@ host.pick(x, y, input);         // piksele względem kontenera
 
 ## Znane luki
 
-- **Nie rysowane:**
-  - prom (`world.shuttles`) i zamówienia pojazdów;
-  - poziom budowli: L1–L5 mają ten sam model.
+- **Nie rysowane:** prom (`world.shuttles`) i zamówienia pojazdów.
 - **Orientacja:**
   - budowla na 3 kafelkach jest zwrócona do kafelka kotwicy; `rotation` z rozkazu nie trafia do `Structure`;
+  - budowla na 1 kafelku patrzy (+Z modelu) w pierwszy narożnik kafelka, więc strona z drzwiami (garaż) wypada różnie;
   - statek w locie ma oś +Z wzdłuż stycznej, a przechylenie jest nieokreślone.
 - **Stałe:**
   - asteroida maleje względem minerałów z pierwszej migawki, więc po zamontowaniu w środku gry skala startowa jest błędna;
@@ -125,12 +129,53 @@ host.pick(x, y, input);         // piksele względem kontenera
 
 1. **`STRUCTURE.tileIndex`:** zwracam kafelek pod kursorem albo kafelek stopy najbliższy trafieniu w model, a nie kotwicę. Tak duch rozmieszczenia podąża za kursorem. Czy tak ma być?
 2. **Środek kamery układu:** jest w gwieździe, zgodnie z zadaniem. Komentarz w `view.ts` mówi, że kamera układu centruje się na `focusBodyId`. Które ma obowiązywać?
-3. **Rodzaje bez modelu:** SMT, SIR, CON, LST, ATN, FIS i inne dostają `structure_tall`. Propozycje: FARM i HAB dostają `basemodule_A`, GAR `cargodepot_A`, MLT `water_storage`. Czy dograć więcej modeli KayKit (dokument wymienia 70) i które?
+3. **Mapowanie modeli (T7A):** tabela w „Modele budowli i poziomy” to propozycja do akceptacji na stykówce. TNK i MLT na L1–2 oraz MIN, ICE i SIT mają wspólny model (jak w planie). Czy rozróżnić je bardziej?
 4. **Arka:** dokuje jak każdy statek, więc nad lądowiskiem, jeśli jest. Według kanwy Arka zostaje na orbicie. Czy dać jej osobną, wyższą orbitę postojową?
 5. **Wybór małych ciał:** ciało poniżej 40 px w ujęciu układu zwraca `BODY`, a nie `TILE`. Czy próg jest dobry?
 6. **Etykiety:** zostają w pakiecie `render` (DOM), czy aplikacja wolałaby rysować je sama, na przykład z dodatkowymi danymi?
 7. **Ścieżki lotu:** krzywa z domeny (uniesienie +Y) potrafi przejść przez gwiazdę, na przykład lot Arki z e do f. Czy domena ma ją omijać?
 8. **Placement:** nie ma pola `rotation`. Czy duch HQ ma się obracać, czy orientacja wynika z kolejności `tiles` (kotwica pierwsza)?
+
+## Modele budowli i poziomy (T7A)
+
+`partsFor(kind, level)` w `model-registry.ts` wybiera części według progu poziomu (decyzja T-21): **L1–2, L3–4, L5**. `partsForKind(kind)` to L1 (duch rozmieszczenia), `modelsForKind(kind)` zwraca modele wszystkich progów. Część (`ModelPart`) to model na części stopy (`at`, indeksy w `structure.tiles`, kotwica = 0), z opcjonalnym własnym wypełnieniem (`fill`), przesunięciem w szerokościach ramki (`offset`: x w prawo, z do przodu, y w górę, ujemne wkopuje) i obrotem (`yaw`). Ten sam kod (`partFrame` + `partMatrix` w `structure-layer.ts`) stawia budowle i ducha. Stykówka: `docs/img/structures/t7a-sheet.png`.
+
+| Typ | L1–2 | L3–4 | L5 |
+|---|---|---|---|
+| HQ (3) | `structure_tall`@0 + `landingpad_small`@[1,2] | + 2 × `lights` na końcach lądowiska | `basemodule_E`@0 + `landingpad_large`@[1,2] + 2 × `lights` |
+| LAND | `landingpad_small` | `landingpad_large` + 2 × `lights` | j.w. |
+| HAB | `basemodule_A` | `basemodule_B` | `basemodule_E` |
+| FARM | `space_farm_small` | `space_farm_large` | `space_farm_large_sprinkler` |
+| GAR | `basemodule_garage` | j.w. | j.w. |
+| DEP | `cargodepot_A` | `cargodepot_B` | `cargodepot_C` |
+| SKL | `containers_A` | `roofmodule_cargo_A` | `cargo_A_stacked` |
+| TNK | `water_storage` | j.w. | j.w. |
+| MLT | `water_storage` | `water_storage` + `eco_module` obok siebie | j.w. |
+| SOL | `solarpanel` | `roofmodule_solarpanels` | j.w. |
+| WND | `windturbine_low` | `windturbine_tall` | j.w. |
+| MIN, ICE, SIT | `drill_structure` | `terrain_mining` (wkopany wykop) + `drill_structure` | j.w. |
+| REGX | `terrain_mining` (wkopany) + `rocks_B` (hałda) | j.w. | j.w. |
+| SMT (3) | `structure_tall`@0 + `cargodepot_B`@[1,2] | j.w. | `structure_tall`@0 + `cargodepot_C`@[1,2] |
+| SIR (3) | `structure_low`@0 + `water_storage`@[1,2] | j.w. | `structure_low`@0 + `eco_module`@[1,2] |
+| CON | `basemodule_D` + `eco_module` (silos) | j.w. | j.w. |
+| LST | `lander_base` + `cargo_A_packed` na nim | j.w. | j.w. |
+| ATN (7) | `basemodule_E`@0, na pierścieniu na zmianę `cargodepot_B` i `basemodule_B`, 6 × `tunnel_straight_B`@[0,k] | j.w. | j.w. |
+| GAS | `eco_module` | j.w. | j.w. |
+| HE3S (3) | `drill_structure`@0 + `water_storage`@[1,2] | j.w. | j.w. |
+| pozostałe (era ≥ 2, nieznane id) | `structure_low` | j.w. | j.w. |
+
+- **Odstępstwa od propozycji z planu (§8.1):**
+  - HAB L5: `basemodule_E` zamiast `dome`. `dome` to przezroczyste szkło bez atlasu; przekolorowane z UV daje cętkowaną kulę.
+  - SKL L3–4: `roofmodule_cargo_A` zamiast `containers_C`, bo w naszej palecie `containers_C` wygląda jak `containers_A`.
+  - MLT L3+ („+ `eco_module`”): dwa mniejsze zbiorniki obok siebie, bo dwie części na jednym kafelku nachodziłyby na siebie.
+  - `terrain_mining` to blok terenu 2 × 2 × 2 z osią w środku. MIN/ICE/SIT L3+ i REGX wkopują go (`offset.y`) tak, że widać tylko wykop. REGX dostaje hałdę `rocks_B`, żeby nie był samą dziurą.
+  - LAND L3+: na 1 kafelku `landingpad_large` wygląda prawie jak `landingpad_small` (oba wpasowane w kafelek), więc dochodzą maszty `lights`. HQ L3+ ma maszty na końcach lądowiska.
+  - SMT i SIR L5 dostają większy model (`cargodepot_C`, `eco_module`) zamiast „j.w.”: te modele i tak są w użyciu.
+  - CON: sam `basemodule_D` z daleka wygląda jak HAB, więc dochodzi silos `eco_module`.
+  - ATN: hale na pierścieniu i tunele do środka. `tunnel_straight_B` zamiast `_A` (284 zamiast 608 trójkątów, 18 zamiast 39 KB).
+  - Zastępstwo `DEFAULT_PARTS` to `structure_low` zamiast `structure_tall`. GAS (preset „fabryka”) dostaje `eco_module`, HE3S wiertło i zbiornik: jedno wiertło rozciągnięte na 3 kafelki było na księżycu wyższe niż R/2.
+- **Zasoby:** 22 nowe pliki `.gltf` + `.bin` (36 razem), +775 KB surowo, około 243 KB po gzip. `ModelKit.loadAll()` wczytuje je wszystkie przy montowaniu widoku.
+- **Draw calls:** jeden `InstancedMesh` na (ciało, model) w użyciu, plus jeden `LineSegments` na model, póki stoją place budowy. 18 budowalnych rodzajów i HQ używają razem 30 modeli: 19–20 w jednym progu, 30 przy kolonii ze wszystkimi rodzajami we wszystkich progach. Przedtem było 8. Kolonia M (L1, wypełniacze SOL, HAB, DEP, SKL, WND, LAND i wydobycie) ma 8 modeli zamiast 7, bo SKL nie dzieli już modelu z DEP. Batch opróżniony przez ulepszenie jest ukryty. `BatchedMesh` (T4) zbierze to w jedno wywołanie.
 
 ## Teren z kafelków hex (Tau Ceti c)
 
