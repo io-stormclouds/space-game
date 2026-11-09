@@ -19,7 +19,7 @@ import { AtanorSession } from '../game/atanor-session';
 import { CommandsService } from '../game/commands';
 import { GameService } from '../game/game.service';
 import { PerfService } from '../game/perf';
-import { UiState } from '../game/ui-state';
+import { UiState, placementPreview } from '../game/ui-state';
 import { SystemMap } from '../hud/system-map';
 import { TEXT } from '../i18n/pl';
 
@@ -217,7 +217,7 @@ export class WorldView {
     void this.game.previewBuild(pick.bodyId, pick.tileIndex, p.kind, p.rotation).then((r) => {
       const cur = this.ui.placement();
       if (cur && cur.kind === p.kind && cur.rotation === p.rotation) {
-        this.ui.placement.set({ ...cur, preview: { kind: p.kind, tiles: r.tiles, valid: r.ok, tileIndex: pick.tileIndex, ...(r.reason ? { reason: r.reason } : {}), ...(r.detail ? { detail: r.detail } : {}) } });
+        this.ui.placement.set({ ...cur, preview: placementPreview(p.kind, pick.tileIndex, r) });
       }
     });
   }

@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/c
 import type { Structure } from '@space-game/api';
 import { HudFrame, RtsButton } from '@space-game/ui';
 import { BUILD_KEYS, CommandsService } from '../game/commands';
-import { bodyName, buildingName, costText } from '../game/format';
+import { bodyName, buildingName, costText, terrainLine } from '../game/format';
 import { GameService } from '../game/game.service';
 import { UiState } from '../game/ui-state';
 import { TEXT } from '../i18n/pl';
@@ -27,10 +27,11 @@ const round1 = (n: number) => (Math.round(n * 10) / 10).toLocaleString('pl-PL');
         }
       } @else if (ui.buildMenu()) {
         <h2 class="hud-title sg">{{ catalogTitle() }}</h2>
+        @if (catalogTerrain(); as ct) {<span class="hud-micro" data-catalog-terrain>{{ ct }}</span>}
         <div class="catalog">
           @for (b of commands.buildList(); track b.id) {
             <hud-rts-button
-              [label]="b.name + ' · ' + b.footprint + ' p.'"
+              [label]="b.name + ' · ' + b.footprint + ' p.' + (b.perTiles ? ' · ' + t.catalog.perTiles : '')"
               [hotkey]="b.hotkey"
               [cost]="b.cost"
               [disabledReason]="b.reason || undefined"
@@ -115,6 +116,11 @@ const round1 = (n: number) => (Math.round(n * 10) / 10).toLocaleString('pl-PL');
             } @else {
               <div class="split">
                 <div class="stack">
+                  @if (terrain(); as tr) {
+                    <dl class="kv kv--one">
+                      <div><dt>{{ t.selection.terrain }}</dt><dd data-tile-terrain [class.al]="!tr.buildable">{{ tr.text }}</dd></div>
+                    </dl>
+                  }
                   @if (ti.deposit; as d) {
                     <dl class="kv">
                       <div><dt>{{ t.selection.deposit }}</dt><dd data-tile-deposit>{{ d.material }} · {{ materialName(d.material) }}</dd></div>
@@ -139,7 +145,7 @@ const round1 = (n: number) => (Math.round(n * 10) / 10).toLocaleString('pl-PL');
                     @for (o of fits(); track o.kind) {
                       <span class="tag" [class.tag--sg]="!!o.extracts">{{ o.name }}</span>
                     } @empty {
-                      <span class="dim">{{ t.selection.fitsNone }}</span>
+                      <span class="dim">{{ ti.terrain && !ti.terrain.buildable ? t.selection.fitsBadTerrain(ti.terrain.name) : t.selection.fitsNone }}</span>
                     }
                   </div>
                 </div>
@@ -213,6 +219,8 @@ const round1 = (n: number) => (Math.round(n * 10) / 10).toLocaleString('pl-PL');
     .structures .tag { justify-self: end; }
     .catalog { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--hud-space-3); }
     .stack { display: flex; flex-direction: column; gap: var(--hud-space-3); min-width: 0; }
+    .kv--one { grid-template-columns: minmax(0, 1fr); }
+    .kv--one dd { text-align: right; }
   `,
 })
 export class SelectionPanel {
@@ -227,6 +235,18 @@ export class SelectionPanel {
   });
 
   protected readonly catalogTitle = computed(() => this.t.catalog.title(bodyName(this.game.world(), this.ui.focusBodyId())));
+
+  /** Under the catalog title when it aims at a tile with terrain: why the 1-tile costs differ (T8). */
+  protected readonly catalogTerrain = computed(() => {
+    const ti = this.commands.buildTile();
+    return ti?.terrain ? this.t.catalog.onTile(ti.index, terrainLine(this.t, ti.terrain)) : '';
+  });
+
+  /** Terrain row of the tile panel (T8); null on bodies without terrain. Water is in the alert tone. */
+  protected readonly terrain = computed(() => {
+    const tr = this.commands.tile()?.terrain;
+    return tr ? { text: terrainLine(this.t, tr), buildable: tr.buildable } : null;
+  });
 
   protected readonly view = computed(() => {
     const w = this.game.world();

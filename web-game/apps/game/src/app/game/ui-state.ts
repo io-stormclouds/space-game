@@ -1,14 +1,33 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
-import type { BodyId, Structure } from '@space-game/api';
+import type { BodyId, BuildPreview, Structure } from '@space-game/api';
 import type { AtanorControls, AtanorReadout, AtanorViewInput, PickResult, Placement, Selection, ViewKind } from '@space-game/render';
 import { GameService } from './game.service';
+
+/**
+ * Last checked tile and its verdict (ghost). `cost` and `buildTime` are the price after the terrain
+ * under the footprint (T8), present once the server's check got past the terrain stage.
+ */
+export type PlacementPreview = Placement & { tileIndex: number; reason?: string; detail?: string; cost?: Readonly<Record<string, number>>; buildTime?: number };
 
 export interface PlacementMode {
   /** Building id, or 'PORT' for the spaceport landed from the Ark. */
   kind: string;
   rotation: number;
-  /** Last checked tile and its verdict (ghost). */
-  preview: (Placement & { tileIndex: number; reason?: string; detail?: string }) | null;
+  preview: PlacementPreview | null;
+}
+
+/** The ghost's verdict from the server's check of `kind` on `tileIndex` (cursor and tile-aimed placement). */
+export function placementPreview(kind: string, tileIndex: number, r: BuildPreview): PlacementPreview {
+  return {
+    kind,
+    tiles: r.tiles,
+    valid: r.ok,
+    tileIndex,
+    ...(r.reason ? { reason: r.reason } : {}),
+    ...(r.detail ? { detail: r.detail } : {}),
+    ...(r.cost ? { cost: r.cost } : {}),
+    ...(r.buildTime !== undefined ? { buildTime: r.buildTime } : {}),
+  };
 }
 
 /** UI-only state of the game screen: view, selection, hover, modes. No game rules here. */

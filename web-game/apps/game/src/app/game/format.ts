@@ -1,4 +1,4 @@
-import type { CatalogView, DomainEvent, WorldState } from '@space-game/api';
+import type { CatalogBuilding, CatalogView, DomainEvent, TileTerrainInfo, WorldState } from '@space-game/api';
 import type { Dictionary } from '../i18n/pl';
 
 const num = new Intl.NumberFormat('pl-PL', { maximumFractionDigits: 1 });
@@ -9,6 +9,52 @@ export function costText(cost: Readonly<Record<string, number>>): string {
     .filter(([, q]) => q > 0)
     .map(([code, q]) => `${code} ${num.format(Math.ceil(q))}`);
   return parts.length ? parts.join(' · ') : '—';
+}
+
+/** Change against the catalog of a terrain %: 110 → "+10 %", 85 → "−15 %" (no-break space before %). */
+export function pctChange(pct: number): string {
+  const d = pct - 100;
+  return `${d < 0 ? '−' : '+'}${num.format(Math.abs(d))} %`;
+}
+
+/**
+ * Materials after the terrain: `Math.ceil(q * pct / 100)` per material, key order kept. Same rounding
+ * as the domain's `scaleCost` (T8 §9.2), which the app does not import (README: no domain logic in
+ * the app), so a slot shows what BUILD will take.
+ */
+export function terrainCost(cost: Readonly<Record<string, number>>, pct: number): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const [code, q] of Object.entries(cost)) out[code] = Math.ceil((q * pct) / 100);
+  return out;
+}
+
+/**
+ * Terrain row of the tile panel (T8): "las · koszt +10 %, czas +50 %", "droga · koszt −15 %, czas −25 %",
+ * "trawa" (catalog cost and time), "woda · nie można budować"; '' on a body without terrain.
+ */
+export function terrainLine(t: Dictionary, terrain: TileTerrainInfo | null): string {
+  if (!terrain) return '';
+  if (!terrain.buildable) return `${terrain.name} · ${t.selection.terrainNoBuild}`;
+  const mods = [
+    terrain.costPct !== 100 ? t.selection.terrainCost(pctChange(terrain.costPct)) : '',
+    terrain.timePct !== 100 ? t.selection.terrainTime(pctChange(terrain.timePct)) : '',
+  ].filter((m) => m !== '');
+  return mods.length ? `${terrain.name} · ${mods.join(', ')}` : terrain.name;
+}
+
+/**
+ * L1 cost and time of a building as a tile shows them before the placement check (quick slots, the
+ * catalog opened from a tile). A 1-tile building covers just this tile, so it pays the tile's terrain %;
+ * a 3- or 7-tile one keeps the catalog numbers, flagged `perTiles` on a body with terrain (the other
+ * tiles of its footprint decide; the placement ghost has the exact price).
+ */
+export function tileBuildCost(building: CatalogBuilding | undefined, terrain: TileTerrainInfo | null): { cost: Record<string, number>; minutes: number; perTiles: boolean } {
+  const l1 = building?.levels[0];
+  const cost = { ...(l1?.cost ?? {}) };
+  const minutes = l1?.buildTime ?? 0;
+  if (!terrain) return { cost, minutes, perTiles: false };
+  if ((building?.footprint ?? 1) > 1) return { cost, minutes, perTiles: true };
+  return { cost: terrainCost(cost, terrain.costPct), minutes: terrain.timePct === 100 ? minutes : (minutes * terrain.timePct) / 100, perTiles: false };
 }
 
 /** "Dzień 1 · 19:40" from model minutes. */
