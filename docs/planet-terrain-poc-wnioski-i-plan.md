@@ -489,3 +489,19 @@ Przykład: SIL 10 → 11 (las), 14 (skała), 12 (śnieg), 9 (droga). Pod T5: san
 3. Ręcznie / zrzuty: każdy biom (orbita, zbliżenie), kolonia na Tau Ceti c ze skórką medieval, karta pola z terenem, odmowa na wodzie, sonda pięciokątów.
 4. Ten dokument: rozdz. 5 „Status” uzupełniany po każdym kroku (co zrobione, odstępstwa, pomiary).
 
+
+## 14. Status realizacji (rozdz. 6–13)
+
+### T6: wykonane (2026-11-09)
+
+| Co | Wynik |
+|---|---|
+| Testy właściwości generatora (`domain/.../terrain-properties.spec.ts`) | 10 siatek (n = 3…8, prawdziwe ziarna złóż Tau Ceti i PoC, dwie z jedną rudą) × 6 ziaren × 2 biomy × 2 kierunki = 240 kombinacji, ok. 2,5 s. Niezmienniki z §7 pkt 1 plus: przynajmniej m wierzchołków na obrysie, budynki w 3 pierścieniach od środka, kopia klasyfikacji zgodna z generatorem |
+| Margines progów szumu (przygotowanie T8) | min. **1,48e-6** (n = 8, ziarno 23, mixed, pole 186, próg lasu), czyli > 1e-12 we wszystkich kombinacjach |
+| Wodoszczelność (`render/.../terrain-watertight.spec.ts`) | Tau Ceti b–f i Planeta Matka × (medieval, 2) i (mixed, 7): każdy wierzchołek w obrysie swojego pola, 21 800 promieni na przypadek bez dziury i bez odwróconej ściany, każdy pięciokąt trafiony. Test wykrywa celowo zepsutą geometrię (dziura, odwrócone pole, brak płyty, pole pomniejszone o 3 %) |
+| Czarny pięciokąt | **przyczyna**: płyta pięciokąta była samym wierzchem, a kafelki hex mają ściany i dno. Kamera PoC (`minDistance = 20` przy R = 50) wchodzi pod powierzchnię; od środka widać dna kafelków, a każdy pięciokąt jest dziurą w kosmos. **Poprawka** (web-game i PoC): płyta ma ściany do podstawy kafelka i dno (30 trójkątów zamiast 15); test „od środka” w `terrain.spec.ts` (promień ze środka przez każde pole trafia ścianę zwróconą do niego) wykrywa brak dna. Kamery PoC nie zmieniam: `camera-controller.ts` ma niezatwierdzone zmiany innej sesji (widok z powierzchni) |
+| Kamera web-game w zamku (H2) | szczyt zamku na Tau Ceti c to ok. 1,31 R, a minimum kamery było 1,3 R. Teraz `minDistance = max(1,3 R, szczyt dekoru + 0,1 R)` (`TerrainDecor.topRadius`) |
+| Sonda na GPU (`render/harness/system/probe-pentagons.mjs`) | Tau Ceti c, 12 pięciokątów × 3 odległości: 0 % czarnych pikseli w środku kadru, kamera nie schodzi poniżej 1,41 R |
+| Błędy generatora znalezione testami | (1) limit dekoru był tylko średni: do 222 drzew i 64 skał w 33 z 264 planów; teraz twardy limit (Tau Ceti c bez zmian, planeta PoC: 204 → 200 drzew). (2) `hex_forest_waterC` nigdy nie wypadał (B zawsze pierwszy); teraz B i C po połowie według `hash3`. (3) staw `waterD` mógł trafić na pole ze złożem; teraz zamiana na `hex_forest` jak przy przejściach. (2) i (3) zmieniają wygląd Tau Ceti c, nie reguły |
+
+Testy: domena i render 355 zielonych, PoC 118 zielonych, `npm run typecheck` czysty.

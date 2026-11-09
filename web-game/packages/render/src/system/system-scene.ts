@@ -893,7 +893,8 @@ export class SystemScene {
         g.phi = 1.05;
         g.theta = centre && focus !== this.root ? Math.atan2(centre.x - focus.world.x, centre.z - focus.world.z) + 0.6 : 0.4;
       }
-      g.minDistance = r * 1.3;
+      // never inside the tallest decor (the castle reaches ~1.31 R on Tau Ceti c): the near view would cut it open
+      g.minDistance = Math.max(r * 1.3, (focus.terrainDecor?.topRadius ?? 0) + r * 0.1);
       g.maxDistance = r * 18;
     }
     this.rig.update(dt, g);

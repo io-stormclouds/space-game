@@ -74,16 +74,24 @@ export function generateTerrain(grid: PlanetGrid, opts: TerrainOptions): Terrain
   const isTree = (d: DecorItem): boolean => d.model.startsWith('detail_tree');
   const treeKeep = Math.min(1, MAX_TREES / Math.max(1, scatter.filter(isTree).length));
   const rockKeep = Math.min(1, MAX_ROCKS / Math.max(1, scatter.filter((d) => !isTree(d)).length));
+  let trees = 0;
+  let rocks = 0;
   scatter.forEach((d, n) => {
-    if (hash3(seed, d.tile, 17, n) < (isTree(d) ? treeKeep : rockKeep)) decor.push(d);
+    const tree = isTree(d);
+    if (hash3(seed, d.tile, 17, n) >= (tree ? treeKeep : rockKeep)) return;
+    // the thinning meets the budget only on average: stop at the cap so it is a hard limit
+    if (tree ? trees >= MAX_TREES : rocks >= MAX_ROCKS) return;
+    if (tree) trees++;
+    else rocks++;
+    decor.push(d);
   });
 
   // kit tile per hexagon
   const variants: (TileVariant | null)[] = tiles.map((t, i) => {
     if (t.kind !== 'HEX') return null;
     const v = chooseVariant(i, frames[i], kinds, road, seed);
-    // a raised half would bury a structure standing on a deposit
-    if (hasDeposit(i) && v.id.startsWith('hex_forest_transition')) return { id: 'hex_forest', k0: 0 };
+    // a raised half would bury a structure standing on a deposit, a pond would put it in water
+    if (hasDeposit(i) && (v.id.startsWith('hex_forest_transition') || v.id === 'hex_forest_waterD')) return { id: 'hex_forest', k0: 0 };
     return v;
   });
 

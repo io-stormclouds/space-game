@@ -23,6 +23,7 @@ export class TerrainDecor {
   private readonly zero = new THREE.Matrix4().makeScale(0, 0, 0);
   private _triangles = 0;
   private _instances = 0;
+  private _topRadius = 0;
 
   constructor(
     grid: PlanetGrid,
@@ -88,6 +89,7 @@ export class TerrainDecor {
           .addScaledVector(Z, (d.oz ?? 0) * tileWidth)
           .normalize()
           .multiplyScalar(R - model.box.min.y * s);
+        this._topRadius = Math.max(this._topRadius, R + model.size.y * s);
         const m = new THREE.Matrix4().compose(pos, q, sc.setScalar(s));
         mesh.setMatrixAt(n, m);
         const slots = this.byTile.get(d.tile) ?? [];
@@ -112,6 +114,11 @@ export class TerrainDecor {
 
   get drawCalls(): number {
     return this.meshes.length;
+  }
+
+  /** Distance from the body centre to the top of the tallest decor model (the castle). */
+  get topRadius(): number {
+    return this._topRadius;
   }
 
   hasDecor(tile: number): boolean {

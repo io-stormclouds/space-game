@@ -20,6 +20,8 @@ const WATER_Y = 0.9;
 const RIM_DROP = 0.05;
 /** The flat top of a kit tile reaches this fraction of the corner radius. */
 const PLATE_INSET = 0.95;
+/** Walls and bottom of a pentagon plate: the soil band of the kit tiles, a little darker than the top. */
+const WALL_SHADE = 0.7;
 
 /**
  * Surface of a gridded body dressed with KayKit hex tiles. Every hexagon gets a kit tile warped onto its
@@ -147,12 +149,12 @@ export class TerrainView implements SurfaceView {
         pos.push(x, y, z);
         col.push(tone.r, tone.g, tone.b);
       };
-      /** Triangle wound counter-clockwise seen from outside. */
-      const tri = (p: number[], q: number[], r: number[], tone: THREE.Color): void => {
+      /** Triangle wound counter-clockwise seen from the side `facing` points to (default: outside). */
+      const tri = (p: number[], q: number[], r: number[], tone: THREE.Color, facing: THREE.Vector3 = normal): void => {
         a.set(q[0] - p[0], q[1] - p[1], q[2] - p[2]);
         b.set(r[0] - p[0], r[1] - p[1], r[2] - p[2]);
         d.crossVectors(a, b);
-        const flip = d.dot(normal) < 0;
+        const flip = d.dot(facing) < 0;
         const [u, v] = flip ? [r, q] : [q, r];
         push(p[0], p[1], p[2], tone);
         push(u[0], u[1], u[2], tone);
@@ -177,22 +179,37 @@ export class TerrainView implements SurfaceView {
         if (deposit) c.lerp(deposit, DEPOSIT_MIX);
         const n = f.m;
         if (tile.kind === 'PENT') {
-          // bevelled plate: flat top inset like the kit's top face, rim dropped like the kit's bevel
+          // bevelled plate: flat top inset like the kit's top face, rim dropped like the kit's bevel. Closed
+          // below like a kit tile (walls down to the kit base, bottom face): seen from inside the body (the
+          // orbit camera can zoom below the surface) a plate without them is a hole, i.e. a black pentagon.
           const ctr = [f.center.x, f.center.y, f.center.z];
           const top: number[][] = [];
           const rim: number[][] = [];
+          const base: number[][] = [];
           for (const v of f.corners) {
             const t = [f.center.x + (v.x - f.center.x) * PLATE_INSET, f.center.y + (v.y - f.center.y) * PLATE_INSET, f.center.z + (v.z - f.center.z) * PLATE_INSET];
             const kt = R / Math.hypot(t[0], t[1], t[2]);
             top.push([t[0] * kt, t[1] * kt, t[2] * kt]);
-            const kr = (R - RIM_DROP * s) / Math.hypot(v.x, v.y, v.z);
+            const len = Math.hypot(v.x, v.y, v.z);
+            const kr = (R - RIM_DROP * s) / len;
             rim.push([v.x * kr, v.y * kr, v.z * kr]);
+            const kb = (R - s) / len;
+            base.push([v.x * kb, v.y * kb, v.z * kb]);
           }
+          const kc = (R - s) / Math.hypot(ctr[0], ctr[1], ctr[2]);
+          const baseCtr = [ctr[0] * kc, ctr[1] * kc, ctr[2] * kc];
+          const inward = normal.clone().negate();
+          const side = new THREE.Vector3();
+          const wall = c.clone().multiplyScalar(WALL_SHADE);
           for (let i = 0; i < n; i++) {
             const j = (i + 1) % n;
             tri(ctr, top[i], top[j], c);
             tri(top[i], rim[i], rim[j], c);
             tri(top[i], rim[j], top[j], c);
+            side.set((rim[i][0] + rim[j][0]) / 2 - ctr[0], (rim[i][1] + rim[j][1]) / 2 - ctr[1], (rim[i][2] + rim[j][2]) / 2 - ctr[2]);
+            tri(rim[i], base[i], base[j], wall, side);
+            tri(rim[i], base[j], rim[j], wall, side);
+            tri(baseCtr, base[i], base[j], wall, inward);
           }
         } else {
           const ctr = [f.center.x, f.center.y, f.center.z];

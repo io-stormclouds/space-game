@@ -69,13 +69,13 @@ describe('TerrainView on the medieval planet', () => {
   it('is flat fans before the kit arrives, then hexagons get kit tiles and pentagons plates', () => {
     const flat = view.terrainTriangles;
     // 630 hexagons × 6 fan triangles + 12 plates × 15
-    expect(flat).toBe(630 * 6 + 12 * 15);
+    expect(flat).toBe(630 * 6 + 12 * 30); // pentagon plate: top 15 + walls 10 + bottom 5
     view.applyKit(kit);
     expect(view.terrainTriangles).toBeGreaterThan(30000);
     expect(view.terrainTriangles).toBeLessThan(60000);
     for (const t of grid.tiles) {
       const { count } = view.rangeOf(t.index);
-      if (t.kind === 'PENT') expect(count / 3, `pentagon ${t.index}`).toBe(15);
+      if (t.kind === 'PENT') expect(count / 3, `pentagon ${t.index}`).toBe(30); // top 15 + walls 10 + bottom 5
       else expect(count / 3, `tile ${t.index}`).toBe(kit.get(plan.variants[t.index]!.id)!.triangles);
     }
   });

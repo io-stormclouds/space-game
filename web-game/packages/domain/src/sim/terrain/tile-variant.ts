@@ -55,7 +55,8 @@ export function chooseVariant(
   if (nWater > 0 && nWater <= 2) {
     for (const [letter, mask] of Object.entries(SHORE_MASKS)) {
       if (mask.split('').reduce((a, b) => a + +b, 0) !== nWater) continue;
-      if (letter === 'C' && hash3(seed, i, 12, 0) < 0.5) continue; // B and C are alternatives for one water side
+      // B and C are alternatives for one water side (C has a deeper bay): the hash picks one, the other is skipped
+      if ((letter === 'B' || letter === 'C') && (letter === 'C') !== (hash3(seed, i, 12, 0) >= 0.5)) continue;
       for (let k0 = 0; k0 < 6; k0++) {
         let ok = true;
         for (let k = 0; k < 6; k++) {

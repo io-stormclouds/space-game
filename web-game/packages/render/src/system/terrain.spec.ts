@@ -67,7 +67,7 @@ describe('TerrainView on Tau Ceti c', () => {
     expect(view.ready).toBe(true);
     for (const t of grid.tiles) {
       const { count } = view.rangeOf(t.index);
-      if (t.kind === 'PENT') expect(count / 3, `pentagon ${t.index}`).toBe(15);
+      if (t.kind === 'PENT') expect(count / 3, `pentagon ${t.index}`).toBe(30); // top 15 + walls 10 + bottom 5
       else expect(count / 3, `tile ${t.index}`).toBe(kit.get(plan.variants[t.index]!.id)!.triangles);
     }
     expect(view.terrainTriangles).toBeGreaterThan(10000);
@@ -106,6 +106,29 @@ describe('TerrainView on Tau Ceti c', () => {
     expect(inward / top).toBeLessThan(0.01);
   });
 
+  it('is closed seen from inside the body: a ray from the centre through any tile hits a face turned to it', () => {
+    // Regression: pentagon plates used to be a top surface only. From inside the body (a camera zoomed
+    // below the surface) the kit tiles showed their bottoms and every pentagon was a hole: a black pentagon.
+    const p = view.visual.geometry.getAttribute('position');
+    const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+    const ray = new THREE.Ray();
+    const hit = new THREE.Vector3();
+    const open: number[] = [];
+    for (const t of grid.tiles) {
+      ray.set(new THREE.Vector3(0, 0, 0), new THREE.Vector3(t.normal.x, t.normal.y, t.normal.z));
+      const { start, count } = view.rangeOf(t.index);
+      let seen = false;
+      for (let v = start; v < start + count && !seen; v += 3) {
+        a.fromBufferAttribute(p, v);
+        b.fromBufferAttribute(p, v + 1);
+        c.fromBufferAttribute(p, v + 2);
+        seen = ray.intersectTriangle(a, b, c, true, hit) !== null; // backface culling: only faces turned to the ray
+      }
+      if (!seen) open.push(t.index);
+    }
+    expect(open).toEqual([]);
+  });
+
   it('paints hover and selection on the whole tile and restores it', () => {
     const idx = 100;
     const base = view.colorOf(idx).clone();
@@ -140,6 +163,9 @@ describe('TerrainDecor on Tau Ceti c', () => {
     expect(decor.instances).toBe(plan.decor.length);
     expect(decor.drawCalls).toBe(new Set(plan.decor.map((d) => d.model)).size);
     expect(decor.triangles).toBeLessThan(170000);
+    // the castle is the tallest model: about 2.5 kit units × its scale above the surface
+    expect(decor.topRadius).toBeGreaterThan(R * 1.2);
+    expect(decor.topRadius).toBeLessThan(R * 1.45);
 
     const castle = plan.settlementCenter!;
     const mesh = decor.group.children.find((c) => c.name === 'Decor_castle') as THREE.InstancedMesh;
