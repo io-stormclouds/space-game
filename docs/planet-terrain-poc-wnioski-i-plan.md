@@ -505,3 +505,21 @@ Przykład: SIL 10 → 11 (las), 14 (skała), 12 (śnieg), 9 (droga). Pod T5: san
 | Błędy generatora znalezione testami | (1) limit dekoru był tylko średni: do 222 drzew i 64 skał w 33 z 264 planów; teraz twardy limit (Tau Ceti c bez zmian, planeta PoC: 204 → 200 drzew). (2) `hex_forest_waterC` nigdy nie wypadał (B zawsze pierwszy); teraz B i C po połowie według `hash3`. (3) staw `waterD` mógł trafić na pole ze złożem; teraz zamiana na `hex_forest` jak przy przejściach. (2) i (3) zmieniają wygląd Tau Ceti c, nie reguły |
 
 Testy: domena i render 355 zielonych, PoC 118 zielonych, `npm run typecheck` czysty.
+
+### T7A: wykonane (2026-11-09)
+
+Każdy z 18 budowalnych typów i HQ ma własny model z pełnej paczki Space Base Bits, a poziomy różnią się w trzech progach (L1–2, L3–4, L5): `partsFor(kind, level)` w `model-registry.ts`, części z `fill`/`offset`/`yaw`, `StructureLayer` przenosi budowlę między partiami przy zmianie progu, duch z części L1. 22 nowe modele (775 KB surowo, ok. 243 KB gzip; plan zakładał 0,4 MB). Stykówka: `docs/img/structures/t7a-sheet.png` (`render/harness/models`).
+
+Odstępstwa od tabeli 8.1: HAB L5 `basemodule_E` zamiast `dome` (szklana kopuła bez atlasu wygląda jak plama), SKL L3 `roofmodule_cargo_A`, MLT L3+ dwa zbiorniki obok siebie, `terrain_mining` zatopiony (widać tylko wyrobisko), LAND L3+ i HQ z masztami świateł, CON z silosem (inaczej wygląda jak habitat), ATN z `tunnel_straight_B` (284 zamiast 608 trójkątów), domyślny model `structure_low`. Pełna kolonia może użyć 30 różnych modeli na ciało (wcześniej 8), więc liczba draw calli rośnie: mierzy to T4.
+
+### T7B: wykonane (2026-11-09)
+
+Na ciałach z biomem `medieval` (dziś Tau Ceti c) budowle gracza stoją jako modele Medieval Hexagon: `ModelSpec.source: 'spacebits' | 'hex'` (GLB kolorowany po nazwie materiału, spłaszczanie wspólne z `HexKit`), `skinFor(body)` i `KIND_TIERS_MEDIEVAL`; modele hex ładowane dopiero, gdy ciało ze skórką dostaje powierzchnię. HQ = zamek + lądowisko sci-fi (T-24), HAB = dom(y), FARM = pole i młyn, WND = wiatrak, MIN/ICE/SIT/REGX = kopalnia, DEP = targ, SKL = `archeryrange` (szopa z ogrodzonym placem czyta się jak skład), SMT = tartak + wieża, SIR = studnia + młyn wodny, ATN = zamek z domami; SOL i LAND zostają sci-fi. Ruiny osady są przygaszone (30 % do szarości o tej samej jasności, potem ×0,8; T-23). Zrzuty: `docs/img/structures/t7b-sheet-medieval.png`, `t7b-tau-ceti-c.png` (kolonia obok ruin: 38 draw calli, 138 tys. trójkątów). Mapowanie i siła przygaszenia czekają na akceptację (T-22).
+
+### T8: część TS wykonana (2026-11-09), Rust w toku
+
+- **Domena:** `classifyTerrain` (rozgrywka) i `dressTerrain` (render) zamiast jednego generatora; golden sprzed podziału zgodny co do pola (osada się nie przesunęła). Styl terenu na ciele (`surfaceGrid.terrain`), klasy i drogi na siatce (`Tile.terrain`, `Tile.road`, `PlanetGrid.terrain`), siatki budowane z ciał zapisu. `TERRAIN_RULES` jako dane katalogu (eksport do `catalog.json`). Kolejność sprawdzeń, koszt `ceil(q·pct/100)`, `Structure.timePct` i zwroty jak w §9.2; port kosmiczny, `findFreeFootprint` i `load-m/l` omijają wodę.
+- **API i mock:** `TileInfo.terrain`, `BuildPreview.cost/buildTime` (obecne od etapu terenu, także przy późniejszej odmowie), `CatalogView.terrain`.
+- **UI:** wiersz „Teren” w panelu pola, cena i czas po terenie w karcie ustawiania, slotach i katalogu otwartym z pola; aplikacja nie importuje logiki domeny (reguła F2), więc zaokrąglenie jest powtórzone w `format.ts` i sprawdzane testem przeciw `previewBuild` mocka.
+- **Render:** `TERRAIN_CONFIG` i `buildWorldTerrain` usunięte, render ubiera siatki z `terrain`.
+- **Odstępstwo od §9.4:** `fabryka` też wymaga ponownego nagrania (świat zawiera ciało Tau Ceti c), a nie tylko pola `source`.
