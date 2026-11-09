@@ -1,0 +1,19 @@
+/* JetBrains Mono, self-hosted (latin-ext covers Polish). */
+@import '@fontsource/jetbrains-mono/400.css';
+@import '@fontsource/jetbrains-mono/500.css';
+@import '@fontsource/jetbrains-mono/700.css';
+
+/* HUD design system (design-system/ linked as @space-game/hud-design-system). */
+@import '@space-game/hud-design-system/css/tokens.css';
+@import '@space-game/hud-design-system/css/base.css';
+@import '@space-game/hud-design-system/css/hud-frame.css';
+
+@import './styles/editor.css';
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: var(--hud-color-void);
+}
