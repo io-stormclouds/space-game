@@ -41,6 +41,9 @@ const MAX_STOCKS = 7;
           }
         </nav>
         <div class="seg">
+          <button type="button" data-action="hub" [attr.aria-pressed]="ui.hubOpen()" aria-keyshortcuts="F3" [title]="t.hub.toggleHint" (click)="ui.hubOpen.update(toggle)">
+            {{ t.hub.toggle }}
+          </button>
           <button type="button" data-action="designer" [attr.aria-pressed]="designer.open()" aria-keyshortcuts="F2" [title]="t.designer.toggleHint" (click)="designer.toggle()">
             {{ t.designer.toggle }}
           </button>
@@ -64,6 +67,7 @@ export class TopBar {
   protected readonly paused = computed(() => this.game.snapshot()?.paused ?? false);
   /** The planet camera needs a body to look at: a selected body, the chosen site or a home base. */
   protected readonly planetReady = this.ui.planetAvailable;
+  protected readonly toggle = (open: boolean) => !open;
 
   /** Per-minute rates from consecutive snapshots (exponential smoothing). */
   private readonly rates = signal<Record<string, number>>({});

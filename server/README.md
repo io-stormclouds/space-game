@@ -1,6 +1,6 @@
 # server — backend gry w Rust
 
-Workspace Cargo z portem domeny gry i narzędziami zgodności (plan `docs/plan/02-BACKEND-RUST.md`). Stan: **B0, B1 i B2 wykonane 2026-11-08** (port całej domeny z silnikiem Atanora i rejestrem gwiazd, złote powtórki, scenariusze `fabryka` i obciążenia S/M/L, pomiar kroku i WASM). **B3 wykonane 2026-11-09**: `GameApi` na WebAssembly w workerze klienta, przełącznik `mock-ts` / `wasm`, zgodność z mockiem. **B4 w toku**: `game-server` (konta, świat na gracza, WebSocket, harmonogram światów, zapis i odtworzenie z punktu kontrolnego i końcówki dziennika, limity) oraz tryb `remote`, w którym klient trzyma kopię świata w WASM i dostaje od serwera tylko rozkazy, kroki i skrót stanu (R-18). **B6 w toku**: usługa galaktyki (huby z księgą zleceń, kredyty, przesyłki między kolonią a hubem, frakcje NPC z wyłącznikiem, R-7); brama „dwóch graczy handluje przez hub” przechodzi w teście WebSocket, brak jeszcze ekranu hubu w kliencie. Szczegóły i braki: sekcje B3, B4 i B6 niżej.
+Workspace Cargo z portem domeny gry i narzędziami zgodności (plan `docs/plan/02-BACKEND-RUST.md`). Stan: **B0, B1 i B2 wykonane 2026-11-08** (port całej domeny z silnikiem Atanora i rejestrem gwiazd, złote powtórki, scenariusze `fabryka` i obciążenia S/M/L, pomiar kroku i WASM). **B3 wykonane 2026-11-09**: `GameApi` na WebAssembly w workerze klienta, przełącznik `mock-ts` / `wasm`, zgodność z mockiem. **B4 w toku**: `game-server` (konta, świat na gracza, WebSocket, harmonogram światów, zapis i odtworzenie z punktu kontrolnego i końcówki dziennika, limity) oraz tryb `remote`, w którym klient trzyma kopię świata w WASM i dostaje od serwera tylko rozkazy, kroki i skrót stanu (R-18). **B6 w toku**: usługa galaktyki (huby z księgą zleceń, kredyty, przesyłki między kolonią a hubem, frakcje NPC z wyłącznikiem, R-7); brama „dwóch graczy handluje przez hub” przechodzi w teście WebSocket; w kliencie ekran hubu (F3). Szczegóły i braki: sekcje B3, B4 i B6 niżej.
 
 ```bash
 cargo test --workspace                 # testy jednostkowe + zgodność z TS (wektory, powtórki)
@@ -177,12 +177,21 @@ Zrobione:
   - w `tests/ws.rs` przez prawdziwy WebSocket: dwóch graczy (przesyłka, oferta, kupno, prowizje, dostawa do kolonii, rynek po restarcie), frakcje wyłączone, odmowa protokołu 2;
   - `replica.spec.ts`: widok galaktyki w migawkach i żądanie rynku.
   - e2e `remote`, pełny zestaw, Chrome, 2 workery: **17 z 17** (1,9 min). Widok galaktyki w kliencie pokazuje huby i graczy z usługi.
+- **Ekran hubu** (`apps/game/src/app/hud/hub-panel.ts`, F3 albo „Hub” w górnym pasku):
+  - kredyty, prowizja, zakładki 4 hubów z gospodarzem, odległością i czasem dostawy;
+  - tabela notowań: kupują / sprzedają, zmiana, zapas w kolonii i w hubie;
+  - zlecenie kupna lub sprzedaży z ilością i ceną;
+  - „Wyślij z kolonii” (`SHIP_TO_HUB`) i „Sprowadź do kolonii”;
+  - moje zlecenia z anulowaniem, przesyłki z odliczaniem, ostatnie transakcje.
+  - Bez serwera panel mówi, że handel działa tylko w grze na serwerze.
+  - e2e `hub.spec.ts` na `remote` (25 s): wysyłka do Epsilon Eridani, sprzedaż frakcji po jej cenie kupna, odkupienie, sprowadzenie do kolonii (zapas wraca dokładnie), zlecenie w księdze i anulowanie.
+  - Pełny zestaw `remote` z hubem (2 workery): 17 z 18. Padł test pliku projektu Atanora (AT6): klikał fabrykę, zanim kamera doleciała do planety. Ten sam test był niestabilny na mocku przy 4 workerach. Poprawiony (czeka na kafle do 10 s); potem 4 z 4 powtórzeń.
 - Moduł WASM: 1357 kB (359 kB gzip).
 
 Zmienne: `NPC_FACTIONS` (on), `NPC_SEED`, `NPC_PLAYERS` (6), `NPC_UPDATE_SECONDS` (600; dev 10), `NPC_DEPTH` (50), `HUB_FEE` (0,02), `START_CREDITS` (1000), `ORDER_HOURS` (168), `SHIPPING_SECONDS_PER_LY` (7200; dev 2), `SHIPPING_HANDLING_SECONDS` (1800; dev 2).
 
 Brakuje względem B6 i 05-SOCIAL (następne kroki):
-- Ekran hubu w kliencie: księga, moje zlecenia, przesyłki, wysyłka z kolonii; `GameApi.galaxy` już jest. Test e2e na `remote`.
+- Ekran hubu: księga zleceń poziomami (dane już są w widoku), handel dwóch graczy w e2e (jest w teście WebSocket).
 - Kontrakty NPC, reputacja i cła frakcji (S1), korporacje (S2), czat, rankingi.
 - PostgreSQL dla rynku (transakcje SQL jak w planie §8) razem z adapterem światów.
 - Zgłoszenie wysyłki po awarii: jeśli serwer padnie między rozkazem `SHIP_TO_HUB` a zapisem `galaxy.json` (≤ 1 s), przesyłka przepada. Do usunięcia przez dziennik wysyłek albo przez transakcję w PostgreSQL.

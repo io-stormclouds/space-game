@@ -1,3 +1,4 @@
+import type { Command } from '@space-game/domain';
 import type { MarketHub, SimulatedPlayer } from './contract';
 
 // The galaxy's market through the game server (plan 05-SOCIAL §3–4, server B6): hubs with order
@@ -106,3 +107,11 @@ export interface Placed {
 }
 
 export type GalaxyReply = GalaxyView | Placed | MarketOrder | Shipment;
+
+/**
+ * The world's command that sends cargo from the colony's storage to a hub (R-21). Only the Rust world
+ * knows it (the TS domain does not), so it is built here and goes through `GameApi.command`.
+ */
+export function shipToHubCommand(bodyId: string, hubId: string, cargo: Record<string, number>): Command {
+  return { type: 'SHIP_TO_HUB', bodyId, hubId, cargo } as unknown as Command;
+}

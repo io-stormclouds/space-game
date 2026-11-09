@@ -11,6 +11,7 @@ import { isPreset, runPreset } from '../game/presets';
 import { UiState } from '../game/ui-state';
 import { AtanorMachine } from '../hud/atanor-machine';
 import { LogPanel, MissionPanel, ScanPanel, StatusBanner } from '../hud/float-panels';
+import { HubPanel } from '../hud/hub-panel';
 import { PerfOverlay } from '../hud/perf-overlay';
 import { SelectionPanel } from '../hud/selection-panel';
 import { SystemMap } from '../hud/system-map';
@@ -25,7 +26,22 @@ const TEMPOS = TEMPO_PRESETS.filter((t) => t !== 10);
 /** The game screen: shared HUD of the canvas (top bar 48 px, dock 240 px) over the world view. */
 @Component({
   selector: 'wg-game-page',
-  imports: [TopBar, WorldView, MissionPanel, StatusBanner, ScanPanel, LogPanel, SystemMap, SelectionPanel, CommandCard, HudFrame, PerfOverlay, DesignerPanel, AtanorMachine],
+  imports: [
+    TopBar,
+    WorldView,
+    MissionPanel,
+    StatusBanner,
+    ScanPanel,
+    LogPanel,
+    SystemMap,
+    SelectionPanel,
+    CommandCard,
+    HudFrame,
+    PerfOverlay,
+    DesignerPanel,
+    AtanorMachine,
+    HubPanel,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { '(window:keydown)': 'onKey($event)' },
   template: `
@@ -39,6 +55,8 @@ const TEMPOS = TEMPO_PRESETS.filter((t) => t !== 10);
         <wg-status-banner />
         @if (designer.open()) {
           <wg-designer-panel />
+        } @else if (ui.hubOpen()) {
+          <wg-hub-panel />
         } @else if (ui.view() === 'atanor') {
           <wg-atanor-machine />
         } @else if (showScan()) {
@@ -141,6 +159,10 @@ export class GamePage {
       case 'F2':
         e.preventDefault();
         this.designer.toggle();
+        return;
+      case 'F3':
+        e.preventDefault();
+        this.ui.hubOpen.update((v) => !v);
         return;
       case 'Escape':
         // The Atanor card always has "Wróć" (Esc): one handler, or Esc would act twice (the

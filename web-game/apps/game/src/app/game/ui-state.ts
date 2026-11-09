@@ -26,6 +26,8 @@ export class UiState {
   readonly driveRover = signal<string | null>(null);
   readonly buildMenu = signal<boolean>(false);
   readonly perfVisible = signal<boolean>(true);
+  /** The hub panel (B6 market, F3). */
+  readonly hubOpen = signal<boolean>(false);
   /** Level of the sandbox (designer F2); a building's machine follows the building's recipe. */
   readonly atanorLevel = signal<string>('A_NAD');
   /** Fabryka atanorowa whose machine the Atanor view shows (AT1, A16); null = sandbox. */
