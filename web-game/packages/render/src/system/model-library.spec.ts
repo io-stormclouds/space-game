@@ -1,9 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import * as THREE from 'three';
+import { HexKit } from './hex-kit';
 import { ModelLibrary, colorFromAtlas, packGlb, stripTextures, type GltfJson } from './model-library';
-import { ALL_MODEL_IDS, MODELS, type ModelId } from './model-registry';
+import { ALL_MODEL_IDS, BASE_MODEL_IDS, MODELS, modelUrl, sourceOf, type ModelId } from './model-registry';
 import { MODEL_TONES } from './palette';
+import { TONE, objectTone } from './terrain-tones';
 
 const PUBLIC = join(process.cwd(), 'apps', 'game', 'public');
 
@@ -18,6 +20,7 @@ function gltfJson(file: ModelId): GltfJson {
 }
 
 const VEHICLES = new Set<ModelId>(['dropship', 'spacetruck']);
+const HEX_IDS = ALL_MODEL_IDS.filter((id) => sourceOf(id) === 'hex');
 
 describe('ModelLibrary (KayKit flattening, PoC model-library.spec)', () => {
   const lib = new ModelLibrary('assets/', fromDisk);
@@ -70,17 +73,17 @@ describe('ModelLibrary (KayKit flattening, PoC model-library.spec)', () => {
     }
   });
 
-  it('every model shares the one Space Base Bits atlas (its UVs drive the recolouring)', () => {
-    for (const id of ALL_MODEL_IDS) {
+  it('every Space Base Bits model shares the one atlas (its UVs drive the recolouring)', () => {
+    for (const id of BASE_MODEL_IDS) {
       const images = (gltfJson(id).images ?? []) as Array<{ uri?: string }>;
       expect(images.map((i) => i.uri), id).toEqual(['spacebits_texture.png']);
     }
   });
 
-  it('recolours vertices of every model only with palette tones times the swatch shade', async () => {
+  it('recolours vertices of every Space Base Bits model only with palette tones times the swatch shade', async () => {
     const c = new THREE.Color();
     const tones = Object.values(MODEL_TONES).map((h) => new THREE.Color(h));
-    for (const id of ALL_MODEL_IDS) {
+    for (const id of BASE_MODEL_IDS) {
       const asset = (await lib.load(id))!;
       expect(Object.keys(asset.geometry.attributes).sort(), id).toEqual(['color', 'normal', 'position']);
       const color = asset.geometry.getAttribute('color');
@@ -93,6 +96,49 @@ describe('ModelLibrary (KayKit flattening, PoC model-library.spec)', () => {
         expect(ok, `${id} vertex ${i}`).toBe(true);
       }
     }
+  });
+
+  it('hex entries (T7B) load the Medieval Hexagon GLB through the same path: the hex-kit flattening, colour by material name', async () => {
+    expect(HEX_IDS.sort()).toEqual(['archeryrange', 'barracks', 'castle', 'farm_plot', 'house', 'lumbermill', 'market', 'mill', 'mine', 'watchtower', 'watermill', 'well']);
+    expect(BASE_MODEL_IDS.some((id) => sourceOf(id) === 'hex')).toBe(false);
+    expect(modelUrl('assets/', 'castle')).toBe('assets/kaykit-hex/castle.gltf.glb');
+    const kit = new HexKit('assets/', fromDisk);
+    const c = new THREE.Color();
+    for (const id of HEX_IDS) {
+      const asset = (await lib.load(id))!;
+      const model = await kit.load(id);
+      // the same flattening as the terrain decor: same triangles, same bounds
+      expect(asset.triangles, id).toBe(model.triangles);
+      expect(asset.box.min.distanceTo(model.box.min), id).toBeLessThan(1e-5);
+      expect(asset.box.max.distanceTo(model.box.max), id).toBeLessThan(1e-5);
+      expect(Object.keys(asset.geometry.attributes).sort(), id).toEqual(['color', 'normal', 'position']);
+      expect(asset.geometry.index, id).toBeNull();
+      // vertex colours: the full objectTone of the material each triangle came from (player buildings are not faded)
+      const color = asset.geometry.getAttribute('color');
+      let v = 0;
+      for (const part of model.parts) {
+        const want = new THREE.Color(objectTone(part.mat));
+        c.setRGB(color.getX(v), color.getY(v), color.getZ(v));
+        expect(c.getHex(), `${id} ${part.mat}`).toBe(want.getHex());
+        v += part.pos.length / 3;
+      }
+      expect(v, id).toBe(color.count);
+      expect(lib.edgesOf(id)!.getAttribute('position').count, id).toBeGreaterThan(50);
+    }
+    // a red flag or roof keeps the palette's thatch (red is reserved for alerts)
+    expect(objectTone('Red')).toBe(TONE.thatch);
+  });
+
+  it('hex files come from kaykit-hex as GLB, Space Base Bits ones as glTF + bin', async () => {
+    const urls: string[] = [];
+    const own = new ModelLibrary('/assets', async (url) => {
+      urls.push(url);
+      return fromDisk(url.slice(1));
+    });
+    await own.load('well');
+    await own.load('rock_A');
+    expect(urls).toEqual(['/assets/kaykit-hex/well.gltf.glb', '/assets/kaykit/rock_A.gltf', '/assets/kaykit/rock_A.bin']);
+    own.dispose();
   });
 
   it('builds feature edges once per model', async () => {

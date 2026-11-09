@@ -1,14 +1,35 @@
-import type { StructureKind } from '@space-game/domain';
+import type { CelestialBody, StructureKind } from '@space-game/domain';
 
 /**
- * Which KayKit "Space Base Bits" model stands for what, and how it is fitted to the surface.
+ * Which KayKit model stands for what, and how it is fitted to the surface.
  * Pure data + math, no Three.js (PoC `engine/model-registry.ts`, extended to the catalog kinds).
  *
- * Models are authored on a 2-unit grid, Y up; files are served at `${assetsBase}kaykit/<file>.gltf`
- * (CC0, Kay Lousberg). Bounds and triangle counts are of the FLATTENED geometry and
- * `model-library.spec.ts` checks every number against the files on disk.
+ * Two sources (CC0, Kay Lousberg), one loading path (`ModelLibrary`):
+ * - `spacebits` (default): Space Base Bits, `${assetsBase}kaykit/<file>.gltf` + `.bin`, coloured
+ *   from the atlas UVs; authored on a 2-unit grid, Y up;
+ * - `hex`: Medieval Hexagon objects, `${assetsBase}kaykit-hex/<file>.gltf.glb`, coloured by material
+ *   name (`objectTone`); authored on a hex tile 2 units flat to flat, corners on ±Z.
+ * Bounds and triangle counts are of the FLATTENED geometry and `model-library.spec.ts` checks every
+ * number against the files on disk.
  */
-export type ModelId =
+export type ModelId = SpaceBitsModelId | HexModelId;
+
+/** Medieval Hexagon objects (player structures of the `medieval` skin). */
+export type HexModelId =
+  | 'archeryrange'
+  | 'barracks'
+  | 'castle'
+  | 'farm_plot'
+  | 'house'
+  | 'lumbermill'
+  | 'market'
+  | 'mill'
+  | 'mine'
+  | 'watchtower'
+  | 'watermill'
+  | 'well';
+
+export type SpaceBitsModelId =
   | 'basemodule_A'
   | 'basemodule_B'
   | 'basemodule_D'
@@ -46,8 +67,12 @@ export type ModelId =
   | 'windturbine_low'
   | 'windturbine_tall';
 
+export type ModelSource = 'spacebits' | 'hex';
+
 export interface ModelSpec {
   file: ModelId;
+  /** Kit the file comes from (loading and colouring); omitted = `spacebits`. */
+  source?: ModelSource;
   /** Footprint (max of x/z; z for vehicles = length along forward) of the flattened scene. */
   footprint: number;
   height: number;
@@ -99,9 +124,30 @@ export const MODELS: Readonly<Record<ModelId, ModelSpec>> = {
   water_storage: { file: 'water_storage', footprint: 2.05, height: 1.05, baseOffset: 0, yaw: 0, fill: 0.75, triangles: 326 },
   windturbine_low: { file: 'windturbine_low', footprint: 1.29, height: 1.47, baseOffset: 0, yaw: 0, fill: 0.65, triangles: 826 },
   windturbine_tall: { file: 'windturbine_tall', footprint: 1.67, height: 3.0, baseOffset: 0, yaw: 0, fill: 0.6, triangles: 632 },
+  // Medieval Hexagon objects; `fill` ≈ footprint / 2 keeps the kit's own proportions to its tile
+  archeryrange: { file: 'archeryrange', source: 'hex', footprint: 1.8, height: 1.54, baseOffset: 0, yaw: 0, fill: 0.85, triangles: 1668 },
+  barracks: { file: 'barracks', source: 'hex', footprint: 1.99, height: 1.3, baseOffset: 0.01, yaw: 0, fill: 0.88, triangles: 1960 },
+  castle: { file: 'castle', source: 'hex', footprint: 1.85, height: 2.53, baseOffset: 0.03, yaw: 0, fill: 0.88, triangles: 2231 },
+  farm_plot: { file: 'farm_plot', source: 'hex', footprint: 1.47, height: 0.46, baseOffset: 0.02, yaw: 0, fill: 0.8, triangles: 906 },
+  house: { file: 'house', source: 'hex', footprint: 1.69, height: 0.91, baseOffset: 0.01, yaw: 0, fill: 0.8, triangles: 1666 },
+  lumbermill: { file: 'lumbermill', source: 'hex', footprint: 1.82, height: 1.47, baseOffset: 0.02, yaw: 0, fill: 0.85, triangles: 1698 },
+  market: { file: 'market', source: 'hex', footprint: 1.67, height: 0.86, baseOffset: 0.04, yaw: 0, fill: 0.82, triangles: 1924 },
+  mill: { file: 'mill', source: 'hex', footprint: 1.69, height: 1.98, baseOffset: 0.03, yaw: 0, fill: 0.8, triangles: 2270 },
+  mine: { file: 'mine', source: 'hex', footprint: 1.88, height: 0.83, baseOffset: 0.01, yaw: 0, fill: 0.88, triangles: 1735 },
+  watchtower: { file: 'watchtower', source: 'hex', footprint: 1.71, height: 1.98, baseOffset: 0.03, yaw: 0, fill: 0.8, triangles: 1871 },
+  // the water wheel hangs 0.58 below the floor (into a river); parts sink it to stand on the floor
+  watermill: { file: 'watermill', source: 'hex', footprint: 1.53, height: 1.6, baseOffset: 0.58, yaw: 0, fill: 0.78, triangles: 1605 },
+  well: { file: 'well', source: 'hex', footprint: 1.02, height: 0.74, baseOffset: 0, yaw: 0, fill: 0.5, triangles: 1252 },
 };
 
 export const ALL_MODEL_IDS = Object.keys(MODELS) as ModelId[];
+
+export function sourceOf(id: ModelId): ModelSource {
+  return MODELS[id].source ?? 'spacebits';
+}
+
+/** Space Base Bits models: what a view loads up front (the default skin, units, deposits, belts). */
+export const BASE_MODEL_IDS: ReadonlyArray<ModelId> = ALL_MODEL_IDS.filter((id) => sourceOf(id) === 'spacebits');
 
 export const SHIP_MODEL: ModelId = 'dropship';
 export const ROVER_MODEL: ModelId = 'spacetruck';
@@ -224,21 +270,126 @@ export const KIND_TIERS: Readonly<Record<StructureKind, TieredParts>> = {
 /** Kinds without an entry (era ≥ 2 and unknown ids): a plain low structure. */
 export const DEFAULT_PARTS: ReadonlyArray<ModelPart> = one('structure_low');
 
-/** Models of a kind at a level (L0 = a site before its first construction ends: looks like L1). */
-export function partsFor(kind: StructureKind, level: number): ReadonlyArray<ModelPart> {
-  const t = KIND_TIERS[kind];
-  return t ? t[levelTier(level) - 1] : DEFAULT_PARTS;
+// ---------------------------------------------------------------- medieval skin (T7B)
+
+/**
+ * Look of the player's structures on a body: `medieval` on bodies whose terrain biome is medieval
+ * (Medieval Hexagon models next to the settlement ruins), Space Base Bits everywhere else.
+ */
+export type Skin = 'spacebits' | 'medieval';
+
+export function skinFor(body: Pick<CelestialBody, 'surfaceGrid'> | null | undefined): Skin {
+  return body?.surfaceGrid?.terrain?.biome === 'medieval' ? 'medieval' : 'spacebits';
+}
+
+/** Sinks the water wheel of `watermill` (it hangs below the floor) so the floor stands on the surface. */
+const millFloor = (fill = MODELS.watermill.fill): ModelPart['offset'] => ({ y: -(MODELS.watermill.baseOffset * fill) / MODELS.watermill.footprint });
+/** Medieval Atanor complex: the castle in the middle, a house on every ring tile. */
+const ATANOR_MEDIEVAL: ModelPart[] = [{ model: 'castle', at: [0] }, ...[1, 2, 3, 4, 5, 6].map((k): ModelPart => ({ model: 'house', at: [k], fill: 0.7 }))];
+const MINE = always(one('mine'));
+
+/**
+ * Catalog kind → medieval models per level tier (plan §8.2, README table). Landing pads and solar
+ * panels stay sci-fi (decision T-24): the colony still lands from orbit and has no medieval power.
+ * Tiers change the look where a second model reads well on one tile; the rest keeps one look.
+ */
+export const KIND_TIERS_MEDIEVAL: Readonly<Record<StructureKind, TieredParts>> = {
+  // the keep on the anchor, the (sci-fi) pad on the two other port tiles; tiers as in Space Base Bits
+  HQ: tiers(
+    [{ model: 'castle', at: [0] }, PORT_PAD],
+    [{ model: 'castle', at: [0] }, PORT_PAD, ...masts([1, 2], 0.5)],
+    [{ model: 'castle', at: [0] }, { model: 'landingpad_large', at: [1, 2] }, ...masts([1, 2], 0.5)],
+  ),
+  LAND: KIND_TIERS['LAND']!,
+  // a house; L3–4 two houses; L5 two houses round a watchtower
+  HAB: tiers(
+    one('house'),
+    [
+      { model: 'house', fill: 0.55, offset: { x: -0.2, z: -0.1 } },
+      { model: 'house', fill: 0.5, offset: { x: 0.22, z: 0.16 }, yaw: Math.PI },
+    ],
+    [
+      { model: 'house', fill: 0.5, offset: { x: -0.22, z: -0.12 } },
+      { model: 'house', fill: 0.46, offset: { x: 0.24, z: -0.1 }, yaw: Math.PI },
+      { model: 'watchtower', fill: 0.36, offset: { z: 0.26 } },
+    ],
+  ),
+  // a field; L3+ a windmill grinding its grain at the corner
+  FARM: tiers(one('farm_plot'), [
+    { model: 'farm_plot', fill: 0.62, offset: { x: -0.14, z: -0.08 } },
+    { model: 'mill', fill: 0.42, offset: { x: 0.26, z: 0.2 } },
+  ]),
+  GAR: always(one('barracks')),
+  DEP: always(one('market')),
+  // storage yard: a shed and a fenced yard of round stock (the kit's archery range)
+  SKL: always(one('archeryrange')),
+  TNK: always(one('well', { fill: 0.62 })),
+  MLT: always([
+    { model: 'well', fill: 0.4, offset: { x: -0.24 } },
+    { model: 'watermill', fill: 0.5, offset: { x: 0.2, ...millFloor(0.5) } },
+  ]),
+  SOL: KIND_TIERS['SOL']!,
+  // a windmill, larger from L3
+  WND: tiers(one('mill', { fill: 0.72 }), one('mill', { fill: 0.9 })),
+  MIN: MINE,
+  ICE: MINE,
+  SIT: MINE,
+  REGX: MINE,
+  // 3-tile works: the workshop on the anchor, a tower (furnace) on the two other tiles
+  SMT: always([{ model: 'lumbermill', at: [0] }, { model: 'watchtower', at: [1, 2], fill: 0.5 }]),
+  // refinery: the water mill on two tiles, its well on the anchor
+  SIR: always([
+    { model: 'well', at: [0], fill: 0.55 },
+    { model: 'watermill', at: [1, 2], fill: 0.66, offset: millFloor(0.66) },
+  ]),
+  CON: always(one('watchtower')),
+  // loading station: the tower and a stack of goods beside it (the kit's crop field reads as bales)
+  LST: always([
+    { model: 'watchtower', fill: 0.62, offset: { x: -0.18 } },
+    { model: 'farm_plot', fill: 0.36, offset: { x: 0.28 } },
+  ]),
+  // preset kinds (era ≥ 2, placed by scenarios)
+  ATN: always(ATANOR_MEDIEVAL),
+  GAS: always(one('well', { fill: 0.62 })),
+  HE3S: always([{ model: 'mine', at: [0] }, { model: 'well', at: [1, 2], fill: 0.5 }]),
+};
+
+/**
+ * Medieval kinds without an entry (era ≥ 2 and unknown ids): a house on the anchor tile (stretched
+ * over a 3- or 7-tile footprint a house turns into a barn the size of a castle).
+ */
+export const DEFAULT_PARTS_MEDIEVAL: ReadonlyArray<ModelPart> = [{ model: 'house', at: [0] }];
+
+const SKINS: Readonly<Record<Skin, { tiers: Readonly<Record<StructureKind, TieredParts>>; fallback: ReadonlyArray<ModelPart> }>> = {
+  spacebits: { tiers: KIND_TIERS, fallback: DEFAULT_PARTS },
+  medieval: { tiers: KIND_TIERS_MEDIEVAL, fallback: DEFAULT_PARTS_MEDIEVAL },
+};
+
+/** Models of a kind at a level in a skin (L0 = a site before its first construction ends: looks like L1). */
+export function partsFor(kind: StructureKind, level: number, skin: Skin = 'spacebits'): ReadonlyArray<ModelPart> {
+  const s = SKINS[skin];
+  const t = s.tiers[kind];
+  return t ? t[levelTier(level) - 1] : s.fallback;
 }
 
 /** L1 look (placement ghost, menus). */
-export function partsForKind(kind: StructureKind): ReadonlyArray<ModelPart> {
-  return partsFor(kind, 1);
+export function partsForKind(kind: StructureKind, skin: Skin = 'spacebits'): ReadonlyArray<ModelPart> {
+  return partsFor(kind, 1, skin);
 }
 
 /** Every model a kind needs at any level (for preloading). */
-export function modelsForKind(kind: StructureKind): ModelId[] {
-  const t = KIND_TIERS[kind] ?? [DEFAULT_PARTS];
+export function modelsForKind(kind: StructureKind, skin: Skin = 'spacebits'): ModelId[] {
+  const s = SKINS[skin];
+  const t = s.tiers[kind] ?? [s.fallback];
   return [...new Set(t.flatMap((parts) => parts.map((p) => p.model)))];
+}
+
+/** Every model the structures of a skin can use, any kind, any level (preload when a body has the skin). */
+export function skinModels(skin: Skin): ModelId[] {
+  const s = SKINS[skin];
+  const ids = new Set<ModelId>(s.fallback.map((p) => p.model));
+  for (const t of Object.values(s.tiers)) for (const parts of t) for (const p of parts) ids.add(p.model);
+  return [...ids];
 }
 
 /**
@@ -257,15 +408,34 @@ export function fitScale(spec: ModelSpec, width: number, fill = spec.fill): numb
   return (width * fill) / spec.footprint;
 }
 
+/**
+ * Height of a part's top above the surface, in widths of its frame (`offset.y` included): about 0
+ * for a pit sunk into the ground, which the placement ghost leaves out.
+ */
+export function partTop(part: ModelPart): number {
+  const spec = MODELS[part.model];
+  return (spec.height * (part.fill ?? spec.fill)) / spec.footprint + (part.offset?.y ?? 0);
+}
+
 /** Vertical lift (scaled units) that puts the model's lowest point on the surface. */
 export function baseLift(spec: ModelSpec, scale: number): number {
   return spec.baseOffset * scale;
 }
 
-/** `${base}kaykit/<file>.gltf`; `base` is the app's assets base ('assets/' or '/assets/'). */
+const slash = (assetsBase: string) => (assetsBase === '' || assetsBase.endsWith('/') ? assetsBase : `${assetsBase}/`);
+
+/** `${base}kaykit-hex/<id>.gltf.glb` (Medieval Hexagon); `base` is the app's assets base ('assets/' or '/assets/'). */
+export function hexKitUrl(assetsBase: string, id: string): string {
+  return `${slash(assetsBase)}kaykit-hex/${id}.gltf.glb`;
+}
+
+/**
+ * File of a registry model: `${base}kaykit/<file>.gltf` (Space Base Bits) or
+ * `${base}kaykit-hex/<file>.gltf.glb` (Medieval Hexagon); `base` is the app's assets base.
+ */
 export function modelUrl(assetsBase: string, file: ModelId): string {
-  const base = assetsBase === '' || assetsBase.endsWith('/') ? assetsBase : `${assetsBase}/`;
-  return `${base}kaykit/${file}.gltf`;
+  if (sourceOf(file) === 'hex') return hexKitUrl(assetsBase, file);
+  return `${slash(assetsBase)}kaykit/${file}.gltf`;
 }
 
 /** Directory the .bin buffers resolve against. */

@@ -1,13 +1,18 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { MODELS, type ModelId, modelDir, modelUrl } from './model-registry';
+import { flattenKitScene, kitGeometry, ownBuffer } from './hex-kit';
+import { MODELS, type ModelId, modelDir, modelUrl, sourceOf } from './model-registry';
 import { atlasShade, atlasTone } from './palette';
+import { objectTone } from './terrain-tones';
 
 /** One loaded KayKit model, flattened to a single geometry so it can be instanced. */
 export interface ModelAsset {
   id: ModelId;
-  /** position, normal, color (the atlas swatches recoloured into the limited palette). */
+  /**
+   * position, normal, color: Space Base Bits atlas swatches recoloured into the limited palette
+   * (indexed), or Medieval Hexagon material names through `objectTone` (non-indexed).
+   */
   geometry: THREE.BufferGeometry;
   /** Authored bounds (after the registry yaw). */
   box: THREE.Box3;
@@ -143,8 +148,21 @@ export function flattenScene(id: ModelId, scene: THREE.Object3D, yaw = 0): Model
 }
 
 /**
- * Loads KayKit glTF files from `${assetsBase}kaykit/`, caches them and owns every geometry it made:
- * `dispose()` frees all of them, including loads that finish after the dispose.
+ * Medieval Hexagon scene → asset: the hex-kit flattening (`flattenKitScene`, shared with the terrain
+ * layer), vertex colours from the material names (`objectTone`, full tones: these are the player's
+ * buildings, the settlement ruins are faded), the registry yaw.
+ */
+export function flattenHexScene(id: ModelId, scene: THREE.Object3D, yaw = 0): ModelAsset {
+  const kit = flattenKitScene(id, scene);
+  const geometry = kitGeometry(kit, objectTone, yaw);
+  const box = geometry.boundingBox!.clone();
+  return { id, geometry, box, size: box.getSize(new THREE.Vector3()), triangles: kit.triangles };
+}
+
+/**
+ * Loads KayKit models of both sources (`ModelSpec.source`): Space Base Bits glTF from
+ * `${assetsBase}kaykit/`, Medieval Hexagon GLB from `${assetsBase}kaykit-hex/`. Caches them and owns
+ * every geometry it made: `dispose()` frees all of them, including loads that finish after the dispose.
  */
 export class ModelLibrary {
   private readonly loader = new GLTFLoader();
@@ -190,8 +208,9 @@ export class ModelLibrary {
     return p;
   }
 
-  /** The .gltf and its .bin buffers, without textures, as one GLB. */
+  /** The .gltf and its .bin buffers, without textures, as one GLB (a hex-kit file already is one). */
   async fetchModel(id: ModelId): Promise<ArrayBuffer> {
+    if (sourceOf(id) === 'hex') return ownBuffer(await this.fetchBytes(modelUrl(this.assetsBase, id)));
     const json = stripTextures(JSON.parse(new TextDecoder().decode(await this.fetchBytes(modelUrl(this.assetsBase, id)))) as GltfJson);
     const dir = modelDir(this.assetsBase);
     const buffers = await Promise.all((json.buffers ?? []).map((b) => {
@@ -209,7 +228,7 @@ export class ModelLibrary {
         path,
         (gltf) => {
           try {
-            const asset = flattenScene(id, gltf.scene, MODELS[id].yaw);
+            const asset = sourceOf(id) === 'hex' ? flattenHexScene(id, gltf.scene, MODELS[id].yaw) : flattenScene(id, gltf.scene, MODELS[id].yaw);
             if (this.disposed) {
               asset.geometry.dispose();
               resolve(null);

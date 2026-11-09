@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { tileIndexOf, type PlanetGrid, type Structure } from '@space-game/domain';
 import { InstancedBatch, LineBuffer, writeTransformed } from './buffers';
 import type { ModelKit } from './model-kit';
-import { DEPOSIT_MODEL, MODELS, baseLift, fitScale, footprintSpan, levelTier, partsFor, type ModelId, type ModelPart } from './model-registry';
+import { DEPOSIT_MODEL, MODELS, baseLift, fitScale, footprintSpan, levelTier, partsFor, type ModelId, type ModelPart, type Skin } from './model-registry';
 import { createFrame, footprintFrame, structureLook, type StructureLook, type SurfaceFrame } from './placement';
 
 /** One model of one structure, as placed on the body (body-local frame). */
@@ -79,8 +79,9 @@ interface Batch {
  * Structures of one body (PoC `StructureView`, generalised): one InstancedMesh per model on the
  * body for solid parts, one merged LineSegments per model for outlines of sites (planned:
  * ghost; constructing: target silhouette; upgrading: scaffold), and deposit rocks (instanced)
- * on free deposit tiles. Each structure shows the parts of its kind at its level tier (`partsFor`),
- * so an upgrade across a tier moves it to other batches. Rebuilt only when the layout signature
+ * on free deposit tiles. Each structure shows the parts of its kind at its level tier in the body's
+ * skin (`partsFor(kind, level, skin)`: Space Base Bits, or Medieval Hexagon on a medieval body), so
+ * an upgrade across a tier moves it to other batches. Rebuilt only when the layout signature
  * (ids, kinds, states, tiles, tiers) changes; progress-only changes rewrite the solid matrices.
  */
 export class StructureLayer {
@@ -107,6 +108,8 @@ export class StructureLayer {
     private readonly kit: ModelKit,
     private readonly outlineMaterial: THREE.LineBasicMaterial,
     private readonly showDecor: boolean,
+    /** Look of the structures (`skinFor(body)`); fixed for the life of the layer. */
+    readonly skin: Skin = 'spacebits',
   ) {
     this.group.name = `${grid.bodyId}_Structures`;
   }
@@ -206,7 +209,7 @@ export class StructureLayer {
       const center = new THREE.Vector3(this.frame.position.x, this.frame.position.y, this.frame.position.z);
       const width = this.frame.width;
       this.centroid.add(center); // once per structure, however many parts it has
-      for (const part of partsFor(s.kind, modelLevel(s))) {
+      for (const part of partsFor(s.kind, modelLevel(s), this.skin)) {
         const local = partMatrix(partFrame(this.grid, tiles, part, this.frame), part, new THREE.Matrix4(), this.basis);
         this.parts.push({ structureId: s.id, model: part.model, tiles, look, local, inverse: local.clone().invert(), center, width });
         this.batch(part.model);

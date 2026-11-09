@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { TAU_CETI_BODIES, TC_C, buildWorldGrids, buildWorldTerrain, type TerrainPlan } from '@space-game/domain';
 import { HexKit, hexKitUrl, type KitModel } from './hex-kit';
 import { TerrainDecor } from './terrain-decor';
+import { RUIN_FADE, RUIN_GREY, TONE, isRuinBuilding, objectTone, ruinTone } from './terrain-tones';
 import { TerrainView } from './terrain-view';
 
 const PUBLIC = join(process.cwd(), 'apps', 'game', 'public');
@@ -182,5 +183,56 @@ describe('TerrainDecor on Tau Ceti c', () => {
     expect(m.elements).toEqual(shown);
     decor.dispose();
     view.dispose();
+  });
+
+  it('fades the settlement buildings (ruins, T-23) and keeps trees, rocks and mountains in full tone', async () => {
+    const kit = await new HexKit('assets/', fromDisk).loadAll(idsOf(plan));
+    const view = new TerrainView(grid, plan);
+    const decor = new TerrainDecor(grid, plan, view.frames, kit);
+    const c = new THREE.Color();
+    const want = new THREE.Color();
+    const buildings = new Set<string>();
+    for (const id of new Set(plan.decor.map((d) => d.model))) {
+      const mesh = decor.group.children.find((o) => o.name === `Decor_${id}`) as THREE.InstancedMesh;
+      const color = mesh.geometry.getAttribute('color');
+      const ruin = isRuinBuilding(id);
+      if (ruin) buildings.add(id);
+      let v = 0;
+      for (const part of kit.get(id)!.parts) {
+        want.setHex(ruin ? ruinTone(objectTone(part.mat)) : objectTone(part.mat));
+        c.setRGB(color.getX(v), color.getY(v), color.getZ(v));
+        expect(c.getHex(), `${id} ${part.mat}`).toBe(want.getHex());
+        v += part.pos.length / 3;
+      }
+    }
+    expect([...buildings].sort()).toEqual(['barracks', 'castle', 'farm_plot', 'house', 'lumbermill', 'market', 'mill', 'mine', 'watchtower', 'well'].filter((b) => plan.decor.some((d) => d.model === b)));
+    expect(buildings.has('castle')).toBe(true);
+    decor.dispose();
+    view.dispose();
+  });
+});
+
+describe('ruin tones (T-23)', () => {
+  const rgb = (hex: number) => [(hex >> 16) & 0xff, (hex >> 8) & 0xff, hex & 0xff] as const;
+
+  it('dims by RUIN_FADE and pulls RUIN_GREY of the way to the grey of equal luminance', () => {
+    expect(RUIN_FADE).toBe(0.8);
+    expect(RUIN_GREY).toBe(0.3);
+    // a grey only dims
+    expect(ruinTone(0xffffff)).toBe(0xcccccc);
+    expect(ruinTone(0x000000)).toBe(0x000000);
+    // a saturated tone loses saturation and brightness, keeps its hue order
+    const [r, g, b] = rgb(TONE.thatch);
+    const [fr, fg, fb] = rgb(ruinTone(TONE.thatch));
+    expect(fr).toBeLessThan(r);
+    expect(fr - fb).toBeLessThan(r - b);
+    expect(fr >= fg && fg >= fb).toBe(r >= g && g >= b);
+    const y = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    expect(fr).toBe(Math.round((r + (y - r) * 0.3) * 0.8));
+  });
+
+  it('treats settlement models as ruins, not trees, rocks or mountains', () => {
+    for (const id of ['castle', 'house', 'farm_plot', 'mill', 'well', 'watchtower']) expect(isRuinBuilding(id), id).toBe(true);
+    for (const id of ['detail_treeA', 'detail_rocks', 'detail_rocks_small', 'mountain']) expect(isRuinBuilding(id), id).toBe(false);
   });
 });

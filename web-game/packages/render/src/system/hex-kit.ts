@@ -1,6 +1,9 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import type { FetchBytes } from './model-library';
+import { hexKitUrl } from './model-registry';
+
+export { hexKitUrl } from './model-registry';
 
 /** One material group of a kit model: node transforms baked in, non-indexed, positions only. */
 export interface KitPart {
@@ -17,16 +20,19 @@ export interface KitModel {
   triangles: number;
 }
 
-/** `${base}kaykit-hex/<id>.gltf.glb`; `base` is the app's assets base ('assets/' or '/assets/'). */
-export function hexKitUrl(assetsBase: string, id: string): string {
-  const base = assetsBase === '' || assetsBase.endsWith('/') ? assetsBase : `${assetsBase}/`;
-  return `${base}kaykit-hex/${id}.gltf.glb`;
+/**
+ * Bytes as an ArrayBuffer of this realm. GLTFLoader tells a GLB from JSON text by `instanceof
+ * ArrayBuffer`; bytes from another realm (jsdom, workers) fail it and would be read as text.
+ */
+export function ownBuffer(bytes: ArrayBuffer): ArrayBuffer {
+  return bytes instanceof ArrayBuffer ? bytes : new Uint8Array(bytes).slice().buffer;
 }
 
 /**
  * Loader for the KayKit Medieval Hexagon subset (`.gltf.glb`, no textures: colour is the material name).
  * Keeps the geometry as plain arrays per material so the terrain layer can warp tiles vertex by vertex
- * and colour them from the palette. Each file is fetched once.
+ * and colour them from the palette. Each file is fetched once. Player structures of the medieval skin
+ * go through `ModelLibrary` instead, which uses the same `flattenKitScene` + `kitGeometry`.
  */
 export class HexKit {
   private readonly loader = new GLTFLoader();
@@ -57,17 +63,20 @@ export class HexKit {
   }
 
   private parse(id: string, bytes: ArrayBuffer): Promise<KitModel> {
-    // GLTFLoader tells a GLB from JSON text by `instanceof ArrayBuffer`; bytes from another realm (jsdom, workers) fail it
-    const data = bytes instanceof ArrayBuffer ? bytes : new Uint8Array(bytes).slice().buffer;
     return new Promise((resolve, reject) => {
-      this.loader.parse(data, '', (gltf) => resolve(flatten(id, gltf.scene)), reject);
+      this.loader.parse(ownBuffer(bytes), '', (gltf) => resolve(flattenKitScene(id, gltf.scene)), reject);
     });
   }
 }
 
-function flatten(id: string, scene: THREE.Object3D): KitModel {
+/**
+ * Bakes every mesh of a hex-kit glTF scene (node transforms applied, non-indexed) into position
+ * arrays grouped by material name, and drops the scene's own geometries and materials.
+ */
+export function flattenKitScene(id: string, scene: THREE.Object3D): KitModel {
   scene.updateMatrixWorld(true);
   const parts: KitPart[] = [];
+  const owned: Array<{ dispose(): void }> = [];
   const box = new THREE.Box3();
   const v = new THREE.Vector3();
   let triangles = 0;
@@ -77,14 +86,47 @@ function flatten(id: string, scene: THREE.Object3D): KitModel {
     const g = src.index ? src.toNonIndexed() : src.clone();
     g.applyMatrix4(o.matrixWorld);
     const pos = (g.getAttribute('position').array as Float32Array).slice();
-    const material = (Array.isArray(o.material) ? o.material[0] : o.material) as THREE.Material;
+    const mats = (Array.isArray(o.material) ? o.material : [o.material]) as THREE.Material[];
     for (let i = 0; i < pos.length; i += 3) box.expandByPoint(v.set(pos[i]!, pos[i + 1]!, pos[i + 2]!));
     triangles += pos.length / 9;
-    parts.push({ mat: material.name, pos });
+    parts.push({ mat: mats[0]!.name, pos });
     g.dispose();
+    owned.push(src, ...mats);
   });
+  for (const r of owned) r.dispose();
   if (parts.length === 0) throw new Error(`Kit model ${id} has no meshes`);
   return { id, parts, box, size: box.getSize(new THREE.Vector3()), triangles };
+}
+
+/**
+ * One flat-shadable geometry of a kit model: position, normal and a `color` per vertex from
+ * `tone(material name)` (sRGB hex), turned by `yaw` about +Y. Bounds computed.
+ */
+export function kitGeometry(model: KitModel, tone: (mat: string) => number, yaw = 0): THREE.BufferGeometry {
+  let n = 0;
+  for (const part of model.parts) n += part.pos.length;
+  const positions = new Float32Array(n);
+  const colors = new Float32Array(n);
+  const c = new THREE.Color();
+  let at = 0;
+  for (const part of model.parts) {
+    positions.set(part.pos, at);
+    c.setHex(tone(part.mat));
+    for (let i = 0; i < part.pos.length; i += 3) {
+      colors[at + i] = c.r;
+      colors[at + i + 1] = c.g;
+      colors[at + i + 2] = c.b;
+    }
+    at += part.pos.length;
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  if (yaw) geometry.rotateY(yaw);
+  geometry.computeVertexNormals();
+  geometry.computeBoundingBox();
+  geometry.computeBoundingSphere();
+  return geometry;
 }
 
 async function defaultFetchBytes(url: string): Promise<ArrayBuffer> {

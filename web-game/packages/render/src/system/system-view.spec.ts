@@ -21,6 +21,7 @@ import {
   type WorldState,
 } from '@space-game/domain';
 import type { PickResult, Placement, Selection, ViewInput } from '../view';
+import type { FetchBytes } from './model-library';
 import { MODELS } from './model-registry';
 import { DS } from './palette';
 import { TRANSITION_SECONDS } from './camera-rig';
@@ -72,7 +73,7 @@ interface Harness {
 }
 
 /** The host's part: one renderer (stubbed: jsdom has no WebGL), a container, the frame loop. */
-function mount(snapshot: GameSnapshot, opts: { loadModels?: boolean } = {}): Harness {
+function mount(snapshot: GameSnapshot, opts: { loadModels?: boolean; fetchBytes?: FetchBytes } = {}): Harness {
   const container = document.createElement('div');
   document.body.appendChild(container);
   const canvas = document.createElement('canvas');
@@ -95,7 +96,7 @@ function mount(snapshot: GameSnapshot, opts: { loadModels?: boolean } = {}): Har
     render: vi.fn(),
     clearDepth: vi.fn(),
   } as unknown as Harness['renderer'];
-  const view = new SystemView({ loadModels: opts.loadModels ?? false, fetchBytes: fromDisk });
+  const view = new SystemView({ loadModels: opts.loadModels ?? false, fetchBytes: opts.fetchBytes ?? fromDisk });
   view.mount({ container, three: renderer, assetsBase: 'assets/', width: W, height: H });
   const input: ViewInput = { snapshot, frame: null, focusBodyId: null, selection: { kind: 'NONE' }, hover: null, placement: null };
   const h: Harness = {
@@ -468,6 +469,91 @@ describe('SystemView (planet + system kinds, one scene)', () => {
     expect(c.grid!.mesh.visible).toBe(true);
 
     const owned = resources(s.scene);
+    const disposed = new Set<unknown>();
+    for (const r of owned) r.addEventListener('dispose', () => disposed.add(r));
+    h.view.dispose();
+    expect([...owned].filter((r) => !disposed.has(r)).map((r) => r.type)).toEqual([]);
+  });
+
+  it('Tau Ceti c (medieval biome): structures use the medieval models, loaded only for that skin; tc-e keeps Space Base Bits; ghost and picking use the kit', async () => {
+    const tc = new Simulation(TAU_CETI_SCENARIO);
+    const urls: string[] = [];
+    h = mount(snapshotOf(tc.world, 'tau-ceti'), {
+      loadModels: true,
+      fetchBytes: (url) => {
+        urls.push(url);
+        return fromDisk(url);
+      },
+    });
+    await h.view.ready;
+    const s = scene(h);
+    // before the scan no body shows a grid: only Space Base Bits are loaded, nothing from the hex kit
+    expect(s.kit.isLoaded('basemodule_A')).toBe(true);
+    expect(s.kit.isLoaded('house')).toBe(false);
+    expect(urls.filter((u) => u.includes('kaykit-hex/'))).toEqual([]);
+
+    tc.dispatch({ type: 'SCAN_SYSTEM', shipId: ARK_ID });
+    while (tc.world.scan.state !== 'DONE') tc.step(0.5);
+    const world = structuredClone(tc.world);
+    h.input = { ...h.input, snapshot: snapshotOf(world, 'tau-ceti'), focusBodyId: TC_C };
+    h.view.setKind('planet');
+    h.frames(Math.ceil(TRANSITION_SECONDS * 60) + 5);
+    await h.view.ready; // now includes the medieval models (tc-c got its structure layer)
+    expect(s.kit.isLoaded('house')).toBe(true);
+    expect(s.kit.isLoaded('castle')).toBe(true);
+
+    const tileC = facingTile(h, TC_C, world);
+    const tileE = s.gridOf(TC_E)!.tiles.find((t) => !t.deposit && t.neighbors.length === 6)!;
+    const habC = standingStructure('HAB', TC_C, [tileC.index]);
+    const habE = standingStructure('HAB', TC_E, [tileE.index]);
+    h.input = { ...h.input, snapshot: snapshotOf({ ...world, structures: [...world.structures, habC, habE] }, 'tau-ceti') };
+    h.frames(Math.ceil(TRANSITION_SECONDS * 60) + 5);
+
+    const c = s.bodyParts(TC_C)!.structures!;
+    const e = s.bodyParts(TC_E)!.structures!;
+    expect(c.skin).toBe('medieval');
+    expect(e.skin).toBe('spacebits');
+    expect(c.partsOf(habC.id).map((p) => p.model)).toEqual(['house']);
+    expect(e.partsOf(habE.id).map((p) => p.model)).toEqual(['basemodule_A']);
+    const batch = (layer: typeof c, body: string, model: string) => layer.group.children.find((o) => o.name === `${body}_${model}`) as THREE.InstancedMesh | undefined;
+    const house = batch(c, TC_C, 'house')!;
+    expect(house.visible).toBe(true);
+    expect(house.count).toBe(1);
+    // the flattened Medieval Hexagon geometry (non-indexed), the same shared material as every model
+    expect(house.geometry).toBe(s.kit.library.get('house')!.geometry);
+    expect(house.geometry.getAttribute('position').count / 3).toBe(MODELS.house.triangles);
+    expect(house.material).toBe(s.kit.material);
+    expect(batch(c, TC_C, 'basemodule_A')).toBeUndefined();
+    expect(batch(e, TC_E, 'house')).toBeUndefined();
+    expect(batch(e, TC_E, 'basemodule_A')!.count).toBe(1);
+
+    // picking: a ray through the top of the house hits its box (the loaded model's, from the kit)
+    const part = c.partsOf(habC.id)[0]!;
+    const box = s.kit.box('house');
+    expect(box).toBe(s.kit.library.get('house')!.box);
+    const top = new THREE.Vector3(0, box.max.y * 0.8, 0).applyMatrix4(part.local);
+    expect(h.pickAt(s.screenOfLocal(TC_C, top))).toMatchObject({ kind: 'STRUCTURE', bodyId: TC_C, structureId: habC.id });
+    expect(h.pickAt(s.screenOfLocal(TC_C, part.center))).toMatchObject({ kind: 'STRUCTURE', bodyId: TC_C, structureId: habC.id });
+
+    // placement ghost on tc-c: the port as castle + pad, edges of the loaded models
+    const grid = s.gridOf(TC_C)!;
+    const free = grid.tiles.find((t) => t.neighbors.length === 6 && t.index !== tileC.index && !t.neighbors.includes(tileC.index) && footprintTiles(grid, t.index, 3, 0))!;
+    const tiles = footprintTiles(grid, free.index, 3, 0)!;
+    h.input = { ...h.input, placement: { kind: 'HQ', tiles, valid: true } };
+    h.frames(1);
+    const visible = () => s.ghostObjects.filter((g) => g.visible).map((g) => g.geometry);
+    expect(visible()).toEqual([s.kit.edges('castle'), s.kit.edges('landingpad_small')]);
+    expect(s.kit.edges('castle')).toBe(s.kit.library.edgesOf('castle'));
+    // a half-sunk water mill keeps its outline (only pits are left out)
+    h.input = { ...h.input, placement: { kind: 'SIR', tiles, valid: true } };
+    h.frames(1);
+    expect(visible()).toEqual([s.kit.edges('well'), s.kit.edges('watermill')]);
+    // the same kind placed on tc-e: Space Base Bits
+    h.input = { ...h.input, focusBodyId: TC_E, placement: { kind: 'HAB', tiles: [tileE.neighbors[0]!], valid: true } };
+    h.frames(1);
+    expect(visible()).toEqual([s.kit.edges('basemodule_A')]);
+
+    const owned = new Set([...resources(s.scene), ...resources(s.overlay.scene)]);
     const disposed = new Set<unknown>();
     for (const r of owned) r.addEventListener('dispose', () => disposed.add(r));
     h.view.dispose();

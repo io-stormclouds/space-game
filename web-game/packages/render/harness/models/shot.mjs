@@ -1,7 +1,9 @@
-// Screenshot of the structure contact sheet (T7A). Start the harness first:
+// Screenshot of the structure contact sheet (T7A, T7B). Start the harness first:
 //   npx vite packages/render/harness/models --port 4432
 // then: node packages/render/harness/models/shot.mjs [out.png] [url]
-// Default output: ../docs/img/structures/t7a-sheet.png (repo docs). GPU Chromium (ANGLE d3d11).
+// Default output: ../docs/img/structures/t7a-sheet.png (repo docs). The medieval skin (T7B):
+//   node packages/render/harness/models/shot.mjs ../docs/img/structures/t7b-sheet-medieval.png "http://localhost:4432/?skin=medieval"
+// GPU Chromium (ANGLE d3d11).
 import { mkdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, resolve } from 'node:path';

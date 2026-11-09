@@ -27,7 +27,7 @@ host.pick(x, y, input);         // piksele względem kontenera
   - próg przeciągnięcia `CLICK_THRESHOLD_PX = 5`;
   - ograniczenie hover do ~30 Hz: `HOVER_INTERVAL_MS = 33`.
 - **`stats()`:** zwraca draw calls i trójkąty obu przebiegów, czyli sceny i nakładki pikselowej. Host widzi w `renderer.info` tylko ostatni przebieg.
-- **`SystemView.ready`:** rozwiązuje się, gdy modele są wczytane. Do tego czasu stoją pudełka o wymiarach z rejestru.
+- **`SystemView.ready`:** rozwiązuje się, gdy wczytane są modele zamówione do tej pory: Space Base Bits przy montowaniu, modele skórki medieval, gdy pokaże się ciało z tym biomem. Do tego czasu stoją pudełka o wymiarach z rejestru.
 
 ## Co skąd (PoC → tutaj)
 
@@ -39,8 +39,8 @@ host.pick(x, y, input);         // piksele względem kontenera
 | `structure-view.ts` | `structure-layer.ts`, `buffers.ts` | InstancedMesh na (ciało, model), stany budowy, stopy 1/3/7 kafelków, skały złóż |
 | `entity-view-registry.ts`, `picking.service.ts` | `system-scene.ts` (`pick`), `screen-overlay.ts` | jednostki w przestrzeni ekranu, test pudełek modeli, pierścień pasa |
 | `camera-controller.ts` | `camera-rig.ts` | dwa ujęcia, przelot 0,7 s, pamięć ujęcia gracza na tryb |
-| `model-library.ts` (+spec) | `model-library.ts` (+spec), `model-kit.ts` | GLB składany w pamięci, kolory z UV atlasu zamiast tekstury, placeholdery |
-| `model-registry.ts` (+spec) | `model-registry.ts` (+spec) | 36 plików, rodzaje z katalogu × progi poziomu (`partsFor`), części z `at` / `fill` / `offset` / `yaw` |
+| `model-library.ts` (+spec) | `model-library.ts` (+spec), `model-kit.ts` | dwa źródła jedną ścieżką: GLB składany w pamięci i kolory z UV atlasu (Space Base Bits) albo gotowy GLB i kolory z nazwy materiału (Medieval Hexagon); placeholdery |
+| `model-registry.ts` (+spec) | `model-registry.ts` (+spec) | 48 plików (36 Space Base Bits + 12 Medieval Hexagon), rodzaje z katalogu × progi poziomu × skórka (`partsFor`), części z `at` / `fill` / `offset` / `yaw` |
 | `asset-cache.ts` | pamięci podręczne w `system-scene.ts` | — |
 | — | `placement.ts`, `belt-view.ts`, `units-layer.ts`, `labels.ts`, `palette.ts` | nowe |
 
@@ -95,7 +95,7 @@ host.pick(x, y, input);         // piksele względem kontenera
 
 ## Testy i harness
 
-- **Testy:** `npx vitest run packages/render/src/system`, 85 testów w 9 plikach (po T7A).
+- **Testy:** `npx vitest run packages/render/src/system`, 98 testów w 9 plikach (po T7B).
   - `system-view.spec.ts` działa w jsdom z atrapą renderera. Sprawdza:
     - pick: kafelek, budowla, statek, łazik, `EMPTY`, małe ciało w układzie;
     - przełączenie bez nowych zasobów;
@@ -106,11 +106,13 @@ host.pick(x, y, input);         // piksele względem kontenera
   - `model-registry.spec.ts`: każdy z 18 budowalnych rodzajów i HQ ma części na L1, L3 i L5, nigdy samo `structure_tall`; progi różnią się tam, gdzie mówi plan; każda część mieści się w swojej ramce na każdym ciele z siatką.
   - `model-library.spec.ts`: każdy wpis rejestru zgadza się z plikiem (trójkąty, stopa, wysokość, przesunięcie podstawy), każdy plik wskazuje wspólny atlas, każdy wierzchołek dostaje odcień palety.
   - `system-view.spec.ts`: ulepszenie L2 → L3 → L5 przenosi budowlę do batcha modelu danego progu, `dispose` zwalnia wszystko.
-- **Stykówka modeli:** `npx vite packages/render/harness/models --port 4432`, potem `node packages/render/harness/models/shot.mjs` zapisuje `docs/img/structures/t7a-sheet.png`. Każdy rodzaj × L1/L3/L5 przez prawdziwe `StructureLayer` i `ModelKit` na płaskich heksach (czasza bardzo dużej sfery). `?only=HQ,LAND&blocks=1` daje zbliżenie wybranych rodzajów.
+  - T7B: `model-library.spec.ts` sprawdza wpisy `hex` z plikami (te same trójkąty i pudełko co `HexKit`, kolor wierzchołka = `objectTone` materiału, bez przygaszenia); `model-registry.spec.ts` sprawdza skórkę medieval (każdy z 18 rodzajów i HQ na L1/L3/L5, tylko modele hex poza zostawionym sci-fi, mapowanie z tabeli, preload); `system-view.spec.ts`: HAB na Tau Ceti c dostaje batch `house`, ten sam rodzaj na tc-e `basemodule_A`, modele medieval ładują się dopiero po odkryciu c, duch (zamek + lądowisko, młyn wodny) i picking przez pudełko z `kit.box`; `terrain.spec.ts`: ruiny przygaszone, drzewa i skały nie.
+- **Stykówka modeli:** `npx vite packages/render/harness/models --port 4432`, potem `node packages/render/harness/models/shot.mjs` zapisuje `docs/img/structures/t7a-sheet.png`. Każdy rodzaj × L1/L3/L5 przez prawdziwe `StructureLayer` i `ModelKit` na płaskich heksach (czasza bardzo dużej sfery). `?only=HQ,LAND&blocks=1` daje zbliżenie wybranych rodzajów, `?skin=medieval` skórkę medieval na trawie (`shot.mjs ../docs/img/structures/t7b-sheet-medieval.png "http://localhost:4432/?skin=medieval"`).
 - **Harness:** `npx vite packages/render/harness/system --port 4431`.
-  - Domyślnie gra przepływ kanwy: skan, port, prom, place. Z `?arrival` pokazuje stan przed skanem.
+  - Domyślnie gra przepływ kanwy: skan, port, prom, place. Z `?arrival` pokazuje stan przed skanem, z `?colony=c` zakłada kolonię na Tau Ceti c (port blisko zamku na suchym lądzie, poza ruinami; domena odrzuca wodę).
+  - `node packages/render/harness/system/shot-colony.mjs [out] [url] [k]` dokłada 10 stojących budowli różnych rodzajów i poziomów obok portu i robi zrzut z k promieni od środka, od strony oświetlonej (domyślnie `docs/img/structures/t7b-tau-ceti-c.png` z `?colony=c`; ciała się nie obracają, więc zrzut rysuje świat w położeniu orbity z t = 0, kiedy osada patrzy na gwiazdę).
   - Klawisze: `1` i `2` zmieniają widok, `P` włącza ducha HQ, `F` ustawia fokus, `Esc` czyści zaznaczenie.
-  - Do Playwrighta służy `window.systemHarness` (`stats`, `cycles(n)`, `stress(n)`, `pick`, `screenOf`). Nazwa jest inna niż `window.harness` z harnessów galaktyki i Atanora.
+  - Do Playwrighta służy `window.systemHarness` (`stats`, `cycles(n)`, `stress(n, { kinds, levels, near })`, `pick`, `screenOf`). Nazwa jest inna niż `window.harness` z harnessów galaktyki i Atanora.
 
 ## Znane luki
 
@@ -124,6 +126,10 @@ host.pick(x, y, input);         // piksele względem kontenera
   - `padLiftFactor` i `arcLiftFactor` pochodzą z `GAME_CONSTANTS`, bo migawka nie niesie stałych scenariusza.
 - **Kamera:** bez przesuwania i klawiatury. Limity przybliżenia ustaliłem sam (planeta 1,3–18 R).
 - **Etykiety:** węzły DOM w kontenerze hosta. Mogą się nakładać, gdy ciała są blisko siebie na ekranie.
+- **Skórka medieval (T7B):**
+  - modele, których używa i dekor ruin, i skórka (`castle`, `house` i 8 innych), pobierają się dwa razy: raz przez `HexKit` (teren), raz przez `ModelLibrary` (budowle). Przeglądarka zwykle poda drugi raz z pamięci podręcznej HTTP; parsowanie jest podwójne;
+  - MIN, ICE, SIT i REGX mają ten sam `mine`, a `watchtower` stoi w CON, LST, SMT i HAB L5 (i w ruinach): te rodzaje rozróżnia panel albo drugi model, nie główna bryła;
+  - budowla gracza i ruina tego samego modelu różnią się tylko tonem (przygaszenie T-23).
 
 ## Pytania otwarte
 
@@ -135,6 +141,7 @@ host.pick(x, y, input);         // piksele względem kontenera
 6. **Etykiety:** zostają w pakiecie `render` (DOM), czy aplikacja wolałaby rysować je sama, na przykład z dodatkowymi danymi?
 7. **Ścieżki lotu:** krzywa z domeny (uniesienie +Y) potrafi przejść przez gwiazdę, na przykład lot Arki z e do f. Czy domena ma ją omijać?
 8. **Placement:** nie ma pola `rotation`. Czy duch HQ ma się obracać, czy orientacja wynika z kolejności `tiles` (kotwica pierwsza)?
+9. **Skórka medieval (T7B):** mapowanie w „Skórka medieval” to propozycja po stykówce. Czy SKL jako `archeryrange`, LST jako wieża ze stosem towaru i MIN/ICE/SIT/REGX jako jedna `mine` są do przyjęcia? Czy przygaszenie ruin (0,8 i 30 % do szarości) wystarcza, czy mocniej?
 
 ## Modele budowli i poziomy (T7A)
 
@@ -177,8 +184,51 @@ host.pick(x, y, input);         // piksele względem kontenera
 - **Zasoby:** 22 nowe pliki `.gltf` + `.bin` (36 razem), +775 KB surowo, około 243 KB po gzip. `ModelKit.loadAll()` wczytuje je wszystkie przy montowaniu widoku.
 - **Draw calls:** jeden `InstancedMesh` na (ciało, model) w użyciu, plus jeden `LineSegments` na model, póki stoją place budowy. 18 budowalnych rodzajów i HQ używają razem 30 modeli: 19–20 w jednym progu, 30 przy kolonii ze wszystkimi rodzajami we wszystkich progach. Przedtem było 8. Kolonia M (L1, wypełniacze SOL, HAB, DEP, SKL, WND, LAND i wydobycie) ma 8 modeli zamiast 7, bo SKL nie dzieli już modelu z DEP. Batch opróżniony przez ulepszenie jest ukryty. `BatchedMesh` (T4) zbierze to w jedno wywołanie.
 
+## Skórka medieval (T7B)
+
+Na ciele z biomem `medieval` (`body.surfaceGrid.terrain.biome`, dziś Tau Ceti c) budowle gracza stoją jako modele KayKit Medieval Hexagon, obok ruin osady. `skinFor(body)` daje `'medieval'` albo `'spacebits'`; `StructureLayer` dostaje skórkę przy budowie warstwy ciała (`layer.skin`), a `partsFor(kind, level, skin)` wybiera części z `KIND_TIERS_MEDIEVAL` (te same progi L1–2 / L3–4 / L5). Duch rozmieszczenia bierze skórkę ciała w fokusie. Plan: `docs/planet-terrain-poc-wnioski-i-plan.md` §8.2.
+
+- **Jedna ścieżka ładowania:** `ModelSpec.source: 'spacebits' | 'hex'` (domyślnie `spacebits`). Dla `hex` `ModelLibrary` pobiera `${assetsBase}kaykit-hex/<id>.gltf.glb` (już GLB, bez tekstur), spłaszcza scenę tym samym kodem co teren (`flattenKitScene` + `kitGeometry` w `hex-kit.ts`) i koloruje wierzchołki po nazwie materiału (`objectTone`, pełne tony). `ModelKit` (pudełko, krawędzie, geometria, placeholder do czasu wczytania, powiadomienia `onLoaded`) działa tak samo dla obu źródeł, więc `StructureLayer`, picking, obrys placów i duch nie mają wyjątków. Geometria hex jest nieindeksowana. `HexKit` zostaje dla kafelków i dekoru terenu.
+- **Preload:** `ModelKit.loadAll()` bez argumentu wczytuje tylko `BASE_MODEL_IDS` (36 Space Base Bits). `SystemScene` zamawia `skinModels('medieval')` (12 plików hex) dopiero, gdy buduje powierzchnię ciała z tą skórką, czyli po odkryciu Tau Ceti c; świat bez takiego ciała nie pobiera ich wcale.
+- **Pomiary rejestru:** `footprint`, `height`, `baseOffset`, `triangles` wpisów hex zmierzone z plików i sprawdzane w `model-library.spec.ts`. `fill` ≈ stopa / 2, czyli proporcje do kafelka jak w zestawie (kafelek zestawu ma 2 jednostki szerokości, narożniki na ±Z, więc pasuje do ramki 1 kafelka, której przód celuje w narożnik). `watermill` ma koło 0,58 pod podłogą: części wkopują je (`millFloor`), żeby podłoga stała na powierzchni. Duch pomija tylko części, których wierzch jest niżej niż 0,05 szerokości ramki nad powierzchnią (`partTop`): wykop zostaje pominięty, młyn wodny nie.
+- **Zasoby:** doszły `archeryrange.gltf.glb` (86 KB) i `watermill.gltf.glb` (86 KB), razem 172 KB surowo, około 64 KB po gzip. Pozostałe 10 modeli skórki było już w `kaykit-hex/` dla ruin.
+
+| Typ | L1–2 | L3–4 | L5 |
+|---|---|---|---|
+| HQ (3) | `castle`@0 + `landingpad_small`@[1,2] | + 2 × `lights` na końcach lądowiska | `castle`@0 + `landingpad_large`@[1,2] + 2 × `lights` |
+| LAND | jak Space Base Bits (`landingpad_small`, potem `landingpad_large` + `lights`) | j.w. | j.w. |
+| HAB | `house` | 2 × `house` | 2 × `house` + `watchtower` |
+| FARM | `farm_plot` | `farm_plot` + mały `mill` w rogu | j.w. |
+| GAR | `barracks` | j.w. | j.w. |
+| DEP | `market` | j.w. | j.w. |
+| SKL | `archeryrange` (szopa i ogrodzony plac) | j.w. | j.w. |
+| TNK | `well` | j.w. | j.w. |
+| MLT | `well` + `watermill` obok siebie | j.w. | j.w. |
+| SOL | jak Space Base Bits (`solarpanel`, potem `roofmodule_solarpanels`) | j.w. | j.w. |
+| WND | `mill` | `mill`, większy | j.w. |
+| MIN, ICE, SIT, REGX | `mine` | j.w. | j.w. |
+| SMT (3) | `lumbermill`@0 + `watchtower`@[1,2] | j.w. | j.w. |
+| SIR (3) | `well`@0 + `watermill`@[1,2] | j.w. | j.w. |
+| CON | `watchtower` | j.w. | j.w. |
+| LST | `watchtower` + `farm_plot` (stos towaru) obok | j.w. | j.w. |
+| ATN (7) | `castle`@0 + `house` na każdym kafelku pierścienia | j.w. | j.w. |
+| GAS | `well` | j.w. | j.w. |
+| HE3S (3) | `mine`@0 + `well`@[1,2] | j.w. | j.w. |
+| pozostałe (era ≥ 2, nieznane id) | `house`@0 (na kotwicy) | j.w. | j.w. |
+
+- **Odstępstwa od propozycji z planu (§8.2), po stykówce `docs/img/structures/t7b-sheet-medieval.png`:**
+  - HQ L3+ dostaje maszty `lights`, a L5 `landingpad_large`, jak w Space Base Bits: lądowisko i tak zostaje sci-fi (T-24), a poziomy portu mają się różnić.
+  - SKL: `archeryrange` zamiast `well` + `farm_plot`. Para studnia + pole wyglądała jak FARM; szopa z ogrodzonym placem i okrągłym towarem czyta się jako skład. To jedyny powód kopiowania `archeryrange`.
+  - TNK, MLT, GAS, HE3S nie miały propozycji: zbiornik to studnia, topielnik studnia i młyn wodny, separator kopalnia i studnia.
+  - SIR: `watermill` na dwóch kafelkach i `well` na kotwicy. Sam młyn rozciągnięty na 3 kafelki był wielką stodołą.
+  - LST: `watchtower` i stos „towaru” (`farm_plot` w małej skali), żeby nie był identyczny z CON (sama `watchtower`).
+  - WND L3+: ten sam `mill`, większy; FARM L5 bez zmian względem L3 (trzeci model na kafelku robi tłok).
+  - Zastępstwo: `house` tylko na kotwicy. Rozciągnięty na 3 kafelki wyglądał jak stodoła wielkości zamku.
+- **Ruiny a budowle gracza (T-23):** `TerrainDecor` rysuje budynki osady (każdy model dekoru poza `detail_*` i `mountain`) tonem `ruinTone(objectTone(mat))`: 30 % drogi do szarości o tej samej luminancji (`RUIN_GREY = 0.3`), potem × `RUIN_FADE = 0.8`. Stałe są w `terrain-tones.ts`. Drzewa, skały i góry mają pełne tony, budowle gracza też. Na zrzucie `docs/img/structures/t7b-tau-ceti-c.png` zamek ruin jest wyraźnie ciemniejszy od zamku portu, a pola ruin oliwkowe obok żółtych pól gracza.
+- **Koszt:** kolonia z zrzutu (port, 2 place, 10 budowli L1–L5) i cały teren Tau Ceti c: 38 draw calls, 138 tys. trójkątów (ANGLE D3D11, 1440×900). Modele hex mają po 900–2 300 trójkątów (Space Base Bits: 30–1 800).
+
 ## Teren z kafelków hex (Tau Ceti c)
 
-Ciała z planem terenu (`TERRAIN_CONFIG` w domenie, dziś tylko Tau Ceti c: biom `medieval`) rysują się z kafelków KayKit Medieval Hexagon (`apps/game/public/assets/kaykit-hex/`). Dane liczy czysta domena (`packages/domain/src/sim/terrain/`: klasy pól, kafelek i obrót na heks, osada, drzewa, skały). Render: `hex-kit.ts` (ładowanie GLB przez `fetchBytes`), `terrain-view.ts` (jedna siatka, warp kafelków na pola Goldberga, pięciokąty jako płyty), `terrain-decor.ts` (instancje; `setHidden` chowa dekor pod budowlami i przywraca po rozbiórce), `terrain-tones.ts` (kolor z nazwy materiału).
+Ciała z planem terenu (`TERRAIN_CONFIG` w domenie, dziś tylko Tau Ceti c: biom `medieval`) rysują się z kafelków KayKit Medieval Hexagon (`apps/game/public/assets/kaykit-hex/`). Dane liczy czysta domena (`packages/domain/src/sim/terrain/`: klasy pól, kafelek i obrót na heks, osada, drzewa, skały). Render: `hex-kit.ts` (ładowanie GLB przez `fetchBytes`; `flattenKitScene` i `kitGeometry` wspólne z `ModelLibrary`), `terrain-view.ts` (jedna siatka, warp kafelków na pola Goldberga, pięciokąty jako płyty), `terrain-decor.ts` (instancje; budynki osady przygaszone jako ruiny; `setHidden` chowa dekor pod budowlami i przywraca po rozbiórce), `terrain-tones.ts` (kolor z nazwy materiału, `ruinTone`).
 
 `PlanetGridView` zostaje: jej siatka wachlarzy to **raycast proxy** (ukryta w pobliżu, ale dalej pickowalna) i daleki LOD; kafelki i dekor rysują się od `EDGES_MIN_PX`. Do czasu załadowania plików planeta wygląda jak dotąd. Plan i wnioski: `docs/planet-terrain-poc-wnioski-i-plan.md`.

@@ -1,7 +1,9 @@
 import * as THREE from 'three';
 import { hash3, type DecorItem, type PlanetGrid, type TerrainPlan, type TileFrame } from '@space-game/domain';
-import type { KitModel } from './hex-kit';
-import { objectTone } from './terrain-tones';
+import { kitGeometry, type KitModel } from './hex-kit';
+import { isRuinBuilding, objectTone, ruinTone } from './terrain-tones';
+
+const ruinObjectTone = (mat: string): number => ruinTone(objectTone(mat));
 
 interface Slot {
   mesh: THREE.InstancedMesh;
@@ -11,7 +13,8 @@ interface Slot {
 
 /**
  * Trees, rocks and the settlement as instanced meshes, one per model. Every instance stands on its tile,
- * turned to the tile frame. `setHidden(tiles)` hides everything on the given tiles (a structure stands
+ * turned to the tile frame. Settlement buildings are ruins in faded tones (`ruinTone`, T-23), trees,
+ * rocks and mountains keep theirs. `setHidden(tiles)` hides everything on the given tiles (a structure stands
  * there) and restores it when a tile leaves the set (the structure was demolished).
  */
 export class TerrainDecor {
@@ -49,25 +52,11 @@ export class TerrainDecor {
     const X = new THREE.Vector3();
     const Y = new THREE.Vector3();
     const Z = new THREE.Vector3();
-    const tone = new THREE.Color();
-
     for (const [id, items] of byModel) {
       const model = kit.get(id);
       if (!model) continue;
-      const positions: number[] = [];
-      const colors: number[] = [];
-      for (const part of model.parts) {
-        tone.setHex(objectTone(part.mat));
-        for (let i = 0; i < part.pos.length; i += 3) {
-          positions.push(part.pos[i]!, part.pos[i + 1]!, part.pos[i + 2]!);
-          colors.push(tone.r, tone.g, tone.b);
-        }
-      }
-      const geometry = new THREE.BufferGeometry();
-      geometry.setAttribute('position', new THREE.BufferAttribute(Float32Array.from(positions), 3));
-      geometry.setAttribute('color', new THREE.BufferAttribute(Float32Array.from(colors), 3));
-      geometry.computeVertexNormals();
-      geometry.computeBoundingSphere();
+      // settlement buildings are ruins: faded, so the player's own (full-tone) buildings stand out
+      const geometry = kitGeometry(model, isRuinBuilding(id) ? ruinObjectTone : objectTone);
 
       const mesh = new THREE.InstancedMesh(geometry, this.material, items.length);
       mesh.name = `Decor_${id}`;

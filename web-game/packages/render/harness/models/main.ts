@@ -1,13 +1,15 @@
-// Contact sheet of the structure models (T7A): `npx vite packages/render/harness/models --port 4432`.
+// Contact sheet of the structure models (T7A, T7B): `npx vite packages/render/harness/models --port 4432`.
 // Every kind × {L1, L3, L5} drawn through the game's own StructureLayer and ModelKit (same parts,
 // fitting, flat-shaded material) on flat hex placeholders. The "planet" is a cap of a very large
-// sphere, so footprintFrame works unchanged. `shot.mjs` saves the screenshot for the docs.
+// sphere, so footprintFrame works unchanged. `?skin=medieval` shows the medieval skin (Medieval
+// Hexagon models on grass-toned tiles). `shot.mjs` saves the screenshot for the docs.
 import * as THREE from 'three';
 import { Rules, footprintTiles, standingStructure, tileId, type BodyId, type PlanetGrid, type Structure, type Tile, type Vec3 } from '@space-game/domain';
 import { ModelKit } from '../../src/system/model-kit';
-import { levelTier, modelsForKind, partsFor } from '../../src/system/model-registry';
+import { levelTier, modelsForKind, partsFor, type Skin } from '../../src/system/model-registry';
 import { DS, SCENE } from '../../src/system/palette';
 import { StructureLayer } from '../../src/system/structure-layer';
+import { TONE } from '../../src/system/terrain-tones';
 
 const stage = document.getElementById('stage')!;
 const hud = document.getElementById('hud')!;
@@ -22,6 +24,9 @@ const only = query.get('only')?.split(',').filter(Boolean);
 export const KINDS: ReadonlyArray<string> = only?.length ? ALL_KINDS.filter((k) => only.includes(k)) : ALL_KINDS;
 export const LEVELS: ReadonlyArray<number> = [1, 3, 5];
 const footprint = (kind: string) => Math.max(1, rules.spec(kind).footprint);
+/** `?skin=medieval`: the look of structures on a medieval body (T7B). */
+export const SKIN: Skin = query.get('skin') === 'medieval' ? 'medieval' : 'spacebits';
+document.body.classList.toggle('medieval', SKIN === 'medieval');
 
 // ---------------------------------------------------------------- flat hex grid on a huge sphere
 
@@ -117,7 +122,7 @@ KINDS.forEach((kind, k) => {
     const tiles = footprintTiles(grid, anchor, footprint(kind), 0);
     if (!tiles) throw new Error(`no footprint for ${kind}`);
     structures.push(standingStructure(kind, BODY, tiles, level));
-    const models = [...new Set(partsFor(kind, level).map((p) => p.model))].join(' · ');
+    const models = [...new Set(partsFor(kind, level, SKIN).map((p) => p.model))].join(' · ');
     const p = onSphere(c.x, c.z + LABEL_Z);
     labels.push({ at: new THREE.Vector3(p.x, p.y - R, p.z), html: `<b>${kind}</b> L${level} · T${levelTier(level)}<br><span class="m">${models}</span>` });
   });
@@ -138,14 +143,18 @@ const world = new THREE.Group();
 world.position.y = -R; // the cap's top at the origin
 scene.add(world);
 
-/** Flat hex placeholders: free tiles in graphite, footprints a step lighter, edges in void. */
+/**
+ * Flat hex placeholders: free tiles in graphite, footprints a step lighter, edges in void; for the
+ * medieval skin the ground of a medieval body (grass, footprints in the road tone).
+ */
 function placeholders(): THREE.Object3D[] {
   const pos: number[] = [];
   const col: number[] = [];
   const edges: number[] = [];
   const c = new THREE.Color();
   for (const t of grid.tiles) {
-    c.setHex(footprintTilesSet.has(t.index) ? DS.metal : DS.graphite);
+    const used = footprintTilesSet.has(t.index);
+    c.setHex(SKIN === 'medieval' ? (used ? TONE.sand : TONE.grass) : used ? DS.metal : DS.graphite);
     const vs = t.vertices;
     for (let i = 0; i < vs.length; i++) {
       const a = vs[i]!;
@@ -168,7 +177,7 @@ function placeholders(): THREE.Object3D[] {
 world.add(...placeholders());
 
 const kit = new ModelKit('/assets/');
-const layer = new StructureLayer(grid, kit, new THREE.LineBasicMaterial({ color: SCENE.site }), false);
+const layer = new StructureLayer(grid, kit, new THREE.LineBasicMaterial({ color: SCENE.site }), false, SKIN);
 world.add(layer.group);
 
 /** Orthographic (every cell at the same scale), pitched like the planet camera looking at a colony. */
@@ -238,10 +247,10 @@ function render(): void {
     labelEls[i]!.style.top = `${((1 - v.y) / 2) * h}px`;
   });
   const info = renderer.info.render;
-  hud.textContent = `${KINDS.length} RODZAJÓW × L1/L3/L5   DRAW ${info.calls}   TRÓJKĄTY ${info.triangles}   MODELE ${layer.drawables}`;
+  hud.textContent = `${KINDS.length} RODZAJÓW × L1/L3/L5 · ${SKIN.toUpperCase()}   DRAW ${info.calls}   TRÓJKĄTY ${info.triangles}   MODELE ${layer.drawables}`;
 }
 
-const ids = [...new Set(KINDS.flatMap(modelsForKind))];
+const ids = [...new Set(KINDS.flatMap((k) => modelsForKind(k, SKIN)))];
 const ready = kit.loadAll(ids).then(() => {
   layer.sync(structures, new Set());
   frame();
@@ -249,7 +258,7 @@ const ready = kit.loadAll(ids).then(() => {
 });
 window.addEventListener('resize', frame);
 
-const modelsHarness = { ready, done: false, kinds: KINDS, levels: LEVELS, layer, kit, render: () => render() };
+const modelsHarness = { ready, done: false, kinds: KINDS, levels: LEVELS, skin: SKIN, layer, kit, render: () => render() };
 
 declare global {
   interface Window {

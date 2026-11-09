@@ -1,10 +1,13 @@
-import { INITIAL_BODIES, Rules, TAU_CETI_BODIES, buildGoldbergGrid, tileWidth } from '@space-game/domain';
+import { INITIAL_BODIES, Rules, TAU_CETI_BODIES, TC_C, TC_E, buildGoldbergGrid, tileWidth } from '@space-game/domain';
 import {
   ALL_MODEL_IDS,
+  BASE_MODEL_IDS,
   BELT_MODELS,
   DEFAULT_PARTS,
+  DEFAULT_PARTS_MEDIEVAL,
   DEPOSIT_MODEL,
   KIND_TIERS,
+  KIND_TIERS_MEDIEVAL,
   MODELS,
   ROVER_MODEL,
   SHIP_MODEL,
@@ -15,8 +18,12 @@ import {
   modelDir,
   modelUrl,
   modelsForKind,
+  partTop,
   partsFor,
   partsForKind,
+  skinFor,
+  skinModels,
+  sourceOf,
   type ModelPart,
 } from './model-registry';
 
@@ -107,11 +114,12 @@ describe('model registry (PoC model-registry.spec, catalog kinds, level tiers)',
     expect(models(DEFAULT_PARTS)).toEqual(['structure_low']);
   });
 
-  it('every registry model has a use: a structure part, the ship, the rover, deposits or belts', () => {
-    const used = new Set<string>([SHIP_MODEL, ROVER_MODEL, DEPOSIT_MODEL, ...BELT_MODELS, ...models(DEFAULT_PARTS)]);
-    for (const tiers of Object.values(KIND_TIERS)) for (const parts of tiers) for (const p of parts) used.add(p.model);
+  it('every registry model has a use: a structure part (either skin), the ship, the rover, deposits or belts', () => {
+    const used = new Set<string>([SHIP_MODEL, ROVER_MODEL, DEPOSIT_MODEL, ...BELT_MODELS, ...models(DEFAULT_PARTS), ...models(DEFAULT_PARTS_MEDIEVAL)]);
+    for (const table of [KIND_TIERS, KIND_TIERS_MEDIEVAL]) for (const tiers of Object.values(table)) for (const parts of tiers) for (const p of parts) used.add(p.model);
     expect([...used].sort()).toEqual([...ALL_MODEL_IDS].sort());
-    expect(ALL_MODEL_IDS).toHaveLength(36);
+    expect(ALL_MODEL_IDS).toHaveLength(48); // 36 Space Base Bits + 12 Medieval Hexagon
+    expect(BASE_MODEL_IDS).toHaveLength(36);
   });
 
   it('sinks the mining pit until its top is flush with the surface and puts the LST crate on the lander frame', () => {
@@ -128,27 +136,27 @@ describe('model registry (PoC model-registry.spec, catalog kinds, level tiers)',
     expect(crate!.offset!.y).toBeCloseTo(MODELS.lander_base.height * fitScale(MODELS.lander_base, 1), 6);
   });
 
-  it('fits every part inside its frame on every gridded body of both scenarios', () => {
-    const kinds = Object.keys(KIND_TIERS);
+  it('fits every part inside its frame on every gridded body of both scenarios, in both skins', () => {
+    const skins = [['spacebits', KIND_TIERS], ['medieval', KIND_TIERS_MEDIEVAL]] as const;
     for (const body of [...INITIAL_BODIES, ...TAU_CETI_BODIES].filter((b) => b.surfaceGrid)) {
       const grid = buildGoldbergGrid(body.id, body.radius, body.surfaceGrid!.frequency);
       const w = tileWidth(grid);
-      for (const k of kinds) {
+      for (const [skin, k] of skins.flatMap(([skin, table]) => Object.keys(table).map((k) => [skin, k] as const))) {
         const size = rules.has(k) ? rules.spec(k).footprint : 1;
         for (const level of LEVELS) {
           let widest = 0;
-          for (const p of partsFor(k, level)) {
+          for (const p of partsFor(k, level, skin)) {
             const span = footprintSpan(p.at ? p.at.length : size) * w;
             const spec = MODELS[p.model];
             const s = fitScale(spec, span, p.fill);
-            const where = `${body.id} ${k} L${level} ${p.model}`;
+            const where = `${body.id} ${skin} ${k} L${level} ${p.model}`;
             expect(spec.footprint * s, where).toBeLessThan(span);
             // a building, not a tower: never taller than half the body radius
             expect(spec.height * s, where).toBeLessThan(body.radius / 2);
             widest = Math.max(widest, spec.footprint * s);
           }
           // the main part fills a good share of a tile (two tanks side by side: half each)
-          expect(widest, `${body.id} ${k} L${level}`).toBeGreaterThanOrEqual(w * 0.5 - 1e-9);
+          expect(widest, `${body.id} ${skin} ${k} L${level}`).toBeGreaterThanOrEqual(w * 0.5 - 1e-9);
         }
       }
     }
@@ -174,10 +182,117 @@ describe('model registry (PoC model-registry.spec, catalog kinds, level tiers)',
     expect(fitScale(MODELS.lights, 2, 0.2)).toBeCloseTo(0.4 / MODELS.lights.footprint, 9);
   });
 
-  it('builds asset urls under the app assets base', () => {
+  it('builds asset urls under the app assets base (hex models: kaykit-hex GLB)', () => {
+    expect(modelUrl('/assets/', 'castle')).toBe('/assets/kaykit-hex/castle.gltf.glb');
+    expect(modelUrl('assets', 'watermill')).toBe('assets/kaykit-hex/watermill.gltf.glb');
     expect(modelUrl('assets/', 'dropship')).toBe('assets/kaykit/dropship.gltf');
     expect(modelUrl('/assets', 'drill_structure')).toBe('/assets/kaykit/drill_structure.gltf');
     expect(modelUrl('', 'rock_A')).toBe('kaykit/rock_A.gltf');
     expect(modelDir('assets/')).toBe('assets/kaykit/');
+  });
+});
+
+describe('medieval skin (T7B)', () => {
+  /** Sci-fi models the medieval skin keeps on purpose (decision T-24: landing; no medieval power). */
+  const SCI_FI_KEPT = new Set(['landingpad_small', 'landingpad_large', 'lights', 'solarpanel', 'roofmodule_solarpanels']);
+  const m = (k: string, level = 1) => models(partsFor(k, level, 'medieval'));
+
+  it('a body with the medieval biome gets the medieval skin, every other body Space Base Bits', () => {
+    const c = TAU_CETI_BODIES.find((b) => b.id === TC_C)!;
+    const e = TAU_CETI_BODIES.find((b) => b.id === TC_E)!;
+    expect(c.surfaceGrid?.terrain?.biome).toBe('medieval');
+    expect(skinFor(c)).toBe('medieval');
+    expect(skinFor(e)).toBe('spacebits');
+    for (const b of INITIAL_BODIES) expect(skinFor(b), b.id).toBe('spacebits');
+    expect(skinFor(null)).toBe('spacebits');
+    expect(skinFor({ surfaceGrid: { frequency: 3, terrain: { biome: 'mixed', seed: 1 } } })).toBe('spacebits');
+  });
+
+  it('gives each of the 18 buildable kinds and the port medieval parts at L1, L3 and L5, never the fallback', () => {
+    for (const k of [...BUILDABLE, 'HQ']) {
+      expect(KIND_TIERS_MEDIEVAL[k], k).toBeDefined();
+      const size = rules.spec(k).footprint;
+      for (const level of LEVELS) {
+        const parts = partsFor(k, level, 'medieval');
+        const where = `${k} L${level}`;
+        expect(parts.length, where).toBeGreaterThan(0);
+        expect(parts, where).not.toBe(DEFAULT_PARTS_MEDIEVAL);
+        for (const p of parts) {
+          expect(MODELS[p.model], `${where} ${p.model}`).toBeDefined();
+          // a medieval look: Medieval Hexagon models, except the kept sci-fi pad, masts and panels
+          if (!SCI_FI_KEPT.has(p.model)) expect(sourceOf(p.model), `${where} ${p.model}`).toBe('hex');
+          for (const i of p.at ?? []) expect(i, `${where} ${p.model} at`).toBeLessThan(size);
+        }
+      }
+      // a site (L0) and in-tier levels look like their tier, as in the default skin
+      expect(partsFor(k, 0, 'medieval'), k).toBe(partsFor(k, 1, 'medieval'));
+      expect(partsFor(k, 4, 'medieval'), k).toBe(partsFor(k, 3, 'medieval'));
+      expect(partsForKind(k, 'medieval'), k).toBe(partsFor(k, 1, 'medieval'));
+    }
+  });
+
+  it('maps the kinds as the README table says (plan §8.2, adjusted on the contact sheet)', () => {
+    expect(m('HQ')).toEqual(['castle', 'landingpad_small']);
+    expect(partsFor('HQ', 1, 'medieval')[0]).toEqual({ model: 'castle', at: [0] });
+    expect(m('HQ', 5)).toEqual(['castle', 'landingpad_large', 'lights', 'lights']);
+    // the landing pad and the solar panel stay sci-fi (T-24)
+    for (const l of LEVELS) expect(partsFor('LAND', l, 'medieval'), `LAND L${l}`).toBe(partsFor('LAND', l));
+    for (const l of LEVELS) expect(partsFor('SOL', l, 'medieval'), `SOL L${l}`).toBe(partsFor('SOL', l));
+    expect(m('HAB')).toEqual(['house']);
+    expect(m('HAB', 3)).toEqual(['house', 'house']);
+    expect(m('HAB', 5)).toEqual(['house', 'house', 'watchtower']);
+    expect(m('FARM')).toEqual(['farm_plot']);
+    expect(m('FARM', 3)).toEqual(['farm_plot', 'mill']);
+    expect(m('GAR')).toEqual(['barracks']);
+    expect(m('DEP')).toEqual(['market']);
+    expect(m('SKL')).toEqual(['archeryrange']);
+    expect(m('TNK')).toEqual(['well']);
+    expect(m('MLT')).toEqual(['well', 'watermill']);
+    for (const k of ['MIN', 'ICE', 'SIT', 'REGX']) expect(m(k), k).toEqual(['mine']);
+    expect(m('WND')).toEqual(['mill']);
+    expect(m('SMT')).toEqual(['lumbermill', 'watchtower']);
+    expect(m('SIR')).toEqual(['well', 'watermill']);
+    expect(m('CON')).toEqual(['watchtower']);
+    expect(m('LST')).toEqual(['watchtower', 'farm_plot']);
+    const atn = partsFor('ATN', 1, 'medieval');
+    expect(atn[0]).toEqual({ model: 'castle', at: [0] });
+    for (let k = 1; k <= 6; k++) expect(atn.some((p) => p.model === 'house' && p.at?.join() === String(k)), `ring ${k}`).toBe(true);
+    for (const k of ['FIS', 'unknown-kind']) expect(partsFor(k, 3, 'medieval'), k).toBe(DEFAULT_PARTS_MEDIEVAL);
+    expect(models(DEFAULT_PARTS_MEDIEVAL)).toEqual(['house']);
+  });
+
+  it('upgrades change the look where a second model reads on the tile (HQ, HAB, FARM, WND)', () => {
+    for (const k of ['HQ', 'HAB', 'FARM', 'WND']) expect(partsFor(k, 3, 'medieval'), k).not.toEqual(partsFor(k, 1, 'medieval'));
+    for (const k of ['HQ', 'HAB']) expect(partsFor(k, 5, 'medieval'), k).not.toEqual(partsFor(k, 3, 'medieval'));
+  });
+
+  it('the default skin is unchanged: partsFor without a skin is Space Base Bits', () => {
+    for (const k of [...BUILDABLE, 'HQ', 'ATN', 'unknown-kind']) {
+      for (const level of LEVELS) expect(partsFor(k, level), k).toBe(partsFor(k, level, 'spacebits'));
+      expect(modelsForKind(k), k).toEqual(modelsForKind(k, 'spacebits'));
+    }
+  });
+
+  it('preloads per skin: the base set is Space Base Bits only, a medieval body adds exactly the hex models', () => {
+    const med = skinModels('medieval');
+    for (const k of [...BUILDABLE, 'HQ', 'ATN', 'GAS', 'HE3S', 'unknown-kind']) {
+      for (const level of LEVELS) for (const p of partsFor(k, level, 'medieval')) expect(med, k).toContain(p.model);
+      for (const id of modelsForKind(k, 'medieval')) expect(med, k).toContain(id);
+    }
+    expect(med.filter((id) => !BASE_MODEL_IDS.includes(id)).sort()).toEqual(ALL_MODEL_IDS.filter((id) => sourceOf(id) === 'hex').sort());
+    for (const id of skinModels('spacebits')) expect(BASE_MODEL_IDS, id).toContain(id);
+  });
+
+  it('stands the water mill on its floor (the wheel sunk below the surface); the ghost still outlines it', () => {
+    const spec = MODELS.watermill;
+    for (const k of ['SIR', 'MLT']) {
+      const mill = partsFor(k, 1, 'medieval').find((p) => p.model === 'watermill')!;
+      // lowest point (the wheel) on the surface, then sunk by its depth below the floor: the floor at 0
+      expect(spec.baseOffset * (mill.fill! / spec.footprint) + mill.offset!.y!, k).toBeCloseTo(0, 9);
+      // the ghost leaves out sunk pits (top ≈ 0), not the half-sunk mill
+      expect(partTop(mill), k).toBeGreaterThan(0.2);
+    }
+    expect(partTop(partsFor('REGX', 1).find((p) => p.model === 'terrain_mining')!)).toBeLessThan(0.05);
+    expect(partTop({ model: 'house' })).toBeCloseTo((MODELS.house.height * MODELS.house.fill) / MODELS.house.footprint, 9);
   });
 });

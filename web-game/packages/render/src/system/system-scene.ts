@@ -26,7 +26,7 @@ import { HexKit, type KitModel } from './hex-kit';
 import { LabelLayer } from './labels';
 import { ModelKit } from './model-kit';
 import type { FetchBytes } from './model-library';
-import { partsFor, type ModelId } from './model-registry';
+import { BASE_MODEL_IDS, partTop, partsFor, skinFor, skinModels, type ModelId, type Skin } from './model-registry';
 import { SCENE, muteBodyColor, muteStarColor } from './palette';
 import { createFrame, defaultFocus, dockingOffsetOf, fitDistance, nearestTile, rootBody, systemExtent } from './placement';
 import { PlanetGridView } from './planet-grid-view';
@@ -91,6 +91,8 @@ const STRUCTURES_MIN_PX = 24;
 /** Ships drawn smaller than this get a vector diamond marker [px]. */
 const MARKER_BELOW_PX = 6;
 const FOV = 50;
+/** Parts whose top is lower than this above the surface [frame widths] are pits: no ghost outline. */
+const GHOST_MIN_TOP = 0.05;
 
 /**
  * The continuous planet/system scene (W12 A): every body at its analytic position, gridded bodies
@@ -104,7 +106,6 @@ export class SystemScene {
   readonly labels: LabelLayer;
   readonly overlay = new ScreenOverlay();
   readonly units: UnitsLayer;
-  readonly ready: Promise<void>;
   /** Draw calls and triangles of the last frame (both passes). */
   readonly frameStats = { drawCalls: 0, triangles: 0 };
 
@@ -120,6 +121,9 @@ export class SystemScene {
   private hexKit: HexKit;
   private hexModels: Promise<ReadonlyMap<string, KitModel>> | null = null;
   private readonly loadModels: boolean;
+  /** Space Base Bits models (loaded at mount) and the extra models of each skin a body uses. */
+  private readonly baseLoad: Promise<void>;
+  private readonly skinLoads = new Map<Skin, Promise<void>>();
   private solver: OrbitSolver | null = null;
   private extent = 1;
   private root: BodyView | null = null;
@@ -213,7 +217,15 @@ export class SystemScene {
     };
 
     this.unloadModels = this.kit.onLoaded((id) => this.onModel(id));
-    this.ready = opts.loadModels === false ? Promise.resolve() : this.kit.loadAll();
+    this.baseLoad = opts.loadModels === false ? Promise.resolve() : this.kit.loadAll(BASE_MODEL_IDS);
+  }
+
+  /**
+   * Resolves when the models requested so far have settled: the Space Base Bits set, plus the
+   * models of every skin a body of the current world uses (requested when its surface is built).
+   */
+  get ready(): Promise<void> {
+    return Promise.all([this.baseLoad, ...this.skinLoads.values()]).then(() => undefined);
   }
 
   setMode(mode: CameraMode): void {
@@ -551,7 +563,9 @@ export class SystemScene {
       bv.grid = new PlanetGridView(grid, body.color);
       mesh = bv.grid.mesh;
       bv.group.add(bv.grid.edges);
-      bv.structures = new StructureLayer(grid, this.kit, this.siteMat, true);
+      const skin = skinFor(body);
+      this.loadSkin(skin);
+      bv.structures = new StructureLayer(grid, this.kit, this.siteMat, true, skin);
       bv.group.add(bv.structures.group);
       this.attachTerrain(bv);
     } else if (body.shape) {
@@ -598,6 +612,13 @@ export class SystemScene {
       },
       (err) => console.warn('Hex kit unavailable, keeping the flat grid', err),
     );
+  }
+
+  /** Starts loading a skin's models beyond the base set, once, when the first body with it is built. */
+  private loadSkin(skin: Skin): void {
+    if (!this.loadModels || skin === 'spacebits' || this.skinLoads.has(skin)) return;
+    const extra = skinModels(skin).filter((id) => !BASE_MODEL_IDS.includes(id));
+    this.skinLoads.set(skin, this.kit.loadAll(extra));
   }
 
   private disposeSurface(bv: BodyView): void {
@@ -726,9 +747,10 @@ export class SystemScene {
     const bv = this.placeFocus ? this.bodies.get(this.placeFocus) : undefined;
     const grid = bv?.grid?.grid;
     if (!p || !bv || !grid || p.tiles.length === 0) return;
-    // a new building: the L1 look; parts sunk into the ground (a pit) stay out, the ghost draws through it
-    const parts = partsFor(p.kind, 1);
-    const above = parts.filter((part) => (part.offset?.y ?? 0) >= 0);
+    // a new building: the L1 look in the body's skin; parts sunk into the ground (a pit) stay out, the
+    // ghost draws through it (a part only partly sunk, like the water wheel of a mill, stays in)
+    const parts = partsFor(p.kind, 1, bv.structures?.skin ?? skinFor(bv.body));
+    const above = parts.filter((part) => partTop(part) > GHOST_MIN_TOP);
     (above.length ? above : parts).forEach((part, i) => {
       const g = this.ghost(i);
       partMatrix(partFrame(grid, p.tiles, part, this.frame), part, g.matrix, this.basis);

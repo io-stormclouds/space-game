@@ -47,6 +47,29 @@ export function groundTone(mat: string, kind: TerrainKind): number {
   }
 }
 
+/**
+ * Ruins of the settlement against the player's own buildings (decision T-23): the same kit models,
+ * so the ruins are dimmed (`RUIN_FADE`) and pulled `RUIN_GREY` of the way towards the grey of equal
+ * luminance; the player's medieval skin keeps the full `objectTone`.
+ */
+export const RUIN_FADE = 0.8;
+export const RUIN_GREY = 0.3;
+
+/** Decor models that are buildings of the settlement (faded), not trees, rocks or mountains. */
+export function isRuinBuilding(model: string): boolean {
+  return !model.startsWith('detail_') && model !== 'mountain';
+}
+
+/** `hex` (sRGB) as a ruin: mixed `RUIN_GREY` towards its luminance grey, then times `RUIN_FADE`. */
+export function ruinTone(hex: number): number {
+  const r = (hex >> 16) & 0xff;
+  const g = (hex >> 8) & 0xff;
+  const b = hex & 0xff;
+  const y = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  const ch = (v: number) => Math.max(0, Math.min(255, Math.round((v + (y - v) * RUIN_GREY) * RUIN_FADE)));
+  return (ch(r) << 16) | (ch(g) << 8) | ch(b);
+}
+
 /** Colour of a decor model material (trees, rocks, buildings). */
 export function objectTone(mat: string): number {
   switch (mat) {
