@@ -77,12 +77,14 @@ pub fn build_goldberg_grid(
             vertices,
             neighbors,
             deposit: deposits.get(&i).cloned(),
+            terrain: None,
+            road: false,
         });
     }
 
     let area = (4.0 * std::f64::consts::PI * radius * radius) / vertex_count as f64;
     let tile_edge = (area / ((3.0 * 3.0_f64.sqrt()) / 2.0)).sqrt();
-    PlanetGrid { body_id: body_id.to_string(), frequency: geo.frequency, radius, tiles, tile_edge }
+    PlanetGrid { body_id: body_id.to_string(), frequency: geo.frequency, radius, tiles, tile_edge, terrain: None }
 }
 
 /// Area of a tile = sum of the fan triangles from its centre.

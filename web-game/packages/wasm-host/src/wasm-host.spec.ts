@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { GameSnapshot, Request, ReplyValue, SaveFile, WorkerMessage } from '@space-game/api';
+import type { BodyId, BuildPreview, GameSnapshot, Request, ReplyValue, SaveFile, TileInfo, WorkerMessage } from '@space-game/api';
 import { ServerHost } from '@space-game/mock-server';
 import { createWasmHost, type WasmHost } from './wasm-host';
 import { createInThreadWasmGameApi } from './in-thread';
@@ -99,6 +99,73 @@ describe.skipIf(!have)('GameApi on WebAssembly answers like the TS mock (B3)', (
     for (const buildingKind of ['MIN', 'SOL', 'MAG', 'HUT'])
       for (const material of [undefined, 'FER', 'KRI']) p.same({ kind: 'suggestTile', bodyId: home, buildingKind, ...(material ? { material } : {}) });
   });
+
+  // T8: terrain of Tau Ceti c (water refused, forest, rock, snow and roads priced) in the tile panel,
+  // the placement ghost (cost and build time after the terrain) and the suggestions
+  it('terrain on Tau Ceti c: tile info, placement ghosts and suggestions', async () => {
+    const p = await pair();
+    const body = 'tc-c' as BodyId;
+    const tileInfoAll = (): TileInfo[] => {
+      const out: TileInfo[] = [];
+      for (let tileIndex = 0; ; tileIndex++) {
+        const info = p.same({ kind: 'tileInfo', bodyId: body, tileIndex }) as TileInfo | null;
+        if (!info) return out;
+        out.push(info);
+      }
+    };
+    /** Two tiles of each terrain class (a road counts apart from its grass), in tile order. */
+    const sample = (tiles: TileInfo[]): number[] => {
+      const key = (t: TileInfo) => (t.terrain?.road ? 'road' : (t.terrain?.kind ?? 'none'));
+      const picked = new Map<string, number[]>();
+      for (const t of tiles) {
+        const list = picked.get(key(t)) ?? [];
+        if (list.length < 2) picked.set(key(t), [...list, t.index]);
+      }
+      for (const k of ['water', 'forest', 'rock', 'road']) expect(picked.get(k)?.length, `tc-c has ${k}`).toBe(2);
+      return [...picked.values()].flat();
+    };
+    const ghosts = (tiles: number[]) => {
+      const out: Array<BuildPreview & { kind: string }> = [];
+      for (const tileIndex of tiles)
+        for (const buildingKind of ['SOL', 'HAB', 'SMT', 'PORT'])
+          for (const rotation of [0, 1, 3])
+            out.push({ ...(p.same({ kind: 'previewBuild', bodyId: body, tileIndex, buildingKind, rotation }) as BuildPreview), kind: buildingKind });
+      expect(out.some((g) => g.reason === 'BAD_TERRAIN' && g.cost === undefined)).toBe(true);
+      return out;
+    };
+    const priced = (g: BuildPreview) => g.cost !== undefined && g.buildTime !== undefined;
+    const suggest = () => {
+      for (const buildingKind of ['SOL', 'HAB', 'SMT', 'PORT'])
+        for (const material of [undefined, 'FER']) p.same({ kind: 'suggestTile', bodyId: body, buildingKind, ...(material ? { material } : {}) });
+    };
+
+    // the start world: no colony (NO_ROVER and NO_COLONY_SITE, priced past the terrain stage)
+    p.same({ kind: 'start', scenarioId: 'tau-ceti' });
+    p.same({ kind: 'pause' });
+    const start = tileInfoAll();
+    expect(start.length).toBe(252);
+    expect(start.every((t) => t.terrain !== null)).toBe(true);
+    const tiles = sample(start);
+    expect(ghosts(tiles).some((g) => g.reason === 'NO_ROVER' && priced(g))).toBe(true);
+
+    // the Ark on the orbit of tc-c with the site chosen: the port ghost on water, roads, forest, rock
+    p.same({ kind: 'command', command: { type: 'SCAN_SYSTEM', shipId: 'arka-1' } as never });
+    p.same({ kind: 'stepOnce', steps: 1000 });
+    p.same({ kind: 'command', command: { type: 'CHOOSE_COLONY_SITE', bodyId: body } as never });
+    p.same({ kind: 'command', command: { type: 'MOVE_SHIP', shipId: 'arka-1', to: body } as never });
+    const docked = p.same({ kind: 'stepOnce', steps: 600 }) as GameSnapshot;
+    expect(docked.world.ships[0]!.state).toBe('DOCKED');
+    expect(docked.world.ships[0]!.currentBodyId).toBe(body);
+    expect(ghosts(tiles).some((g) => g.kind === 'PORT' && g.ok && priced(g))).toBe(true);
+    suggest();
+
+    // the colony of the `teren` replay: port on the road, a panel, a habitat on rock
+    const file = JSON.parse(readFileSync(join(REPLAYS, 'teren', 'save.json'), 'utf8')) as SaveFile;
+    p.same({ kind: 'replay', file });
+    tileInfoAll();
+    expect(ghosts(tiles).some((g) => g.kind === 'SOL' && g.ok && priced(g))).toBe(true);
+    suggest();
+  }, 120_000);
 
   it('tempo, pause, steps, commands and rejections', async () => {
     const p = await pair();

@@ -1,12 +1,14 @@
 // Records golden replays (plan 02 §5.1): scripted games on the mock server, saved as the mock's
-// `SaveFile` plus the events of every step. `cargo run -p conformance -- replay <dir>` in server/
+// `SaveFile` plus the events of every step. Scripts that show a rule (`teren`) throw when the mock
+// does not do what they expect. `cargo run -p conformance -- replay <dir>` in server/
 // replays each save through game-core and compares the world, the events and the rejected count.
 //   node --import tsx tools/conformance/record-replays.ts [outDir] [revision]
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { Command, DomainEvent, WorldState } from '@space-game/domain';
+import type { Command, Cost, DomainEvent, TerrainKind, TileId, WorldState } from '@space-game/domain';
 import {
+  TC_C,
   TC_E,
   TC_F,
   TAU_CETI_ID,
@@ -17,6 +19,8 @@ import {
   MOON_ID,
   ASTEROID_ID,
   SHIP_ID,
+  footprintTiles,
+  tileId,
 } from '@space-game/domain';
 import { MockServer } from '@space-game/mock-server';
 // the Atanor engine is not exported from the package index (the client imports it by path)
@@ -45,6 +49,10 @@ class Recorder {
   readonly server: MockServer;
   readonly events: StepEvents[] = [];
   rejected = 0;
+  /** Events of the last command, of the last step, and the game minutes of the last step (for checks). */
+  lastCommand: DomainEvent[] = [];
+  lastStep: DomainEvent[] = [];
+  lastDt = 0;
 
   constructor(scenario: ScenarioId) {
     this.server = new MockServer();
@@ -68,12 +76,16 @@ class Recorder {
     const r = this.server.command(command);
     if (!r.ok) this.rejected++;
     this.bucket().events.push(...r.events);
+    this.lastCommand = r.events;
     return r.ok;
   }
 
   step(): void {
     const b = this.bucket();
-    b.events.push(...this.server.step());
+    const t0 = this.world.time;
+    this.lastStep = this.server.step();
+    this.lastDt = this.world.time - t0;
+    b.events.push(...this.lastStep);
   }
 
   steps(n: number): void {
@@ -100,6 +112,16 @@ class Recorder {
 
   plainTile(body: string) {
     return this.freeTiles(body).find((t) => !t.deposit && t.neighbors.length === 6)!.id;
+  }
+
+  /** A free hexagon of a terrain class (T8), off the settlement roads and without a deposit. */
+  terrainTile(body: string, kind: TerrainKind) {
+    return this.freeTiles(body).find((t) => t.terrain === kind && !t.road && !t.deposit && t.neighbors.length === 6)!.id;
+  }
+
+  /** A free tile of the settlement roads (T8). */
+  roadTile(body: string) {
+    return this.freeTiles(body).find((t) => t.road)!.id;
   }
 
   write(name: string): void {
@@ -344,6 +366,126 @@ function fabryka(): void {
   r.write('fabryka');
 }
 
+/** Throws when `ok` is false: the replay must show the rule it is named after. */
+function expect(ok: boolean, what: string): void {
+  if (!ok) throw new Error(`teren: ${what}`);
+}
+
+/** The first event of `type` among `events`; throws without one. */
+function eventOf<T extends DomainEvent['type']>(events: DomainEvent[], type: T, what: string): Extract<DomainEvent, { type: T }> {
+  const e = events.find((x) => x.type === type);
+  expect(e !== undefined, `${what}: expected ${type}, got ${JSON.stringify(events).slice(0, 300)}`);
+  return e as Extract<DomainEvent, { type: T }>;
+}
+
+/** `ceil(q · pct / 100)` per material, written out here so the replay checks the rule, not the code. */
+function terrainCost(cost: Cost, pct: number): Cost {
+  return Object.fromEntries(Object.entries(cost).map(([k, q]) => [k, Math.ceil((q * pct) / 100)]));
+}
+
+const sameCost = (a: Cost, b: Cost): boolean => JSON.stringify(a) === JSON.stringify(b);
+
+/**
+ * Terrain in play on Tau Ceti c (T8, docs/planet-terrain-poc-wnioski-i-plan.md §9.4): the port refused
+ * on water (BAD_TERRAIN), landed on the settlement road (cost × 85 %, time × 75 %); a shuttle; solar
+ * panels on a road and in a forest, a habitat on rock, a panel refused on water; the forest site
+ * cancelled (75 % of its terrain cost back); everything else built in its terrain time. tc-c has a
+ * trace atmosphere, so no wind turbines.
+ */
+function teren(): void {
+  const r = new Recorder('tau-ceti');
+  const sim = r.server.simulation;
+  const rules = sim.rules.terrain();
+  const grid = sim.grids.get(TC_C)!;
+  expect(grid.terrain?.biome === 'medieval', 'tc-c has the medieval terrain');
+  // cost and time % of a tile: a road's on a road, its class's otherwise
+  const pctOf = (index: number) => {
+    const t = grid.tiles[index]!;
+    return t.road ? rules.road : rules.kinds[t.terrain!];
+  };
+  r.cmd({ type: 'SCAN_SYSTEM', shipId: ARK_ID });
+  r.until(() => r.world.scan.state === 'DONE', 30 * 60);
+  r.cmd({ type: 'CHOOSE_COLONY_SITE', bodyId: TC_C });
+  r.cmd({ type: 'MOVE_SHIP', shipId: ARK_ID, to: TC_C });
+  r.until(() => r.world.ships[0]!.state === 'DOCKED', 60 * 60);
+
+  // the port on a lake: refused
+  const lake = grid.tiles.find((t) => t.terrain === 'water' && footprintTiles(grid, t.index, 3, 0))!;
+  r.cmd({ type: 'PLACE_SPACEPORT', bodyId: TC_C, tileId: lake.id });
+  const wet = eventOf(r.lastCommand, 'COMMAND_REJECTED', 'port on water');
+  expect(wet.reason === 'BAD_TERRAIN' && wet.detail === rules.kinds.water.name, `port on water: ${wet.reason} ${wet.detail}`);
+
+  // the port on three road tiles (else on grass): cheaper and faster than the catalog
+  let anchor: { index: number; rotation: number } | null = null;
+  for (const want of [(i: number) => grid.tiles[i]!.road === true, (i: number) => grid.tiles[i]!.terrain === 'grass' && !grid.tiles[i]!.deposit]) {
+    for (const t of grid.tiles) {
+      for (let rotation = 0; !anchor && rotation < t.neighbors.length; rotation++) {
+        const tiles = footprintTiles(grid, t.index, 3, rotation);
+        if (tiles && tiles.every(want)) anchor = { index: t.index, rotation };
+      }
+      if (anchor) break;
+    }
+    if (anchor) break;
+  }
+  expect(anchor !== null, 'a place for the port');
+  const portPct = pctOf(anchor!.index);
+  r.cmd({ type: 'PLACE_SPACEPORT', bodyId: TC_C, tileId: tileId(TC_C, anchor!.index), rotation: anchor!.rotation });
+  const placed = eventOf(r.lastCommand, 'SPACEPORT_PLACED', 'port on the road');
+  const portCost = sim.scenario.colonization.portCost;
+  expect(sameCost(placed.cost, terrainCost(portCost, portPct.costPct)), `port cost ${JSON.stringify(placed.cost)}`);
+  expect(portPct.costPct === 100 || !sameCost(placed.cost, portCost), 'the road changes the port cost');
+  expect((placed.structure.timePct ?? 100) === portPct.timePct, `port time ${placed.structure.timePct}`);
+  r.until(() => r.world.colony.foundedAt !== null, 60 * 60);
+
+  r.cmd({ type: 'CALL_SHUTTLE', bodyId: TC_C, cargo: { FER: 60, SIL: 60 } });
+  r.until(() => (storageOf(r.world, TC_C)['SIL'] ?? 0) >= 60, 30 * 60);
+
+  // three sites at their terrain prices, one refused on water
+  const order = (kind: string, tile: TileId, what: string) => {
+    r.cmd({ type: 'BUILD', bodyId: TC_C, tileId: tile, kind });
+    const e = eventOf(r.lastCommand, 'CONSTRUCTION_ORDERED', what);
+    const pct = pctOf(grid.tiles.find((t) => t.id === tile)!.index);
+    const base = sim.rules.spec(kind, 1);
+    expect(sameCost(e.cost, terrainCost(base.cost, pct.costPct)), `${what}: cost ${JSON.stringify(e.cost)}`);
+    expect(sameCost(e.structure.paid, e.cost), `${what}: paid`);
+    expect((e.structure.timePct ?? 100) === pct.timePct && e.structure.timePct !== 100, `${what}: timePct ${e.structure.timePct}`);
+    return { id: e.structure.id, time: (base.buildTime * pct.timePct) / 100, paid: e.cost };
+  };
+  const road = order('SOL', r.roadTile(TC_C), 'SOL on a road');
+  const forest = order('SOL', r.terrainTile(TC_C, 'forest'), 'SOL in a forest');
+  const rock = order('HAB', r.terrainTile(TC_C, 'rock'), 'HAB on rock');
+  r.cmd({ type: 'BUILD', bodyId: TC_C, tileId: r.terrainTile(TC_C, 'water'), kind: 'SOL' });
+  const sunk = eventOf(r.lastCommand, 'COMMAND_REJECTED', 'SOL on water');
+  expect(sunk.reason === 'BAD_TERRAIN' && sunk.detail === rules.kinds.water.name, `SOL on water: ${sunk.reason} ${sunk.detail}`);
+
+  // the forest site cancelled: 75 % (rounded down) of what it cost after the terrain
+  r.cmd({ type: 'CANCEL_CONSTRUCTION', structureId: forest.id });
+  const back = eventOf(r.lastCommand, 'CONSTRUCTION_CANCELLED', 'cancel in the forest');
+  expect(Object.entries(forest.paid).every(([k, q]) => back.refund[k] === Math.floor(q * 0.75)), `refund ${JSON.stringify(back.refund)}`);
+  const baseRefund = Object.entries(sim.rules.spec('SOL', 1).cost).map(([k, q]) => [k, Math.floor(q * 0.75)]);
+  expect(!sameCost(back.refund, Object.fromEntries(baseRefund)), 'the forest refund follows the terrain cost');
+
+  // everything built; one rover per site, so a site takes its catalog time × the terrain % (± one step)
+  const started = new Map<string, number>();
+  const built = new Map<string, number>();
+  r.until(() => {
+    for (const e of r.lastStep) {
+      if (e.type === 'CONSTRUCTION_STARTED' && !started.has(e.structureId)) started.set(e.structureId, r.world.time - r.lastDt);
+      if (e.type === 'STRUCTURE_BUILT') {
+        built.set(e.structure.id, r.world.time);
+        expect(e.structure.timePct === undefined, `${e.structure.id}: timePct dropped when built`);
+      }
+    }
+    return r.world.structures.every((s) => s.state === 'ACTIVE');
+  }, 60 * 60);
+  for (const site of [road, rock]) {
+    const took = built.get(site.id)! - started.get(site.id)!;
+    expect(Math.abs(took - site.time) <= r.lastDt + 1e-9, `${site.id}: took ${took} min, terrain time ${site.time}`);
+  }
+  r.steps(60);
+  r.write('teren');
+}
+
 /** A load world of F5 runs for a while: hundreds of buildings, ships in flight, rovers driving. */
 function obciazenie(level: 'load-s' | 'load-m', steps: number): void {
   const r = new Recorder(level);
@@ -358,5 +500,6 @@ pocEkonomia();
 tempoZmiany();
 odmowy();
 fabryka();
+teren();
 obciazenie('load-s', 600);
 obciazenie('load-m', 60);

@@ -14,14 +14,16 @@ use game_core::math::goldberg::build_goldberg_grid;
 use game_core::math::lead::{LeadOptions, solve_lead_intercept};
 use game_core::math::noise::{fbm, hash3};
 use game_core::math::orbit::OrbitSolver;
+use game_core::math::terrain::{classify_terrain, terrain_aim};
 use game_core::math::vec3::Vec3;
 use game_core::models::resource::Qty;
+use game_core::models::terrain::TerrainBiome;
 use game_core::sim::scenarios::{poc_scenario, tau_ceti_scenario};
 use game_core::sim::{Rules, Simulation, SimulationOptions, create_world};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-use crate::compare::{Tolerance, compare, report};
+use crate::compare::{Diff, Tolerance, compare, report};
 
 #[derive(Deserialize)]
 struct GridVector {
@@ -68,6 +70,17 @@ struct AtanorCase {
     board_radius: Option<i32>,
     supply: Option<Qty>,
     ticks: u64,
+}
+
+/// One terrain classification: a recorded grid (`grids[grid]`), its body and a style.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct TerrainVector {
+    grid: usize,
+    scenario: String,
+    body_id: String,
+    biome: TerrainBiome,
+    seed: f64,
 }
 
 #[derive(Deserialize)]
@@ -144,6 +157,46 @@ pub fn run(file: &Path) -> bool {
             ok &= report(&format!("grid[{i}] {} GP({},0)", input.body_id, input.frequency), &compare(exp, &act, tol), 10);
             grids.push(grid);
         }
+    }
+
+    // terrain classes and settlement roads (T8): the aim from the scenario body (libm cos/sin), the
+    // classes compared as strings, so they must be equal to the last bit of the noise
+    if let Some(Value::Array(list)) = root.get("terrain") {
+        let mut act = Vec::new();
+        let mut inexact = Vec::new();
+        for (i, exp) in list.iter().enumerate() {
+            let input: TerrainVector = serde_json::from_value(exp.clone()).expect("terrain vector");
+            let bodies = match input.scenario.as_str() {
+                "tau-ceti" => tau_ceti_scenario().bodies,
+                _ => poc_scenario().bodies,
+            };
+            let body = bodies.iter().find(|b| b.id == input.body_id).expect("terrain body");
+            let aim = terrain_aim(body);
+            // the aim feeds the settlement score: bit for bit, not within the tolerance
+            let recorded: [f64; 3] = serde_json::from_value(exp["aim"].clone()).expect("terrain aim");
+            if recorded != aim.to_array() {
+                inexact.push(Diff {
+                    path: format!("$[{i}].aim"),
+                    message: format!("TS {recorded:?} vs Rust {:?} (not bit-identical)", aim.to_array()),
+                });
+            }
+            let c = grids.get(input.grid).map(|g| classify_terrain(g, input.biome, input.seed, Some(aim)));
+            act.push(json!({
+                "grid": input.grid,
+                "scenario": input.scenario,
+                "bodyId": input.body_id,
+                "biome": input.biome,
+                "seed": input.seed,
+                "aim": v3(aim),
+                "kinds": c.as_ref().map(|c| c.kinds.clone()),
+                "road": c.as_ref().map(|c| c.road.clone()),
+                "settlementCenter": c.as_ref().and_then(|c| c.settlement_center),
+            }));
+        }
+        let name = format!("terrain ({} classifications: aim, classes, roads, settlement centre)", list.len());
+        let mut diffs = compare(root.get("terrain").unwrap(), &Value::Array(act), tol);
+        diffs.extend(inexact);
+        ok &= report(&name, &diffs, 10);
     }
 
     if let Some(Value::Array(list)) = root.get("orbits") {

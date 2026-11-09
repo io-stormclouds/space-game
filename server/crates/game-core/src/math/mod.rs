@@ -10,6 +10,7 @@ pub mod js;
 pub mod lead;
 pub mod noise;
 pub mod orbit;
+pub mod terrain;
 pub mod vec3;
 
 pub use asteroid::*;
@@ -21,4 +22,5 @@ pub use goldberg::*;
 pub use lead::*;
 pub use noise::*;
 pub use orbit::*;
+pub use terrain::*;
 pub use vec3::*;

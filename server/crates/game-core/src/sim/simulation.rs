@@ -77,7 +77,9 @@ impl Simulation {
     pub fn new(scenario: Scenario, opts: SimulationOptions) -> Simulation {
         let rules = Rules::new(opts.economy, scenario.overrides.clone());
         let cfg = scenario_constants(&scenario);
-        let grids = build_world_grids(&scenario.bodies);
+        // grids (and their terrain) from the bodies of the save when continuing one: a world saved before
+        // a body got terrain keeps plain tiles, so the sim and the renderer see the same surface
+        let grids = build_world_grids(opts.world.as_ref().map_or(&scenario.bodies, |w| &w.bodies));
         let shapes = scenario.bodies.iter().filter(|b| b.shape.is_some()).map(|b| (b.id.clone(), asteroid_shape(b, 4))).collect();
         let solver = OrbitSolver::new(&scenario.bodies);
         let snapshot = FrameSnapshot::new(scenario.bodies.iter().map(|b| &b.id));

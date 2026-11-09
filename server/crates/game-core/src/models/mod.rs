@@ -10,6 +10,7 @@ pub mod rover;
 pub mod serde_util;
 pub mod ship;
 pub mod structure;
+pub mod terrain;
 pub mod transfer;
 
 pub use atanor_machine::*;
@@ -21,4 +22,5 @@ pub use resource::*;
 pub use rover::*;
 pub use ship::*;
 pub use structure::*;
+pub use terrain::*;
 pub use transfer::*;

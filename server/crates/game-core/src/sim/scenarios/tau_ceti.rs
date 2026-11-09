@@ -14,6 +14,7 @@ use indexmap::IndexMap;
 use crate::math::js;
 use crate::models::body::{Atmosphere, BodyKind, BodyProfile, CelestialBody, SurfaceGrid};
 use crate::models::ship::{Onboard, ShipRole, ShipState, Spacecraft};
+use crate::models::terrain::{TerrainBiome, TerrainConfig};
 use crate::sim::constants::GAME_CONSTANTS;
 use crate::sim::rules::LevelOverride;
 use crate::sim::scenario::{Scenario, default_colonization, no_rovers, no_structures};
@@ -55,6 +56,8 @@ struct PlanetData {
     phase: f64,
     color: u32,
     profile: BodyProfile,
+    /// Hex-kit terrain (T8: changes building cost and time); none = plain tiles.
+    terrain: Option<TerrainConfig>,
 }
 
 fn profile(kind: &str, temperature: &str, water: &str, rating: &str, fuel: f64, note: &str, deposits: &[(&str, f64)]) -> BodyProfile {
@@ -90,6 +93,7 @@ fn planets() -> Vec<PlanetData> {
                 "Bogata w metale, ale bez lodu i węgla: woda i paliwo musiałyby przylatywać z innych ciał.",
                 &[("KUP", 80.0), ("TYT", 55.0), ("URA", 25.0)],
             ),
+            terrain: None,
         },
         PlanetData {
             id: TC_C,
@@ -110,6 +114,8 @@ fn planets() -> Vec<PlanetData> {
                 "Dobre metale i słońce, brak lodu. Lepsza jako druga kolonia przemysłowa.",
                 &[("TYT", 70.0), ("FER", 50.0), ("KUP", 35.0)],
             ),
+            // ruined medieval settlement facing the sun (docs/planet-terrain-poc-wnioski-i-plan.md §9.1)
+            terrain: Some(TerrainConfig { biome: TerrainBiome::Medieval, seed: 2.0 }),
         },
         PlanetData {
             id: TC_D,
@@ -130,6 +136,7 @@ fn planets() -> Vec<PlanetData> {
                 "Ferryt i Silicyt, mało wody. Niska grawitacja nadaje się na wyrzutnię masy.",
                 &[("FER", 65.0), ("SIL", 60.0), ("REG", 90.0)],
             ),
+            terrain: None,
         },
         PlanetData {
             id: TC_E,
@@ -150,6 +157,7 @@ fn planets() -> Vec<PlanetData> {
                 "Pełny zestaw surowców T0 i atmosfera do turbin wiatrowych. Najprostszy start, ale droższy start promu z powierzchni.",
                 &[("FER", 60.0), ("SIL", 55.0), ("KRI", 75.0), ("KAR", 45.0), ("KUP", 15.0)],
             ),
+            terrain: None,
         },
         PlanetData {
             id: TC_F,
@@ -170,6 +178,7 @@ fn planets() -> Vec<PlanetData> {
                 "Źródło wody i paliwa na później. Słabe słońce: energia z reaktorów.",
                 &[("KRI", 95.0), ("KAR", 50.0)],
             ),
+            terrain: None,
         },
     ]
 }
@@ -208,8 +217,13 @@ pub fn tau_ceti_bodies() -> Vec<CelestialBody> {
         b.orbit_radius = r;
         b.orbit_speed = two_pi / period_for(r);
         b.initial_angle = p.phase;
-        b.surface_grid =
-            Some(SurfaceGrid { frequency: p.n, deposit_seed: Some(p.seed), deposit_weights: Some(weights_of(&p.profile.deposits)) });
+        // only bodies with terrain get the key, so the others keep their world JSON
+        b.surface_grid = Some(SurfaceGrid {
+            frequency: p.n,
+            deposit_seed: Some(p.seed),
+            deposit_weights: Some(weights_of(&p.profile.deposits)),
+            terrain: p.terrain,
+        });
         b.atmosphere = Some(p.atmosphere);
         b.insolation = Some(p.insolation);
         b.revealed = Some(false);

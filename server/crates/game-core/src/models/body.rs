@@ -4,6 +4,7 @@ use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 
 use super::resource::Cost;
+use super::terrain::TerrainConfig;
 use crate::ids::BodyId;
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
@@ -52,6 +53,10 @@ pub struct SurfaceGrid {
     /// Relative weights of deposit materials; default FER, KRI and SIL equally (PoC).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub deposit_weights: Option<IndexMap<String, f64>>,
+    /// Hex-kit terrain (T8): tile classes and settlement roads generated from this style
+    /// (`build_world_grids`), which change what building costs and how long it takes. Absent = plain tiles.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub terrain: Option<TerrainConfig>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]

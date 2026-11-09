@@ -21,6 +21,7 @@ use crate::models::structure::Structure;
 use crate::sim::reducer::{ColonyState, ScanState};
 use crate::sim::scenario::standing_structure;
 use crate::sim::simulation::{Simulation, SimulationOptions};
+use crate::sim::terrain_rules::tile_buildable;
 
 /// Mulberry32: small, fast, deterministic; the state is one 32-bit integer. Bit for bit the mock's `Rng`.
 #[derive(Clone, Copy, Debug)]
@@ -129,12 +130,16 @@ pub fn build_load(level: LoadLevel, economy: Option<Economy>, seed: i32) -> Simu
         }
     }
 
-    // buildings on free tiles, bodies in turn
+    // buildings on free tiles, bodies in turn; never on terrain that cannot be built on (water, T8)
     let bodies: Vec<String> = sim.grids.keys().cloned().collect();
     let used: HashSet<&str> = w.structures.iter().flat_map(|s| s.tiles.iter().map(|t| t.as_str())).collect();
+    let terrain = sim.rules.terrain();
     let mut free: IndexMap<String, Vec<usize>> = bodies
         .iter()
-        .map(|b| (b.clone(), sim.grids[b].tiles.iter().filter(|t| !used.contains(t.id.as_str())).map(|t| t.index).collect()))
+        .map(|b| {
+            let tiles = sim.grids[b].tiles.iter().filter(|t| !used.contains(t.id.as_str()) && tile_buildable(t, terrain));
+            (b.clone(), tiles.map(|t| t.index).collect())
+        })
         .collect();
     let mut structures: Vec<Structure> = w.structures.clone();
     let mut i = structures.len();

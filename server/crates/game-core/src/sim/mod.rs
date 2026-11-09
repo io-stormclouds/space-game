@@ -12,6 +12,7 @@ pub mod scenario;
 pub mod scenarios;
 pub mod simulation;
 pub mod systems;
+pub mod terrain_rules;
 
 pub use clock::*;
 pub use colony::*;
@@ -23,3 +24,4 @@ pub use reducer::*;
 pub use rules::*;
 pub use scenario::*;
 pub use simulation::*;
+pub use terrain_rules::*;

@@ -20,6 +20,7 @@ use game_core::sim::scenario::top_tile;
 use game_core::sim::scenarios::{LoadLevel, scenario_by_id, start_simulation};
 use game_core::sim::simulation::{ColonyReadout, SimState, Simulation, SimulationOptions};
 use game_core::sim::systems::{build, colony};
+use game_core::sim::terrain_rules::{scale_time, tile_terrain};
 
 use crate::contract::*;
 use crate::galaxy::{DEFAULT_GALAXY_OPTIONS, GalaxyOptions, GalaxySim, GalaxySimState};
@@ -415,6 +416,7 @@ impl GameSession {
                 shuttle_capacity: c.shuttle_capacity,
                 shuttle_trip_minutes: c.shuttle_trip_minutes,
             },
+            terrain: rules.terrain().clone(),
         }
     }
 
@@ -435,14 +437,20 @@ impl GameSession {
         out
     }
 
-    /// Placement ghost: BUILD check, or the spaceport check for the pseudo-kind 'PORT'.
+    /// Placement ghost: BUILD check, or the spaceport check for the pseudo-kind 'PORT'. Past the
+    /// terrain stage it adds the terrain-adjusted `cost` and `build_time` (also when a later stage rejects).
     pub fn preview_build(&self, body_id: &str, tile_index: usize, kind: &str, rotation: i64) -> BuildPreview {
         let anchor = tile_id(body_id, tile_index);
         let grid = self.sim.grids.get(body_id);
         let rules = &self.sim.rules;
         let footprint = |size: usize| grid.and_then(|g| footprint_tiles(g, tile_index, size, rotation)).unwrap_or_default();
+        // (cost, build time) on this terrain, when the check priced the site
+        let priced = |k: &str, price: Option<&build::SitePrice>| match price {
+            Some(p) => (Some(p.cost.clone()), Some(scale_time(rules.spec(k, 1).build_time, p.time_pct))),
+            None => (None, None),
+        };
         if kind == "PORT" {
-            let e = colony::place_spaceport(
+            let check = colony::check_spaceport(
                 &self.sim.world,
                 &self.sim.grids,
                 rules,
@@ -452,21 +460,33 @@ impl GameSession {
                 rotation,
             );
             let tiles = footprint(rules.spec("HQ", 1).footprint);
-            return match e {
-                DomainEvent::CommandRejected { reason, detail, .. } => BuildPreview { ok: false, reason: Some(reason), detail, tiles },
-                _ => BuildPreview { ok: true, reason: None, detail: None, tiles },
+            return match check {
+                Ok(c) => {
+                    let (cost, build_time) = priced("HQ", Some(&c.price));
+                    BuildPreview { ok: true, reason: None, detail: None, tiles, cost, build_time }
+                }
+                Err(f) => {
+                    let (cost, build_time) = priced("HQ", f.price.as_ref());
+                    BuildPreview { ok: false, reason: Some(f.fail.reason), detail: f.fail.detail, tiles, cost, build_time }
+                }
             };
         }
         match build::check(&self.sim.world, &self.sim.grids, rules, body_id, &anchor, kind, rotation) {
-            Ok(tiles) => BuildPreview { ok: true, reason: None, detail: None, tiles: tiles.iter().map(|t| tile_index_of(t)).collect() },
+            Ok(c) => {
+                let (cost, build_time) = priced(kind, Some(&c.price));
+                let tiles = c.tiles.iter().map(|t| tile_index_of(t)).collect();
+                BuildPreview { ok: true, reason: None, detail: None, tiles, cost, build_time }
+            }
             Err(f) => {
                 let size = if rules.has(kind) { rules.spec(kind, 1).footprint } else { 1 };
-                BuildPreview { ok: false, reason: Some(f.reason), detail: f.detail, tiles: footprint(size) }
+                let (cost, build_time) = priced(kind, f.price.as_ref());
+                BuildPreview { ok: false, reason: Some(f.fail.reason), detail: f.fail.detail, tiles: footprint(size), cost, build_time }
             }
         }
     }
 
-    /// One surface tile for the tile panel: shape, deposit left, what stands there, every buildable kind checked here.
+    /// One surface tile for the tile panel: shape, deposit left, terrain (class, road, cost and time %),
+    /// what stands there, every buildable kind checked here.
     pub fn tile_info(&self, body_id: &str, tile_index: usize) -> Option<TileInfo> {
         let tile = self.sim.grids.get(body_id)?.tiles.get(tile_index)?;
         let w = &self.sim.world;
@@ -494,6 +514,7 @@ impl GameSession {
                 initial: d.amount,
                 remaining: w.deposits.get(&tile.id).copied().unwrap_or(d.amount),
             }),
+            terrain: tile_terrain(tile, rules.terrain()),
             structure_id: owner.map(|s| s.id.clone()),
             options,
         })
