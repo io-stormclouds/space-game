@@ -1,6 +1,7 @@
 //! The server end to end over a real WebSocket: hello → welcome → checkpoint, requests → sync and
 //! replies, a replica that stays equal to the server's world (hash), a refused login, the rate
-//! limit, and a world that survives a reconnect and a server restart (restored from disk).
+//! limit, a world that survives a reconnect and a server restart (restored from disk), and two
+//! players trading through a hub of the galaxy service (B6).
 
 use std::time::Duration;
 
@@ -8,7 +9,8 @@ use futures_util::{SinkExt, StreamExt};
 use serde_json::{Value, json};
 use tokio_tungstenite::tungstenite::Message;
 
-use game_server::{AppState, Config, router};
+use game_server::{AppState, Config, PROTOCOL_VERSION, router};
+use game_session::exchange::{MarketConfig, NpcConfig};
 use game_session::{Host, HostOptions, SyncMessage};
 
 fn config(dir: &std::path::Path, dev: bool) -> Config {
@@ -21,6 +23,13 @@ fn config(dir: &std::path::Path, dev: bool) -> Config {
         idle_seconds: 300.0,
         offline_limit_hours: 12.0,
         max_requests_per_second: 20.0,
+        // shipments in about a second
+        market: MarketConfig {
+            seconds_per_ly: 0.02,
+            handling_seconds: 0.5,
+            npc: Some(NpcConfig { seed: 7, players: 6, update_seconds: 10.0, depth: 50.0 }),
+            ..MarketConfig::default()
+        },
     }
 }
 
@@ -35,16 +44,18 @@ async fn start(cfg: Config) -> (String, std::sync::Arc<AppState>) {
 
 type Ws = tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
 
-/// A client with its replica: every sync message from the server is applied to it.
+/// A client with its replica: every sync message from the server is applied to it; the last view
+/// of the galaxy is kept.
 struct Client {
     ws: Ws,
     replica: Host,
     hashes: usize,
+    galaxy: Option<Value>,
 }
 
 async fn connect(url: &str, callsign: &str, password: &str) -> (Ws, Value) {
     let (mut ws, _) = tokio_tungstenite::connect_async(url).await.unwrap();
-    let hello = json!({ "type": "hello", "protocolVersion": 2, "callsign": callsign, "password": password });
+    let hello = json!({ "type": "hello", "protocolVersion": PROTOCOL_VERSION, "callsign": callsign, "password": password });
     ws.send(Message::Text(hello.to_string().into())).await.unwrap();
     let first = next(&mut ws).await;
     (ws, first)
@@ -66,7 +77,7 @@ impl Client {
         assert_eq!(welcome["type"], "welcome", "{welcome}");
         let reset = next(&mut ws).await;
         assert_eq!(reset["type"], "reset");
-        let mut c = Client { ws, replica: Host::new(HostOptions::default()), hashes: 0 };
+        let mut c = Client { ws, replica: Host::new(HostOptions::default()), hashes: 0, galaxy: None };
         c.apply(reset);
         c
     }
@@ -79,12 +90,13 @@ impl Client {
         self.replica.apply_sync(msg).expect("the replica follows the server");
     }
 
-    /// Next message that is not a sync message (those go to the replica).
+    /// Next message that is neither a sync message (those go to the replica) nor a galaxy view (kept).
     async fn next(&mut self) -> Value {
         loop {
             let m = next(&mut self.ws).await;
             match m["type"].as_str() {
                 Some("reset" | "sync" | "hash") => self.apply(m),
+                Some("galaxy") => self.galaxy = Some(m["view"].clone()),
                 _ => return m,
             }
         }
@@ -96,6 +108,7 @@ impl Client {
             let m = next(&mut self.ws).await;
             match m["type"].as_str() {
                 Some("reset" | "sync" | "hash") => self.apply(m),
+                Some("galaxy") => self.galaxy = Some(m["view"].clone()),
                 _ => panic!("unexpected message {m}"),
             }
         }
@@ -103,6 +116,10 @@ impl Client {
 
     async fn ask(&mut self, id: u64, request: Value) -> Value {
         self.ws.send(Message::Text(json!({ "id": id, "request": request }).to_string().into())).await.unwrap();
+        self.reply(id).await
+    }
+
+    async fn reply(&mut self, id: u64) -> Value {
         loop {
             let m = self.next().await;
             if m["type"] == "reply" && m["id"] == id {
@@ -110,6 +127,49 @@ impl Client {
             }
         }
     }
+
+    async fn galaxy_op(&mut self, id: u64, op: Value) -> Value {
+        self.ws.send(Message::Text(json!({ "id": id, "galaxy": op }).to_string().into())).await.unwrap();
+        self.reply(id).await
+    }
+
+    /// Follows the world and the galaxy until `ok` holds (at most 15 s).
+    async fn wait(&mut self, ok: impl Fn(&Client) -> bool, what: &str) -> &Client {
+        let until = tokio::time::Instant::now() + Duration::from_secs(15);
+        while !ok(self) {
+            assert!(tokio::time::Instant::now() < until, "not in time: {what}; view {:?}", self.galaxy);
+            let m = next(&mut self.ws).await;
+            match m["type"].as_str() {
+                Some("reset" | "sync" | "hash") => self.apply(m),
+                Some("galaxy") => self.galaxy = Some(m["view"].clone()),
+                _ => {}
+            }
+        }
+        self
+    }
+
+    /// Body of the colony's port.
+    fn port(&self) -> String {
+        let w = self.replica.session.world();
+        w.structures.iter().find(|s| s.kind == "HQ" && s.is_working()).expect("a port").body_id.clone()
+    }
+
+    /// Body of the colony's port and a catalog material it has at least `n` of.
+    fn port_and_stock(&self, n: f64) -> (String, String) {
+        let body = self.port();
+        let catalog: Vec<String> = self.replica.session.catalog().materials.into_iter().map(|m| m.id).collect();
+        let mat =
+            self.replica.session.world().storage_of(&body).into_iter().find(|(m, q)| *q >= n && catalog.contains(m)).expect("stock").0;
+        (body, mat)
+    }
+
+    fn stored(&self, body: &str, mat: &str) -> f64 {
+        self.replica.session.world().storage_of(body).get(mat).copied().unwrap_or(0.0)
+    }
+}
+
+fn hub<'a>(view: &'a Value, id: &str) -> &'a Value {
+    view["hubs"].as_array().unwrap().iter().find(|h| h["id"] == id).expect("hub")
 }
 
 fn tmp(name: &str) -> std::path::PathBuf {
@@ -179,10 +239,11 @@ async fn production_needs_an_account_keeps_time_and_limits_requests() {
     assert!(refused["error"].as_str().unwrap().contains("nieznany"));
     // registration is explicit in production
     let (mut ws, _) = tokio_tungstenite::connect_async(&url).await.unwrap();
-    let hello = json!({ "type": "hello", "protocolVersion": 2, "callsign": "Nowy", "password": "haslo-123", "register": true });
+    let hello =
+        json!({ "type": "hello", "protocolVersion": PROTOCOL_VERSION, "callsign": "Nowy", "password": "haslo-123", "register": true });
     ws.send(Message::Text(hello.to_string().into())).await.unwrap();
     assert_eq!(next(&mut ws).await["type"], "welcome");
-    let mut c = Client { ws, replica: Host::new(HostOptions::default()), hashes: 0 };
+    let mut c = Client { ws, replica: Host::new(HostOptions::default()), hashes: 0, galaxy: None };
     let tempo = c.ask(1, json!({ "kind": "setTempo", "tempo": 600 })).await;
     assert_eq!(tempo["ok"], false, "no test tempos in production");
 
@@ -207,5 +268,158 @@ async fn production_needs_an_account_keeps_time_and_limits_requests() {
     tokio::time::sleep(Duration::from_millis(300)).await;
     let older = c.ask(300, json!({ "kind": "snapshot" })).await;
     assert_eq!(older["ok"], true);
+    // a client of the previous protocol is told, not served (its replica would keep its own galaxy)
+    let (mut ws, _) = tokio_tungstenite::connect_async(&url).await.unwrap();
+    let hello = json!({ "type": "hello", "protocolVersion": 2, "callsign": "Nowy", "password": "haslo-123" });
+    ws.send(Message::Text(hello.to_string().into())).await.unwrap();
+    let old = next(&mut ws).await;
+    assert_eq!(old["type"], "error");
+    assert!(old["error"].as_str().unwrap().contains("protocol 3"), "{old}");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+fn round2(x: f64) -> f64 {
+    (x * 100.0).round() / 100.0
+}
+
+/// B6 gate (plan 02 §11, 05-SOCIAL S1): two players trade through a hub. Kestrel ships goods from
+/// the colony to Sirius and offers them inside the faction's spread; Wega buys there, cheaper than
+/// from the faction, and ships them home, where they land in the storage of Wega's world (one
+/// `HUB_DELIVERY` command in its log, followed by the replica). Credits move by the price, less and
+/// plus the fee; the market survives a restart.
+#[tokio::test]
+async fn two_players_trade_through_a_hub() {
+    let dir = tmp("trade");
+    let (url, state) = start(config(&dir, true)).await;
+    let hub_id = "hub-sirius";
+    let mut a = Client::login(&url, "Kestrel", "tajne-haslo").await;
+    let mut b = Client::login(&url, "Wega", "inne-haslo").await;
+    a.ask(1, json!({ "kind": "start", "scenarioId": "planeta-matka" })).await;
+    b.ask(1, json!({ "kind": "start", "scenarioId": "planeta-matka" })).await;
+    assert!(a.replica.session.snapshot().hubs.is_empty(), "server worlds have no galaxy of their own");
+
+    let (a_body, mat) = a.port_and_stock(20.0);
+    let before = a.stored(&a_body, &mat);
+    // the bridge into the world is the server's: a client cannot deliver to itself
+    let cheat = a
+        .ask(2, json!({ "kind": "command", "command": { "type": "HUB_DELIVERY", "shipmentId": "x", "bodyId": a_body, "cargo": { &mat: 100 } } }))
+        .await;
+    assert_eq!(cheat["ok"], false, "{cheat}");
+    let nowhere = a
+        .ask(
+            3,
+            json!({ "kind": "command", "command": { "type": "SHIP_TO_HUB", "bodyId": a_body, "hubId": "hub-x", "cargo": { &mat: 1 } } }),
+        )
+        .await;
+    assert_eq!(nowhere["ok"], false);
+    let sent = a
+        .ask(
+            4,
+            json!({ "kind": "command", "command": { "type": "SHIP_TO_HUB", "bodyId": a_body, "hubId": hub_id, "cargo": { &mat: 20 } } }),
+        )
+        .await;
+    assert_eq!(sent["value"]["ok"], true, "{sent}");
+    assert_eq!(a.stored(&a_body, &mat), before - 20.0, "the cargo left the colony (the replica too)");
+
+    let at_hub = |v: &Value, who: &str| hub(v, hub_id)["stock"][who].as_f64().unwrap_or(0.0);
+    let view = a.wait(|c| c.galaxy.as_ref().is_some_and(|v| at_hub(v, &mat) == 20.0), "the cargo at the hub").await.galaxy.clone().unwrap();
+    let account_a = view["account"].as_str().unwrap().to_string();
+    let quote = hub(&view, hub_id)["quotes"].as_array().unwrap().iter().find(|q| q["material"] == mat.as_str()).unwrap().clone();
+    let (bid, ask) = (quote["bid"].as_f64().unwrap(), quote["ask"].as_f64().unwrap());
+    assert!(bid > 0.0 && ask > bid, "the faction quotes {mat}: {quote}");
+    let price = round2((bid + ask) / 2.0);
+    let a_credits = view["credits"].as_f64().unwrap();
+
+    let offer = a
+        .galaxy_op(10, json!({ "op": "placeOrder", "hubId": hub_id, "material": mat, "side": "sell", "quantity": 20, "price": price }))
+        .await;
+    assert_eq!(offer["ok"], true, "{offer}");
+    assert!(offer["value"]["trades"].as_array().unwrap().is_empty(), "inside the spread nobody meets it at once");
+
+    let offered = |v: &Value| {
+        hub(v, hub_id)["book"].as_array().unwrap().iter().any(|l| l["material"] == mat.as_str() && l["side"] == "sell" && l["npc"] == false)
+    };
+    let b_view = b.wait(|c| c.galaxy.as_ref().is_some_and(offered), "Kestrel's offer in Wega's book").await.galaxy.clone().unwrap();
+    let players = b_view["players"].as_array().unwrap();
+    assert!(players.iter().any(|p| p["name"] == "Kestrel" && p["npc"] == false), "players see each other");
+    assert!(players.iter().any(|p| p["npc"] == true), "and the factions' commanders");
+    assert_eq!(hub(&b_view, hub_id)["faction"], "Konsorcjum Orion");
+    let b_credits = b_view["credits"].as_f64().unwrap();
+
+    let deal =
+        b.galaxy_op(11, json!({ "op": "placeOrder", "hubId": hub_id, "material": mat, "side": "buy", "quantity": 15, "price": ask })).await;
+    assert_eq!(deal["ok"], true, "{deal}");
+    let trades = deal["value"]["trades"].as_array().unwrap();
+    assert_eq!(trades.len(), 1, "{deal}");
+    assert_eq!(trades[0]["seller"], account_a.as_str(), "bought from the player, not the faction");
+    assert_eq!(trades[0]["price"].as_f64(), Some(price));
+    let value = price * 15.0;
+    let paid = b
+        .wait(|c| c.galaxy.as_ref().is_some_and(|v| at_hub(v, &mat) == 15.0), "the goods in Wega's hub stock")
+        .await
+        .galaxy
+        .clone()
+        .unwrap();
+    assert!((paid["credits"].as_f64().unwrap() - (b_credits - value * 1.02)).abs() < 0.011, "{} vs {b_credits}", paid["credits"]);
+    let got = a
+        .wait(|c| c.galaxy.as_ref().is_some_and(|v| v["credits"].as_f64().unwrap() > a_credits), "Kestrel paid")
+        .await
+        .galaxy
+        .clone()
+        .unwrap();
+    assert!((got["credits"].as_f64().unwrap() - (a_credits + value * 0.98)).abs() < 0.011);
+    assert_eq!(got["orders"][0]["remaining"].as_f64(), Some(5.0), "5 units still offered");
+
+    // home: the goods land in Wega's colony
+    let b_body = b.port();
+    let b_before = b.stored(&b_body, &mat);
+    let ship = b.galaxy_op(12, json!({ "op": "shipHome", "hubId": hub_id, "bodyId": b_body, "cargo": { &mat: 15 } })).await;
+    assert_eq!(ship["ok"], true, "{ship}");
+    b.wait(|c| c.stored(&b_body, &mat) >= b_before + 15.0, "the delivery in Wega's storage").await;
+    let deliveries = b
+        .replica
+        .session
+        .commands()
+        .iter()
+        .filter(|c| matches!(c.command, game_core::models::command::Command::HubDelivery { .. }))
+        .count();
+    assert_eq!(deliveries, 1);
+    b.wait(|c| c.galaxy.as_ref().is_some_and(|v| v["shipments"].as_array().unwrap().is_empty()), "the shipment done").await;
+
+    // the market is kept across a restart
+    a.ws.close(None).await.unwrap();
+    b.ws.close(None).await.unwrap();
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    state.shutdown().await;
+    let saved: Value = serde_json::from_str(&std::fs::read_to_string(dir.join("galaxy.json")).unwrap()).unwrap();
+    assert_eq!(saved["wallets"].as_object().unwrap().len(), 2);
+    let (url2, _state2) = start(config(&dir, true)).await;
+    let mut a = Client::login(&url2, "Kestrel", "tajne-haslo").await;
+    let again = a.wait(|c| c.galaxy.is_some(), "the view after the restart").await.galaxy.clone().unwrap();
+    assert_eq!(again["credits"], got["credits"]);
+    assert_eq!(again["orders"][0]["remaining"].as_f64(), Some(5.0));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// R-7: the factions are a switch. Off: no faction quotes, commanders or hosts; players' orders only.
+#[tokio::test]
+async fn factions_can_be_switched_off() {
+    let dir = tmp("nonpc");
+    let mut cfg = config(&dir, true);
+    cfg.market.npc = None;
+    let (url, _state) = start(cfg).await;
+    let mut a = Client::login(&url, "Kestrel", "tajne-haslo").await;
+    let v = a.wait(|c| c.galaxy.is_some(), "the view").await.galaxy.clone().unwrap();
+    assert_eq!(v["npc"], false);
+    assert!(v["players"].as_array().unwrap().is_empty());
+    for h in v["hubs"].as_array().unwrap() {
+        assert!(h["faction"].is_null());
+        assert!(h["quotes"].as_array().unwrap().iter().all(|q| q["bid"] == 0.0 && q["ask"] == 0.0));
+    }
+    let order = a
+        .galaxy_op(1, json!({ "op": "placeOrder", "hubId": "hub-sol", "material": "FER", "side": "buy", "quantity": 2, "price": 10 }))
+        .await;
+    assert_eq!(order["ok"], true);
+    assert!(order["value"]["trades"].as_array().unwrap().is_empty(), "nobody sells");
     let _ = std::fs::remove_dir_all(dir);
 }

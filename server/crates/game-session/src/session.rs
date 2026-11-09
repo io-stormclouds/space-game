@@ -35,7 +35,10 @@ pub struct SessionOptions {
     pub step_seconds: f64,
     /// Upper bound of steps per `advance` call (against the spiral of death).
     pub max_steps_per_advance: u32,
-    pub galaxy: GalaxyOptions,
+    /// Simulated players and hub prices of this world alone (mock, offline WASM). `None` on the
+    /// server: there the shared galaxy service has them (R-7), and the world's saves say so, so the
+    /// client's replica runs without them too.
+    pub galaxy: Option<GalaxyOptions>,
     /// Clock for step timing.
     pub clock: Clock,
     /// Tempo of a fresh start (mock: 60).
@@ -51,28 +54,29 @@ impl Default for SessionOptions {
         SessionOptions {
             step_seconds: 1.0 / 60.0,
             max_steps_per_advance: 8,
-            galaxy: DEFAULT_GALAXY_OPTIONS,
+            galaxy: Some(DEFAULT_GALAXY_OPTIONS),
             clock: zero_clock,
             start_tempo: 60.0,
         }
     }
 }
 
-#[derive(serde::Serialize, serde::Deserialize)]
+/// `meta` of a save file: the world's own galaxy, `null` when it has none (a server world).
+#[derive(serde::Serialize)]
 struct Meta {
-    galaxy: GalaxySimState,
+    galaxy: Option<GalaxySimState>,
 }
 
 pub struct GameSession {
     pub step_seconds: f64,
     max_steps: u32,
     clock: Clock,
-    galaxy_options: GalaxyOptions,
+    galaxy_options: Option<GalaxyOptions>,
     start_tempo: f64,
     scenario_id: String,
     economy_params: Option<EconomyParams>,
     sim: Simulation,
-    galaxy: GalaxySim,
+    galaxy: Option<GalaxySim>,
     tempo: f64,
     tempos: Vec<TempoChange>,
     paused: bool,
@@ -97,6 +101,17 @@ fn load_level(id: &str) -> Option<LoadLevel> {
     match id {
         "load-s" | "load-m" | "load-l" => LoadLevel::parse(id),
         _ => None,
+    }
+}
+
+/// The world's galaxy as its save file has it: absent or unreadable → a fresh one (older files),
+/// `null` → none, a state → that state (when this session runs world galaxies at all).
+fn galaxy_of_save(meta: &serde_json::Value, eco: &Economy, opts: Option<GalaxyOptions>) -> Option<GalaxySim> {
+    let opts = opts?;
+    match meta.get("galaxy") {
+        Some(serde_json::Value::Null) => None,
+        Some(v) => Some(GalaxySim::new(eco, opts, serde_json::from_value::<GalaxySimState>(v.clone()).ok())),
+        None => Some(GalaxySim::new(eco, opts, None)),
     }
 }
 
@@ -141,13 +156,17 @@ impl GameSession {
         self.generation
     }
 
-    fn fresh(id: &str, economy: Option<&EconomyParams>, galaxy: GalaxyOptions) -> SessionResult<(Simulation, GalaxySim, Economy)> {
+    fn fresh(
+        id: &str,
+        economy: Option<&EconomyParams>,
+        galaxy: Option<GalaxyOptions>,
+    ) -> SessionResult<(Simulation, Option<GalaxySim>, Economy)> {
         if !SCENARIO_IDS.contains(&id) {
             return Err(format!("unknown scenario {id}"));
         }
         let eco = compute_economy(economy.cloned().unwrap_or_default());
         let sim = start_simulation(id, Some(eco.clone())).ok_or_else(|| format!("unknown scenario {id}"))?;
-        let galaxy = GalaxySim::new(&eco, galaxy_for(galaxy, load_level(id)), None);
+        let galaxy = galaxy.map(|g| GalaxySim::new(&eco, galaxy_for(g, load_level(id)), None));
         Ok((sim, galaxy, eco))
     }
 
@@ -245,7 +264,9 @@ impl GameSession {
     pub fn step(&mut self) -> Vec<DomainEvent> {
         let t0 = (self.clock)();
         let events = self.sim.step(self.step_minutes());
-        self.galaxy.advance(self.sim.time());
+        if let Some(g) = self.galaxy.as_mut() {
+            g.advance(self.sim.time());
+        }
         self.step_index += 1;
         let t1 = (self.clock)();
         self.timings.push_back((t1, t1 - t0));
@@ -302,8 +323,8 @@ impl GameSession {
             world: world.clone(),
             colonies,
             objectives: colony_objectives(world, &self.sim.rules, &self.sim.grids, &DEFAULT_OBJECTIVE_MATERIALS),
-            players: self.galaxy.players(),
-            hubs: self.galaxy.hubs(),
+            players: self.galaxy.as_ref().map(|g| g.players()).unwrap_or_default(),
+            hubs: self.galaxy.as_ref().map(|g| g.hubs()).unwrap_or_default(),
             tempo: self.tempo,
             paused: self.paused,
             step: self.step_index,
@@ -548,7 +569,7 @@ impl GameSession {
     }
 
     pub fn save(&self) -> SaveFile {
-        let meta = Meta { galaxy: self.galaxy.save() };
+        let meta = Meta { galaxy: self.galaxy.as_ref().map(|g| g.save()) };
         SaveFile {
             format: "space-game-save".to_string(),
             version: 1,
@@ -568,8 +589,7 @@ impl GameSession {
         Self::assert_file(&file)?;
         let scenario = scenario_by_id(&file.scenario_id).ok_or_else(|| format!("unknown scenario {}", file.scenario_id))?;
         let eco = compute_economy(file.economy.clone().unwrap_or_default());
-        let galaxy_state = serde_json::from_value::<Meta>(file.meta.clone()).ok().map(|m| m.galaxy);
-        self.galaxy = GalaxySim::new(&eco, self.galaxy_options, galaxy_state);
+        self.galaxy = galaxy_of_save(&file.meta, &eco, self.galaxy_options);
         self.sim = Simulation::new(scenario, SimulationOptions { economy: Some(eco), world: Some(file.world) });
         self.scenario_id = file.scenario_id;
         self.economy_params = file.economy;
@@ -633,7 +653,7 @@ impl GameSession {
     /// players, step, tempo), as hex. Equal on the server and on the client's replica.
     pub fn state_hash(&self) -> String {
         // into a byte buffer (the serialiser the module already has), then FNV-1a 64
-        let galaxy = self.galaxy.save();
+        let galaxy = self.galaxy.as_ref().map(|g| g.save());
         let bytes =
             serde_json::to_vec(&(&self.sim.world, self.sim.export_state(), &galaxy, self.step_index, self.tempo)).unwrap_or_default();
         let hash = bytes.iter().fold(0xcbf2_9ce4_8422_2325u64, |h, &b| (h ^ b as u64).wrapping_mul(0x0000_0100_0000_01b3));

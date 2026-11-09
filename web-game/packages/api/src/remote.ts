@@ -7,8 +7,12 @@ import type { RequestMessage, WorkerLike, WorkerMessage } from './protocol';
 // checks a state hash every few seconds. The UI's queries are answered by the replica; requests that
 // change the game go to the server. To the UI it is a worker like the mock's.
 
-/** Version of the WebSocket protocol; 2: the client keeps a replica (no snapshots on the wire). */
-export const REMOTE_PROTOCOL_VERSION = 2;
+/**
+ * Version of the WebSocket protocol; 2: the client keeps a replica (no snapshots on the wire);
+ * 3: the galaxy service (`{ id, galaxy }` requests, `{ type: 'galaxy', view }` pushes), and server
+ * worlds without a galaxy of their own (the replica shows the service's hubs and players).
+ */
+export const REMOTE_PROTOCOL_VERSION = 3;
 
 export interface RemoteCredentials {
   callsign: string;

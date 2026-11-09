@@ -1,5 +1,6 @@
-//! WebSocket gateway: hello (login) → welcome → the world's checkpoint, then requests in, replies
-//! and sync messages out; `{"type":"resync"}` asks for a new checkpoint. Requests are rate-limited.
+//! WebSocket gateway: hello (login) → welcome → the world's checkpoint and the galaxy's view, then
+//! requests in, replies and sync messages out; `{"type":"resync"}` asks for a new checkpoint;
+//! `{"id","galaxy":{…}}` goes to the galaxy service. Requests are rate-limited.
 
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
@@ -12,6 +13,7 @@ use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use tokio::sync::{mpsc, oneshot};
 
+use crate::galaxy::GalaxyMsg;
 use crate::world::{Wire, WorldMsg, wall_ms};
 use crate::{AppState, PROTOCOL_VERSION};
 
@@ -129,6 +131,12 @@ async fn session(mut socket: WebSocket, state: Arc<AppState>) {
     } else {
         let _ = attached.await;
     }
+    let _ = state.galaxy.send(GalaxyMsg::Connect {
+        account: account.id.clone(),
+        callsign: account.callsign.clone(),
+        client,
+        tx: own_tx.clone(),
+    });
     println!("{} connected (client {client})", account.callsign);
 
     // 3. requests in, messages out
@@ -166,6 +174,11 @@ async fn session(mut socket: WebSocket, state: Arc<AppState>) {
                     }
                     continue;
                 }
+                if let Some(op) = parsed.as_ref().and_then(|v| v.get("galaxy")) {
+                    let id = parsed.as_ref().and_then(|v| v.get("id")?.as_u64()).unwrap_or(0);
+                    let _ = state.galaxy.send(GalaxyMsg::Op { account: account.id.clone(), client, id, op: op.clone() });
+                    continue;
+                }
                 let m = if resync { WorldMsg::Resync { client } } else { WorldMsg::Request { client, json: t.to_string() } };
                 if world.send(m).await.is_err() {
                     break;
@@ -176,6 +189,7 @@ async fn session(mut socket: WebSocket, state: Arc<AppState>) {
         }
     }
     let _ = world.send(WorldMsg::Detach { client }).await;
+    let _ = state.galaxy.send(GalaxyMsg::Disconnect { client });
     writer.abort();
     println!("{} disconnected (client {client})", account.callsign);
 }

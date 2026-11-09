@@ -71,6 +71,10 @@ pub enum Request {
     NominalFlows {
         body_id: BodyId,
     },
+    /// The galaxy's market: the server's galaxy service answers it; a world alone refuses (NO_TRADE).
+    Galaxy {
+        op: serde_json::Value,
+    },
 }
 
 impl Request {
@@ -87,6 +91,7 @@ impl Request {
                 | Request::TileInfo { .. }
                 | Request::EconomyReport { .. }
                 | Request::NominalFlows { .. }
+                | Request::Galaxy { .. }
         )
     }
 }
@@ -145,18 +150,25 @@ pub struct HostOptions {
     pub session: SessionOptions,
     /// Real ms between pushed snapshots (HUD state).
     pub snapshot_ms: f64,
+    /// A galaxy service stands behind the world (the server): commands of the trade with hubs are
+    /// accepted. Without it (mock, offline WASM) they are refused: the cargo would have nowhere to go.
+    pub trade: bool,
 }
 
 impl Default for HostOptions {
     fn default() -> HostOptions {
-        HostOptions { session: SessionOptions::default(), snapshot_ms: 100.0 }
+        HostOptions { session: SessionOptions::default(), snapshot_ms: 100.0, trade: false }
     }
 }
+
+/// Reply to a trade command in a world without the galaxy service.
+pub const NO_TRADE: &str = "handel z hubami działa tylko w grze na serwerze";
 
 /// Runs a [`GameSession`] behind the message protocol.
 pub struct Host {
     pub session: GameSession,
     snapshot_ms: f64,
+    trade: bool,
     last: Option<f64>,
     last_snapshot: f64,
     /// Replica: the game changed since the last pushed snapshot.
@@ -170,6 +182,7 @@ impl Host {
         Host {
             session: GameSession::new(opts.session),
             snapshot_ms: opts.snapshot_ms,
+            trade: opts.trade,
             last: None,
             last_snapshot: f64::NEG_INFINITY,
             dirty: true,
@@ -280,6 +293,9 @@ impl Host {
         Ok(match r {
             Request::Start { scenario_id, economy } => ReplyValue::Snapshot(Box::new(s.start(&scenario_id, economy, None)?)),
             Request::Command { command } => {
+                if command.needs_galaxy() && !self.trade {
+                    return Err(NO_TRADE.to_string());
+                }
                 let result = s.command(command);
                 if !result.events.is_empty() {
                     out.push(Outgoing::Events { events: result.events.clone() });
@@ -321,6 +337,7 @@ impl Host {
             Request::TileInfo { body_id, tile_index } => ReplyValue::Tile(s.tile_info(&body_id, tile_index).map(Box::new)),
             Request::EconomyReport { economy } => ReplyValue::Economy(Box::new(s.economy_report(economy))),
             Request::NominalFlows { body_id } => ReplyValue::Flows(Box::new(s.nominal_flows(&body_id))),
+            Request::Galaxy { .. } => return Err(NO_TRADE.to_string()),
         })
     }
 }

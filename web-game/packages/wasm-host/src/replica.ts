@@ -1,4 +1,13 @@
-import { REMOTE_PROTOCOL_VERSION, type RemoteCredentials, type Request, type RequestMessage, type Welcome, type WorkerMessage } from '@space-game/api';
+import {
+  REMOTE_PROTOCOL_VERSION,
+  type GalaxyView,
+  type GameSnapshot,
+  type RemoteCredentials,
+  type Request,
+  type RequestMessage,
+  type Welcome,
+  type WorkerMessage,
+} from '@space-game/api';
 import type { WasmHost } from './wasm-host';
 
 // Replica of the player's world on the game server (plan 02 §6, B4). The Rust game session in
@@ -12,6 +21,8 @@ import type { WasmHost } from './wasm-host';
 // replica makes the events, frames and snapshots. A lost connection is retried with backoff; the
 // requests in flight fail (they may or may not have reached the world), new ones wait for the next
 // checkpoint, queries keep being answered from the last state. A refused login ends it.
+// The galaxy (protocol 3): `galaxy` requests go to the server's galaxy service; its pushed view goes
+// to the UI and fills the snapshots' hubs and players (server worlds have none of their own).
 // Platform-free: the worker entry (replica-worker.ts) passes the WebSocket, the module, `postMessage`.
 
 /** Requests answered by the replica (they do not change the game). */
@@ -72,16 +83,29 @@ export function createReplica(opts: ReplicaOptions): Replica {
   const inbox: string[] = []; // server messages that came before the module
   const waiting: RequestMessage[] = []; // UI requests until the next checkpoint
   const forwarded = new Set<number>();
+  const galaxyRequests = new Set<number>(); // forwarded to the galaxy service
+  let galaxy: GalaxyView | null = null;
   let resolveWelcome!: (w: Welcome) => void;
   let rejectWelcome!: (e: Error) => void;
   const welcome = new Promise<Welcome>((res, rej) => ((resolveWelcome = res), (rejectWelcome = rej)));
   welcome.catch(() => undefined);
 
-  const post = (messages: WorkerMessage[]) => messages.forEach(opts.post);
+  /** A snapshot (pushed, or a reply's value) shows the galaxy service's hubs and players. */
+  const withGalaxy = (m: WorkerMessage): WorkerMessage => {
+    if (!galaxy) return m;
+    const g = { hubs: galaxy.hubs, players: galaxy.players };
+    if (m.type === 'snapshot') return { ...m, snapshot: { ...m.snapshot, ...g } };
+    if (m.type === 'reply' && m.ok && m.value && typeof m.value === 'object' && 'hubs' in m.value && 'players' in m.value) {
+      return { ...m, value: { ...(m.value as GameSnapshot), ...g } };
+    }
+    return m;
+  };
+  const post = (messages: WorkerMessage[]) => messages.forEach((m) => opts.post(withGalaxy(m)));
   const fail = (id: number, error: string) => opts.post({ type: 'reply', id, ok: false, error });
   const failInFlight = (reason: string) => {
     for (const id of forwarded) fail(id, reason);
     forwarded.clear();
+    galaxyRequests.clear();
   };
 
   const failAll = (reason: string) => {
@@ -192,9 +216,17 @@ export function createReplica(opts: ReplicaOptions): Replica {
       case 'reply': {
         const m = JSON.parse(text) as Extract<WorkerMessage, { type: 'reply' }>;
         if (!forwarded.delete(m.id)) return;
-        opts.post(m);
-        // as the mock: a snapshot right after the reply to a change (its sync came before the reply)
-        if (m.ok && !awaitingReset) post(h.snapshot(now()));
+        const market = galaxyRequests.delete(m.id);
+        post([m]);
+        // as the mock: a snapshot right after the reply to a change (its sync came before the reply);
+        // the market's changes come as a galaxy view instead
+        if (m.ok && !awaitingReset && !market) post(h.snapshot(now()));
+        return;
+      }
+      case 'galaxy': {
+        galaxy = (JSON.parse(text) as { view: GalaxyView }).view;
+        opts.post({ type: 'galaxy', view: galaxy });
+        if (everReady && !awaitingReset) post(h.snapshot(now()));
         return;
       }
     }
@@ -206,6 +238,11 @@ export function createReplica(opts: ReplicaOptions): Replica {
       return;
     }
     forwarded.add(m.id);
+    if (m.request.kind === 'galaxy') {
+      galaxyRequests.add(m.id);
+      socket.send(JSON.stringify({ id: m.id, galaxy: m.request.op }));
+      return;
+    }
     socket.send(JSON.stringify(m));
   }
 

@@ -14,12 +14,18 @@ use std::time::Duration;
 
 use tokio::sync::{Mutex, mpsc, oneshot};
 
+use game_core::models::command::Command;
+use game_core::models::event::DomainEvent;
+use game_core::models::resource::Qty;
+use game_core::sim::systems::hub;
+use game_session::exchange::{DEFAULT_HOME_STAR, is_hub};
 use game_session::{
-    Checkpoint, GameSession, Host, HostOptions, Outgoing, RecordedCommand, RequestMessage, SessionOptions, SyncCursor, SyncMessage,
-    TempoChange,
+    Checkpoint, GameSession, Host, HostOptions, Outgoing, RecordedCommand, Reply, ReplyValue, Request, RequestMessage, SessionOptions,
+    SyncCursor, SyncMessage, TempoChange,
 };
 
 use crate::config::Config;
+use crate::galaxy::GalaxyMsg;
 use crate::repo::{LogEntry, Persister, RepoOp, StoredWorld, WorldRepository, combine};
 
 pub type ClientId = u64;
@@ -47,6 +53,13 @@ pub enum WorldMsg {
     Resync {
         client: ClientId,
     },
+    /// A shipment from a hub arrived (the galaxy service): `done` says whether the world took it.
+    Deliver {
+        shipment_id: String,
+        body_id: String,
+        cargo: Qty,
+        done: oneshot::Sender<bool>,
+    },
     /// Write the world now and stop (shutdown).
     Stop {
         done: oneshot::Sender<()>,
@@ -71,12 +84,14 @@ fn session_options(cfg: &Config) -> SessionOptions {
         clock: mono_ms,
         // production runs at ×1 (R-4); dev starts at ×60 as the mock
         start_tempo: if cfg.dev_mode { 60.0 } else { 1.0 },
+        // the galaxy service has the players and the hubs (R-7), not each world
+        galaxy: None,
         ..SessionOptions::default()
     }
 }
 
 fn new_host(cfg: &Config) -> Host {
-    Host::new(HostOptions { session: session_options(cfg), ..HostOptions::default() })
+    Host::new(HostOptions { session: session_options(cfg), trade: true, ..HostOptions::default() })
 }
 
 /// What the log adds after the snapshot: tempo changes, commands, and the last step they reach.
@@ -160,6 +175,7 @@ pub struct World {
     last_snapshot_ms: f64,
     last_hash_ms: f64,
     idle_since_ms: Option<f64>,
+    galaxy: Option<mpsc::UnboundedSender<GalaxyMsg>>,
 }
 
 impl World {
@@ -199,7 +215,9 @@ impl World {
             clients: HashMap::new(),
             last_snapshot_ms: mono_ms(),
             last_hash_ms: mono_ms(),
-            idle_since_ms: None,
+            // no client yet (a world woken for a delivery goes back to sleep on its own)
+            idle_since_ms: Some(mono_ms()),
+            galaxy: None,
         };
         if fresh || resized || !cfg.dev_mode {
             w.snapshot();
@@ -209,6 +227,50 @@ impl World {
 
     pub fn host(&self) -> &Host {
         &self.host
+    }
+
+    fn home_star(&self) -> String {
+        hub::home_star(self.host.session.world()).unwrap_or(DEFAULT_HOME_STAR).to_string()
+    }
+
+    /// Connects the world to the galaxy service, telling it where the colony is.
+    pub fn set_galaxy(&mut self, galaxy: mpsc::UnboundedSender<GalaxyMsg>) {
+        let _ = galaxy.send(GalaxyMsg::Home { account: self.id.clone(), star: self.home_star() });
+        self.galaxy = Some(galaxy);
+    }
+
+    /// A shipment from a hub: the `HUB_DELIVERY` command goes into the log once per shipment (a
+    /// shipment already in the log is taken again without a second command). False when it cannot
+    /// land (no such body): the galaxy gives the goods back to the hub.
+    pub fn deliver(&mut self, shipment_id: &str, body_id: &str, cargo: &Qty) -> bool {
+        let s = &mut self.host.session;
+        let taken = s.commands().iter().any(|c| matches!(&c.command, Command::HubDelivery { shipment_id: id, .. } if id == shipment_id));
+        if taken {
+            return true;
+        }
+        if !hub::can_deliver(s.world(), body_id, cargo) {
+            return false;
+        }
+        let cmd = Command::HubDelivery { shipment_id: shipment_id.to_string(), body_id: body_id.to_string(), cargo: cargo.clone() };
+        let ok = s.command(cmd).ok;
+        self.log_changes();
+        ok
+    }
+
+    /// Cargo sent to hubs by a command's events goes to the galaxy service.
+    fn report_departures(&self, reply: &Outgoing) {
+        let (Some(galaxy), Outgoing::Reply(Reply::Ok { value: ReplyValue::Command(result), .. })) = (&self.galaxy, reply) else { return };
+        for e in &result.events {
+            if let DomainEvent::ShipmentDeparted { shipment_id, body_id, hub_id, cargo } = e {
+                let _ = galaxy.send(GalaxyMsg::Departed {
+                    account: self.id.clone(),
+                    shipment_id: shipment_id.clone(),
+                    body_id: body_id.clone(),
+                    hub_id: hub_id.clone(),
+                    cargo: cargo.clone(),
+                });
+            }
+        }
     }
 
     fn snapshot(&mut self) {
@@ -225,8 +287,11 @@ impl World {
     fn log_changes(&mut self) {
         let s = &self.host.session;
         if s.generation() != self.logged_generation {
-            // the world was replaced (start, load, replay): a new baseline
+            // the world was replaced (start, load, replay): a new baseline, maybe at another star
             self.snapshot();
+            if let Some(g) = &self.galaxy {
+                let _ = g.send(GalaxyMsg::Home { account: self.id.clone(), star: self.home_star() });
+            }
             return;
         }
         for c in &s.commands()[self.logged_commands..] {
@@ -287,8 +352,19 @@ impl World {
                 return Outgoing::ok(msg.id, game_session::ReplyValue::Snapshot(Box::new(self.host.session.snapshot())));
             }
         }
+        if let Request::Command { command } = &msg.request {
+            if command.is_system() {
+                return Outgoing::err(msg.id, "rozkaz systemowy: wydaje go tylko serwer");
+            }
+            if let Command::ShipToHub { hub_id, .. } = command
+                && !is_hub(hub_id)
+            {
+                return Outgoing::err(msg.id, format!("nieznany hub {hub_id}"));
+            }
+        }
         let reply = self.host.answer(msg);
         self.log_changes();
+        self.report_departures(&reply);
         reply
     }
 
@@ -351,6 +427,13 @@ impl World {
                         println!("world {}: client {client} resyncs at step {}", self.id, self.host.session.step_index());
                         self.send_to(client, &SyncMessage::reset(&self.host.session));
                     }
+                    Some(WorldMsg::Deliver { shipment_id, body_id, cargo, done }) => {
+                        let taken = self.deliver(&shipment_id, &body_id, &cargo);
+                        if let Some(m) = self.sync() {
+                            self.send_all(&m);
+                        }
+                        let _ = done.send(taken);
+                    }
                     Some(WorldMsg::Stop { done }) => {
                         self.snapshot();
                         let _ = done.send(());
@@ -377,6 +460,7 @@ mod tests {
             idle_seconds: 300.0,
             offline_limit_hours: 12.0,
             max_requests_per_second: 20.0,
+            market: game_session::exchange::MarketConfig::default(),
         }
     }
 
@@ -488,5 +572,45 @@ mod tests {
         assert_eq!(s.tempos().len(), 2, "×60 from step 0 (same step: replaced), ×1 from step 480: {:?}", s.tempos());
         let capped = catch_up(&mut s, 100.0 * 3600.0, 12.0);
         assert_eq!(capped, 720);
+    }
+
+    /// The bridge to the galaxy: the world reports its star and its departures, takes a delivery
+    /// once (a repeated one is not logged again), refuses one that cannot land, and the replica
+    /// (with its own galaxy switched on) follows the server's world without one.
+    #[test]
+    fn trade_crosses_into_the_galaxy_and_back_once() {
+        let dir = tmp("trade");
+        let c = cfg(&dir, true);
+        let persister = Persister::spawn(FileRepository::new(&dir));
+        let mut w = World::open("acc-5", &c, &FileRepository::new(&dir), persister);
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        w.set_galaxy(tx);
+        assert!(matches!(rx.try_recv(), Ok(GalaxyMsg::Home { star, .. }) if star == "Tau Ceti"));
+        let mut replica = Host::new(HostOptions::default());
+        let feed =
+            |m: SyncMessage, r: &mut Host| r.apply_sync(SyncMessage::from_json(&serde_json::to_string(&m).unwrap()).unwrap()).unwrap();
+        w.request(&req(1, r#"{"kind":"start","scenarioId":"planeta-matka"}"#));
+        feed(SyncMessage::reset(&w.host().session), &mut replica);
+        while rx.try_recv().is_ok() {}
+
+        let world = w.host().session.world();
+        let body = world.structures.iter().find(|s| s.kind == "HQ" && s.is_working()).unwrap().body_id.clone();
+        let (mat, _) = world.storage_of(&body).into_iter().find(|(_, q)| *q >= 5.0).unwrap();
+        let ship =
+            format!(r#"{{"kind":"command","command":{{"type":"SHIP_TO_HUB","bodyId":"{body}","hubId":"hub-sol","cargo":{{"{mat}":5}}}}}}"#);
+        w.request(&req(2, &ship));
+        assert!(matches!(rx.try_recv(), Ok(GalaxyMsg::Departed { hub_id, cargo, .. }) if hub_id == "hub-sol" && cargo[&mat] == 5.0));
+
+        let cargo: Qty = [("FER".to_string(), 7.0)].into_iter().collect();
+        assert!(w.deliver("acc-5:freight-1", &body, &cargo));
+        assert!(w.deliver("acc-5:freight-1", &body, &cargo), "taken again: no second command");
+        assert!(!w.deliver("acc-5:freight-2", "nowhere", &cargo));
+        let logged = w.host().session.commands().iter().filter(|c| matches!(c.command, Command::HubDelivery { .. })).count();
+        assert_eq!(logged, 1);
+        feed(w.sync().unwrap(), &mut replica);
+        assert_eq!(world_of(&replica), world_of(w.host()));
+        assert_eq!(replica.session.state_hash(), w.host().session.state_hash());
+        assert!(replica.session.snapshot().players.is_empty(), "no galaxy of its own, as the server's world");
+        let _ = std::fs::remove_dir_all(dir);
     }
 }

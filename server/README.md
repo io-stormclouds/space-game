@@ -1,6 +1,6 @@
 # server — backend gry w Rust
 
-Workspace Cargo z portem domeny gry i narzędziami zgodności (plan `docs/plan/02-BACKEND-RUST.md`). Stan: **B0, B1 i B2 wykonane 2026-11-08** (port całej domeny z silnikiem Atanora i rejestrem gwiazd, złote powtórki, scenariusze `fabryka` i obciążenia S/M/L, pomiar kroku i WASM). **B3 wykonane 2026-11-09**: `GameApi` na WebAssembly w workerze klienta, przełącznik `mock-ts` / `wasm`, zgodność z mockiem. **B4 w toku**: `game-server` (konta, świat na gracza, WebSocket, harmonogram światów, zapis i odtworzenie z punktu kontrolnego i końcówki dziennika, limity) oraz tryb `remote`, w którym klient trzyma kopię świata w WASM i dostaje od serwera tylko rozkazy, kroki i skrót stanu (R-18). Szczegóły i braki: sekcje B3 i B4 niżej.
+Workspace Cargo z portem domeny gry i narzędziami zgodności (plan `docs/plan/02-BACKEND-RUST.md`). Stan: **B0, B1 i B2 wykonane 2026-11-08** (port całej domeny z silnikiem Atanora i rejestrem gwiazd, złote powtórki, scenariusze `fabryka` i obciążenia S/M/L, pomiar kroku i WASM). **B3 wykonane 2026-11-09**: `GameApi` na WebAssembly w workerze klienta, przełącznik `mock-ts` / `wasm`, zgodność z mockiem. **B4 w toku**: `game-server` (konta, świat na gracza, WebSocket, harmonogram światów, zapis i odtworzenie z punktu kontrolnego i końcówki dziennika, limity) oraz tryb `remote`, w którym klient trzyma kopię świata w WASM i dostaje od serwera tylko rozkazy, kroki i skrót stanu (R-18). **B6 w toku**: usługa galaktyki (huby z księgą zleceń, kredyty, przesyłki między kolonią a hubem, frakcje NPC z wyłącznikiem, R-7); brama „dwóch graczy handluje przez hub” przechodzi w teście WebSocket, brak jeszcze ekranu hubu w kliencie. Szczegóły i braki: sekcje B3, B4 i B6 niżej.
 
 ```bash
 cargo test --workspace                 # testy jednostkowe + zgodność z TS (wektory, powtórki)
@@ -26,9 +26,9 @@ W `web-game/`: `npm run wasm:build` (moduł do `apps/game/public/wasm/`), `npm r
 | `crates/game-core/src/sim/scenarios/{factory,load}.rs` | światy `fabryka` i `load-s/m/l` z generatorem Mulberry32; w TS leżą obok mocka, serwer Rust musi je startować sam (R-11) | `mock-server/src/{factory,load,rng}.ts` |
 | `crates/game-core/data/catalog.json` | katalog ekonomii wyeksportowany z `catalog-data.ts` (`npm run conformance:catalog` w `web-game/`). Liczby zmienia się w TS i eksportuje ponownie | `economy/catalog-data.ts` |
 | `crates/game-core/data/stars.json` | 41 gwiazd PoC galaktyki (`npm run conformance:stars`) | `galaxy/stars.data.ts` |
-| `crates/game-session` | gra jednego gracza za kontraktem `GameApi`. `GameSession`: stały krok, tempa, dziennik rozkazów, zapis, wczytanie, powtórka i zapytania UI (katalog, dostępność, duch budowy, karta i sugestia pola, tabele ekonomii, przepływy). `GalaxySim`: symulowani gracze i rynek. `Host`: protokół wiadomości (żądanie → odpowiedź i pushe snapshot / events / frame). `sync`: punkt kontrolny (`Checkpoint`), dalszy bieg według cudzych zmian (`follow`), skrót stanu, komunikaty kopii i `SyncCursor` serwera (R-18). Bez I/O i bez zegara | `mock-server` (`server.ts`, `host.ts`, `galaxy-sim.ts`), `api` (`contract.ts`, `protocol.ts`); `sync` nowe |
+| `crates/game-session` | gra jednego gracza za kontraktem `GameApi`. `GameSession`: stały krok, tempa, dziennik rozkazów, zapis, wczytanie, powtórka i zapytania UI (katalog, dostępność, duch budowy, karta i sugestia pola, tabele ekonomii, przepływy). `GalaxySim`: symulowani gracze i rynek. `Host`: protokół wiadomości (żądanie → odpowiedź i pushe snapshot / events / frame). `sync`: punkt kontrolny (`Checkpoint`), dalszy bieg według cudzych zmian (`follow`), skrót stanu, komunikaty kopii i `SyncCursor` serwera (R-18). `exchange`: wspólny rynek galaktyki (B6, R-20, R-22): księgi zleceń w hubach, kredyty i towary kont, przesyłki, frakcje NPC. Bez I/O i bez zegara | `mock-server` (`server.ts`, `host.ts`, `galaxy-sim.ts`), `api` (`contract.ts`, `protocol.ts`, `galaxy.ts`); `sync` i `exchange` nowe |
 | `crates/game-wasm` | `game-session` dla przeglądarki: zwykłe ABI C (`sg_input`, `sg_handle`, `sg_tick`, `sg_snapshot`, `sg_sync`, `sg_view`, `sg_output_ptr`) z wiadomościami JSON w pamięci liniowej, importy `env.sg_now` i `env.sg_panic`. Bez `wasm-bindgen` i bez generatora kleju (R-13) | `mock-server/src/worker.ts`; loader, worker i kopia świata w `web-game/packages/wasm-host` |
-| `crates/game-server` | serwer sieciowy (B4): Axum + Tokio, WebSocket `/ws`, `/health`, konta (argon2id), świat na konto, harmonogram (aktywny / uśpiony / nadrabianie), zapis punktu kontrolnego i dziennika przez wątek I/O, odtworzenie z punktu kontrolnego i końcówki dziennika, komunikaty dla kopii klientów, limit żądań | `mock-server` + nowe |
+| `crates/game-server` | serwer sieciowy (B4): Axum + Tokio, WebSocket `/ws`, `/health`, konta (argon2id), świat na konto, harmonogram (aktywny / uśpiony / nadrabianie), zapis punktu kontrolnego i dziennika przez wątek I/O, odtworzenie z punktu kontrolnego i końcówki dziennika, komunikaty dla kopii klientów, limit żądań; usługa galaktyki (`galaxy.rs`, B6): rynek na zegarze serwera, most do światów, `galaxy.json` | `mock-server` + nowe |
 | `conformance` | biblioteka i narzędzie: powtórka `SaveFile` z mocka i porównanie świata, zdarzeń i odrzuceń; sprawdzenie wektorów liczbowych; `bench` | `tools/conformance/*.ts` nagrywa wzorce |
 | `conformance/vectors`, `conformance/replays` | nagrane wzorce (rewizja w `expected.json` → `source.revision`) | — |
 
@@ -80,7 +80,7 @@ Bezpośredni port liczył krok L w 2,7 ms; tabela specyfikacji budynków w `Rule
 ## B4: serwer sieciowy (MVP 2026-11-09, protokół kopii tego samego dnia)
 
 Zrobione:
-- **Połączenie:** WebSocket `/ws`, ramki tekstowe JSON (R-3). Pierwsza ramka to `{"type":"hello","protocolVersion":2,"callsign","password","register"?}`, a odpowiedź to `welcome` (konto, świat, `devMode`, `stepSeconds`, czas serwera) albo `error` i zamknięcie.
+- **Połączenie:** WebSocket `/ws`, ramki tekstowe JSON (R-3). Pierwsza ramka to `{"type":"hello","protocolVersion":3,"callsign","password","register"?}` (wersja 3 od B6; klient wersji 2 dostaje `error`), a odpowiedź to `welcome` (konto, świat, `devMode`, `stepSeconds`, czas serwera) albo `error` i zamknięcie.
 - **Kopia świata u klienta (R-18):**
   - Zaraz po `welcome` serwer wysyła `reset`: punkt kontrolny świata, czyli zapis plus stan kroków spoza świata.
   - Potem wysyła tylko zmiany. `sync` zawiera rozkazy i zmiany tempa przypięte do kroków oraz krok, do którego doszedł świat; w `DEV_MODE` przychodzi co tick (16 ms), w produkcji co krok (1 s). Co 5 s przychodzi `hash`, czyli FNV-1a stanu.
@@ -140,9 +140,56 @@ Brakuje względem planu 02 §11 B4 (następne kroki):
 - Toolchain `gnu` bez MinGW nie ma `dlltool`, a wymagają go crate'y z `windows-link` (`raw-dylib`). Dlatego `Cargo.lock` przypina wersje oparte na `windows-sys 0.59` / `windows-targets`: `tokio 1.47.1`, `mio 1.0.4`, `socket2 0.6.0`, `getrandom 0.2.15` i `0.3.1`.
 - Na Linuksie i w kontenerze te przypięcia nie są potrzebne.
 
+## B6: usługa galaktyki (w toku od 2026-11-09)
+
+Plan 02 §11 B6 i 05-SOCIAL S0–S1. Brama „dwóch graczy handluje przez hub” przechodzi w teście WebSocket (`tests/ws.rs::two_players_trade_through_a_hub`).
+
+Zrobione:
+- **Rynek (`game-session::exchange`, R-22):** czysty, deterministyczny moduł; czas jest argumentem.
+  - 4 huby: Syriusz, Słońce, Procyon, Epsilon Eridani. Każdy ma księgę zleceń na każdy materiał katalogu.
+  - Zlecenia kupna i sprzedaży z limitem. Kupno wiąże kredyty z prowizją, sprzedaż wiąże towar w hubie.
+  - Dopasowanie: lepsza cena, potem starsze zlecenie; gracz przed frakcją przy równej cenie; po cenie strony czekającej. Częściowe realizacje, bez handlu z samym sobą.
+  - Prowizja 2% od każdej strony. Zlecenia wygasają po 7 dniach, najwyżej 50 na konto.
+  - Konto ma kredyty (start 1000 kr) i towary w każdym hubie.
+- **Frakcje NPC (R-7):** gospodarze hubów, czyli Konsorcjum Orion, Unia Lagrange, Kolektyw Hel-3 i Spółka Kriogen.
+  - Działają na `GalaxySim` z mocka. Kupują po 0,8·P, sprzedają po 1,25·P, najwyżej `NPC_DEPTH` sztuk na materiał między aktualizacjami. Ich transakcje przesuwają P.
+  - Ich dowódcy są na liście graczy z `npc: true`.
+  - `NPC_FACTIONS=off` je wyłącza: w hubach zostają tylko zlecenia graczy. Wyłączenie zachowuje kredyty, towary i zlecenia graczy.
+- **Przesyłki:**
+  - `SHIP_TO_HUB` to rozkaz w świecie gracza. Wymaga działającego portu; towar od razu schodzi z magazynu.
+  - Świat zgłasza wysyłkę usłudze. Po czasie `0,5 h + 2 h/ly` (w `DEV_MODE` sekundy) towar jest na koncie w hubie.
+  - Żądanie galaktyki `shipHome` wysyła towar z hubu do kolonii. Po przylocie usługa wpisuje do świata rozkaz systemowy `HUB_DELIVERY`; budzi przy tym świat, jeśli śpi.
+  - Świat przyjmuje przesyłkę raz, bo sprawdza swój dziennik. Dostawę, która nie może wylądować, usługa zwraca do hubu.
+  - `HUB_DELIVERY` od klienta jest odrzucane.
+  - Oba rozkazy są w dzienniku z krokiem, więc powtórka, odtworzenie i kopia klienta zostają dokładne (R-21).
+- **Usługa (`game-server/src/galaxy.rs`, R-20):**
+  - Jedno zadanie Tokio na zegarze serwera; tick co 250 ms w dev, co 1 s w produkcji.
+  - Żądania `{id, galaxy: {op: view | placeOrder | cancelOrder | shipHome}}` dostają `reply`. Po każdej zmianie każdy podłączony klient dostaje `{type: "galaxy", view}` swojego konta: kredyty, huby z notowaniami, księgą i odległością, zlecenia, przesyłki, transakcje, inni gracze.
+  - Stan trafia do `DATA_DIR/galaxy.json` atomowo, najwyżej co 1 s i przy zamknięciu. Plik, którego nie da się odczytać, jest odkładany na bok.
+- **Światy na serwerze nie mają własnej galaktyki** (`SessionOptions::galaxy = None`). Zapis ma `meta.galaxy: null`, więc kopia klienta też jej nie ma.
+  - Huby i graczy w migawce wkleja kopia z widoku usługi (`replica.ts`).
+  - Mock i WASM offline odpowiadają na handel `NO_TRADE`.
+- **Protokół 3:** `REMOTE_PROTOCOL_VERSION` w `packages/api`. `GameApi` ma `galaxy(op)` i `onGalaxy(listener)`, a typy są w `packages/api/src/galaxy.ts`.
+- **Testy:**
+  - `exchange::tests`: handel wewnątrz widełek frakcji, głębokość i ruch ceny, pieniądze, towary i zakaz handlu z sobą, rynek bez frakcji i wygasanie, przesyłki w obie strony, stan po JSON i wyłączenie frakcji;
+  - `hub::tests` w `game-core`;
+  - `world::tests::trade_crosses_into_the_galaxy_and_back_once`;
+  - w `tests/ws.rs` przez prawdziwy WebSocket: dwóch graczy (przesyłka, oferta, kupno, prowizje, dostawa do kolonii, rynek po restarcie), frakcje wyłączone, odmowa protokołu 2;
+  - `replica.spec.ts`: widok galaktyki w migawkach i żądanie rynku.
+  - e2e `remote`, pełny zestaw, Chrome, 2 workery: **17 z 17** (1,9 min). Widok galaktyki w kliencie pokazuje huby i graczy z usługi.
+- Moduł WASM: 1357 kB (359 kB gzip).
+
+Zmienne: `NPC_FACTIONS` (on), `NPC_SEED`, `NPC_PLAYERS` (6), `NPC_UPDATE_SECONDS` (600; dev 10), `NPC_DEPTH` (50), `HUB_FEE` (0,02), `START_CREDITS` (1000), `ORDER_HOURS` (168), `SHIPPING_SECONDS_PER_LY` (7200; dev 2), `SHIPPING_HANDLING_SECONDS` (1800; dev 2).
+
+Brakuje względem B6 i 05-SOCIAL (następne kroki):
+- Ekran hubu w kliencie: księga, moje zlecenia, przesyłki, wysyłka z kolonii; `GameApi.galaxy` już jest. Test e2e na `remote`.
+- Kontrakty NPC, reputacja i cła frakcji (S1), korporacje (S2), czat, rankingi.
+- PostgreSQL dla rynku (transakcje SQL jak w planie §8) razem z adapterem światów.
+- Zgłoszenie wysyłki po awarii: jeśli serwer padnie między rozkazem `SHIP_TO_HUB` a zapisem `galaxy.json` (≤ 1 s), przesyłka przepada. Do usunięcia przez dziennik wysyłek albo przez transakcję w PostgreSQL.
+
 ## Czego port nie zawiera
 
-- `galaxy-sim.ts` i `MockServer` nie są częścią `game-core`; mieszkają w `game-session` (B3). Czy NPC mają działać na serwerze produkcyjnym, rozstrzyga wciąż otwarte pytanie R-7.
+- `galaxy-sim.ts` i `MockServer` nie są częścią `game-core`; mieszkają w `game-session` (B3). Na serwerze `GalaxySim` napędza frakcje NPC usługi galaktyki (R-7), a nie pojedyncze światy.
 - Edytor maszyny po stronie klienta (`atanor/editor/solution-edit.ts`) poza dwoma sprawdzeniami, które serwer powtarza przy wdrożeniu (`programIssues`, `solutionKey`).
 
 Po każdej zmianie domeny TS: `npm run conformance:catalog`, `conformance:stars`, `conformance:vectors`, `conformance:replays` (z zacommitowanej rewizji, zob. `web-game/tools/conformance/README.md`), potem `cargo test --workspace`.
