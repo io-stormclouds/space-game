@@ -185,7 +185,7 @@ Zrobione:
   - moje zlecenia z anulowaniem, przesyłki z odliczaniem, ostatnie transakcje.
   - Bez serwera panel mówi, że handel działa tylko w grze na serwerze.
   - e2e `hub.spec.ts` na `remote` (25 s): wysyłka do Epsilon Eridani, sprzedaż frakcji po jej cenie kupna, odkupienie, sprowadzenie do kolonii (zapas wraca dokładnie), zlecenie w księdze i anulowanie.
-  - Pełny zestaw `remote` z hubem (2 workery): 17 z 18. Padł test pliku projektu Atanora (AT6): klikał fabrykę, zanim kamera doleciała do planety. Ten sam test był niestabilny na mocku przy 4 workerach. Poprawiony (czeka na kafle do 10 s); potem 4 z 4 powtórzeń.
+  - Pełny zestaw `remote` z hubem (2 workery): 17 z 18. Padł test pliku projektu Atanora (AT6): klikał fabrykę, zanim kamera doleciała do planety. Ten sam test był niestabilny na mocku przy 4 workerach. Poprawiony (czeka na kafle do 10 s); potem 4 z 4 powtórzeń, a pełny zestaw `remote` **18 z 18** (2,7 min).
 - Moduł WASM: 1357 kB (359 kB gzip).
 
 Zmienne: `NPC_FACTIONS` (on), `NPC_SEED`, `NPC_PLAYERS` (6), `NPC_UPDATE_SECONDS` (600; dev 10), `NPC_DEPTH` (50), `HUB_FEE` (0,02), `START_CREDITS` (1000), `ORDER_HOURS` (168), `SHIPPING_SECONDS_PER_LY` (7200; dev 2), `SHIPPING_HANDLING_SECONDS` (1800; dev 2).
