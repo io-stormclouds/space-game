@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
+import { CALLSIGN_KEY } from '../game/game-api';
 import { HudFrame, RtsButton } from '@space-game/ui';
 import { GameService } from '../game/game.service';
 import { TEXT } from '../i18n/pl';
@@ -82,6 +83,15 @@ export class LoginPage {
   protected async submit(): Promise<void> {
     if (this.busy()) return;
     this.busy.set(true);
+    // the callsign logs in on the game server (remote mode); the other modes ignore it
+    const id = this.id().trim();
+    if (id) {
+      try {
+        localStorage.setItem(CALLSIGN_KEY, id);
+      } catch {
+        /* private mode: a guest callsign */
+      }
+    }
     await this.game.start('tau-ceti');
     await this.router.navigateByUrl('/gra');
   }

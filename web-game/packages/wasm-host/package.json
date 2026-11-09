@@ -1,0 +1,14 @@
+{
+  "name": "@space-game/wasm-host",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "GameApi on WebAssembly (plan 02 B3): the Rust game session (server/crates/game-wasm) in a Web Worker, speaking the mock server's message protocol.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./worker": "./src/worker.ts"
+  },
+  "dependencies": {
+    "@space-game/api": "*"
+  }
+}

@@ -1,0 +1,15 @@
+# game-server (plan 02 §9, single-box). Build from the repository root:
+#   docker build -f deploy/Dockerfile.server -t space-game/server .
+# NOT RUN YET on the development machine (Docker Desktop off, 2026-11-09).
+FROM rust:1.96-bookworm AS build
+WORKDIR /src
+COPY server/ ./server/
+WORKDIR /src/server
+RUN cargo build --release -p game-server
+
+FROM gcr.io/distroless/cc-debian12
+COPY --from=build /src/server/target/release/game-server /game-server
+ENV ADDR=0.0.0.0:8080 DATA_DIR=/data
+VOLUME /data
+EXPOSE 8080
+ENTRYPOINT ["/game-server"]

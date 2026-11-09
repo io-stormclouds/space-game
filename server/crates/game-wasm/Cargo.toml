@@ -4,12 +4,11 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 publish.workspace = true
-description = "WebAssembly build of game-core for the client worker (local preview, offline mode, designer panel)."
+description = "WebAssembly build of the game session for the client worker (GameApi on WASM, plan 02 B3): a plain C ABI with JSON messages, no JS glue generator."
 
 [lib]
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-game-core = { path = "../game-core" }
+game-session = { path = "../game-session" }
 serde_json = { workspace = true }
-wasm-bindgen = "0.2"

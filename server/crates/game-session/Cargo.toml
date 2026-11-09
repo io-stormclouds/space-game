@@ -1,0 +1,20 @@
+[package]
+name = "game-session"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+description = "One player's game behind the GameApi contract: fixed-step clock, command log, save/load/replay, queries for the UI, simulated players and market. Port of web-game/packages/mock-server; used by game-wasm (client worker) and game-server."
+
+[lib]
+crate-type = ["rlib"]
+
+[dependencies]
+game-core = { path = "../game-core" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+indexmap = { workspace = true }
+libm = { workspace = true }
+
+[lints.rust]
+unsafe_code = "forbid"

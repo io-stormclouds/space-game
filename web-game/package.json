@@ -15,7 +15,9 @@
     "test": "npm run test:unit && npm run test:app",
     "test:unit": "vitest run",
     "test:app": "ng test --watch=false",
-    "e2e": "playwright test",
+    "e2e": "playwright test --project=chromium",
+    "e2e:wasm": "npm run wasm:build && playwright test --project=chromium-wasm",
+    "e2e:remote": "node tools/conformance/e2e-remote.mjs",
     "check": "npm run typecheck && npm run test && npm run build && npm run e2e",
     "perf": "ng build && node tools/perf/run.mjs",
     "econ:docs": "npm run docs -w @space-game/economy-model",
@@ -24,7 +26,8 @@
     "conformance:catalog": "tsx tools/conformance/export-catalog.ts",
     "conformance:stars": "tsx tools/conformance/export-stars.ts",
     "conformance:vectors": "tsx tools/conformance/record-vectors.ts",
-    "conformance:replays": "tsx tools/conformance/record-replays.ts"
+    "conformance:replays": "tsx tools/conformance/record-replays.ts",
+    "wasm:build": "node tools/conformance/build-wasm.mjs"
   },
   "dependencies": {
     "@angular/common": "^22.0.0",

@@ -1,0 +1,17 @@
+# The client and the game server on one origin: in remote mode (?api=remote, remembered in
+# localStorage) a client on a standard port connects to wss://<host>/ws by itself.
+{$SITE_ADDRESS}
+
+handle /ws {
+	reverse_proxy game-server:8080
+}
+
+handle /health {
+	reverse_proxy game-server:8080
+}
+
+handle {
+	root * /srv
+	try_files {path} /index.html
+	file_server
+}

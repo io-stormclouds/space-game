@@ -21,6 +21,8 @@
       "@space-game/render": ["./packages/render/src/index.ts"],
       "@space-game/mock-server": ["./packages/mock-server/src/index.ts"],
       "@space-game/mock-server/worker": ["./packages/mock-server/src/worker.ts"],
+      "@space-game/wasm-host": ["./packages/wasm-host/src/index.ts"],
+      "@space-game/wasm-host/worker": ["./packages/wasm-host/src/worker.ts"],
       "@space-game/hud-design-system/core": ["./node_modules/@space-game/hud-design-system/src/core/index.ts"]
     }
   },
