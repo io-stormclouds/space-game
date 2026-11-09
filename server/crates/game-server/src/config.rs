@@ -20,6 +20,9 @@ pub struct Config {
     pub idle_seconds: f64,
     /// `OFFLINE_LIMIT_HOURS`: most model time a sleeping world catches up on wake-up (R-5, default 12).
     pub offline_limit_hours: f64,
+    /// `MAX_REQUESTS_PER_SECOND`: requests one connection may send per second on average (plan 02 §6:
+    /// ≤ 20 commands/s; queries run on the client's replica). Bursts up to twice that pass.
+    pub max_requests_per_second: f64,
 }
 
 impl Config {
@@ -35,10 +38,11 @@ impl Config {
             snapshot_seconds: num("SNAPSHOT_SECONDS", 60.0),
             idle_seconds: num("IDLE_SECONDS", 300.0),
             offline_limit_hours: num("OFFLINE_LIMIT_HOURS", 12.0),
+            max_requests_per_second: num("MAX_REQUESTS_PER_SECOND", 20.0),
         }
     }
 
-    /// Loop tick of a running world [ms]: frames for the client at ~60 Hz in dev, ~10 Hz in production.
+    /// Loop tick of a running world [ms]: at least one per step (dev: 1/60 s steps), 10 Hz otherwise.
     pub fn tick_ms(&self) -> u64 {
         if self.dev_mode { 16 } else { 100 }
     }

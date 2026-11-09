@@ -3,12 +3,12 @@
 // runs here instead of the TypeScript mock and speaks the same protocol. Requests that arrive while
 // the module loads wait in a queue; if it fails to load, every request gets an error reply.
 import type { RequestMessage, WorkerMessage } from '@space-game/api';
-import { createWasmHost, type WasmHost } from './wasm-host';
+import { fetchWasmHost } from './load';
+import type { WasmHost } from './wasm-host';
 
 declare const self: DedicatedWorkerGlobalScope;
 
-/** Where `npm run wasm:build` puts the module (apps/game/public/wasm), next to the worker script. */
-export const WASM_PATH = 'wasm/game_wasm.wasm';
+export { WASM_PATH } from './load';
 const TICK_MS = 16;
 
 const post = (messages: WorkerMessage[]) => messages.forEach((m) => self.postMessage(m));
@@ -26,10 +26,7 @@ self.addEventListener('message', (e: MessageEvent<RequestMessage>) => {
 
 async function boot(): Promise<void> {
   try {
-    const url = new URL(WASM_PATH, self.location.href);
-    const response = await fetch(url);
-    if (!response.ok) throw new Error(`${url.pathname}: HTTP ${response.status} (npm run wasm:build)`);
-    const h = await createWasmHost(await response.arrayBuffer());
+    const h = await fetchWasmHost(self.location.href);
     host = h;
     post(h.snapshot(Date.now()));
     for (const m of queue.splice(0)) post(h.handle(m, Date.now()));

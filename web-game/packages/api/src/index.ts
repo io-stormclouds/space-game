@@ -3,7 +3,7 @@
 export * from './contract';
 export * from './protocol';
 export { createWorkerGameApi } from './worker-client';
-export { createRemoteWorker, REMOTE_PROTOCOL_VERSION, type RemoteCredentials, type RemoteWorker, type SocketLike, type Welcome } from './remote-client';
+export { connectOnFirstRequest, REMOTE_PROTOCOL_VERSION, type ConnectMessage, type RemoteCredentials, type Welcome } from './remote';
 
 export type {
   BodyId,

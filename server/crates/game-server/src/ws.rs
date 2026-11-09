@@ -1,4 +1,5 @@
-//! WebSocket gateway: hello (login) → welcome → requests and pushes of the player's world.
+//! WebSocket gateway: hello (login) → welcome → the world's checkpoint, then requests in, replies
+//! and sync messages out; `{"type":"resync"}` asks for a new checkpoint. Requests are rate-limited.
 
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
@@ -11,11 +12,36 @@ use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use tokio::sync::{mpsc, oneshot};
 
-use crate::world::{WorldMsg, wall_ms};
+use crate::world::{Wire, WorldMsg, wall_ms};
 use crate::{AppState, PROTOCOL_VERSION};
 
 /// Most bytes of one client frame (plan 02 §6: ≤ 1 MB; a save file for `load` fits).
 const MAX_FRAME: usize = 4 << 20;
+
+/// Token bucket of one connection: `rate` per second, bursts up to twice that.
+struct Bucket {
+    rate: f64,
+    tokens: f64,
+    last: std::time::Instant,
+}
+
+impl Bucket {
+    fn new(rate: f64) -> Bucket {
+        Bucket { rate, tokens: 2.0 * rate, last: std::time::Instant::now() }
+    }
+
+    fn take(&mut self, cost: f64) -> bool {
+        let now = std::time::Instant::now();
+        self.tokens = (self.tokens + now.duration_since(self.last).as_secs_f64() * self.rate).min(2.0 * self.rate);
+        self.last = now;
+        if self.tokens >= cost {
+            self.tokens -= cost;
+            true
+        } else {
+            false
+        }
+    }
+}
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -76,7 +102,8 @@ async fn session(mut socket: WebSocket, state: Arc<AppState>) {
     // 2. the player's world (one per account, Model C)
     let world_id = account.id.clone();
     let client = state.next_client.fetch_add(1, Ordering::Relaxed);
-    let (tx, mut rx) = mpsc::unbounded_channel();
+    let (tx, mut rx) = mpsc::unbounded_channel::<Wire>();
+    let own_tx = tx.clone();
     let mut world = state.world(&world_id).await;
     let welcome = Welcome {
         kind: "welcome",
@@ -106,17 +133,41 @@ async fn session(mut socket: WebSocket, state: Arc<AppState>) {
 
     // 3. requests in, messages out
     let (mut sink, mut stream) = socket.split();
-    let writer = tokio::spawn(async move {
+    let mut writer = tokio::spawn(async move {
         while let Some(json) = rx.recv().await {
             if sink.send(Message::Text(Utf8Bytes::from(json.as_ref()))).await.is_err() {
                 break;
             }
         }
     });
-    while let Some(Ok(msg)) = stream.next().await {
+    let mut bucket = Bucket::new(state.cfg.max_requests_per_second);
+    loop {
+        let msg = tokio::select! {
+            // the world's task ended (stopped, or a panic in it): close, the client reconnects to a restored world
+            _ = world.closed() => {
+                println!("{}: world {world_id} ended, closing (client {client})", account.callsign);
+                break;
+            }
+            _ = &mut writer => break,
+            msg = stream.next() => match msg {
+                Some(Ok(m)) => m,
+                _ => break,
+            },
+        };
         match msg {
             Message::Text(t) => {
-                if world.send(WorldMsg::Request { client, json: t.to_string() }).await.is_err() {
+                let parsed: Option<serde_json::Value> = serde_json::from_str(t.as_str()).ok();
+                let resync = parsed.as_ref().is_some_and(|v| v.get("type").and_then(|k| k.as_str()) == Some("resync"));
+                // a resync costs a whole checkpoint: it counts as ten requests
+                if !bucket.take(if resync { 10.0 } else { 1.0 }) {
+                    if let Some(id) = parsed.as_ref().and_then(|v| v.get("id")?.as_u64()) {
+                        let reply = game_session::Outgoing::err(id, "za dużo żądań na sekundę: zwolnij");
+                        let _ = own_tx.send(serde_json::to_string(&reply).expect("reply serialises").into());
+                    }
+                    continue;
+                }
+                let m = if resync { WorldMsg::Resync { client } } else { WorldMsg::Request { client, json: t.to_string() } };
+                if world.send(m).await.is_err() {
                     break;
                 }
             }

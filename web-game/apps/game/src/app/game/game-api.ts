@@ -1,12 +1,13 @@
 import { InjectionToken } from '@angular/core';
-import { createRemoteWorker, createWorkerGameApi, type GameApi, type RemoteCredentials, type WorkerLike } from '@space-game/api';
+import { connectOnFirstRequest, createWorkerGameApi, type GameApi, type RemoteCredentials, type WorkerLike } from '@space-game/api';
 
 /**
  * Which implementation of GameApi the app runs (plan 02 B3/B4):
  * - `mock-ts`: the TypeScript mock server in a worker (default),
  * - `wasm`: the Rust game session compiled to WebAssembly in a worker (`npm run wasm:build`),
- * - `remote`: the game server (`server/crates/game-server`) over a WebSocket; address from
- *   `?server=ws://…/ws` or localStorage `sg.server` (default: port 8080 of this host).
+ * - `remote`: the game server (`server/crates/game-server`); a worker keeps a replica of the world in
+ *   WebAssembly (needs `npm run wasm:build` too) and follows the server over a WebSocket; address
+ *   from `?server=ws://…/ws` or localStorage `sg.server` (default: port 8080 of this host).
  * Chosen with `?api=…` in the address (remembered) or localStorage `sg.api`.
  */
 export type ApiMode = 'mock-ts' | 'wasm' | 'remote';
@@ -69,7 +70,10 @@ export const GAME_API = new InjectionToken<() => GameApi>('GAME_API', {
   providedIn: 'root',
   factory: () => () => {
     const mode = apiMode();
-    if (mode === 'remote') return createWorkerGameApi(createRemoteWorker(() => new WebSocket(serverUrl()), remoteCredentials));
+    if (mode === 'remote') {
+      const replica = new Worker(new URL('./game-replica.worker', import.meta.url), { type: 'module', name: 'game-replica' });
+      return createWorkerGameApi(connectOnFirstRequest(replica, () => ({ type: 'connect', url: serverUrl(), credentials: remoteCredentials() })));
+    }
     const worker =
       mode === 'wasm'
         ? new Worker(new URL('./game-wasm.worker', import.meta.url), { type: 'module', name: 'game-wasm' })

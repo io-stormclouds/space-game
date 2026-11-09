@@ -1,7 +1,8 @@
-//! Persistence of worlds (plan 02 §3.2 `WorldRepository`, §7): a snapshot (the whole `SaveFile`:
-//! world, tempo schedule, every command since the start) plus a log of what happened after it.
-//! Restoring a world replays the scenario with the snapshot's commands and the log (the same code as
-//! the golden replays), so a restored world *is* the replay of its command log.
+//! Persistence of worlds (plan 02 §3.2 `WorldRepository`, §7): a snapshot (a checkpoint: the whole
+//! `SaveFile` — world, tempo schedule, every command since the start — plus the step state) and a
+//! log of what happened after it. Restoring a world continues the checkpoint with the log tail; the
+//! result equals the replay of the whole command log from the scenario's start (tested), which stays
+//! the fallback.
 //!
 //! Adapter for one node: files under `DATA_DIR/worlds/<world>/` (`world.json`, `log.jsonl`), written
 //! by one I/O thread fed through a channel, so a world's loop never waits for the disk (rule from
@@ -15,6 +16,7 @@ use std::sync::mpsc;
 use serde::{Deserialize, Serialize};
 
 use game_core::models::command::Command;
+use game_core::sim::simulation::SimState;
 use game_session::{SaveFile, TempoChange};
 
 use crate::accounts::write_atomic;
@@ -26,6 +28,10 @@ pub struct StoredWorld {
     /// Wall clock of the snapshot [Unix ms]; a sleeping world catches up from here.
     pub saved_at_ms: f64,
     pub save: SaveFile,
+    /// Step state outside the world (`Checkpoint`): with it the snapshot continues exactly and only
+    /// the log tail is replayed. Missing in snapshots written before it existed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sim: Option<SimState>,
 }
 
 /// One line of `log.jsonl`: what changed after the snapshot.

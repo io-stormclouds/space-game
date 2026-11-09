@@ -14,8 +14,10 @@ pub mod contract;
 pub mod galaxy;
 pub mod host;
 pub mod session;
+pub mod sync;
 
 pub use contract::*;
 pub use galaxy::*;
 pub use host::*;
 pub use session::*;
+pub use sync::*;

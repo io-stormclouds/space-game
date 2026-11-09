@@ -29,6 +29,15 @@ impl ExtractionSystem {
         ExtractionSystem::default()
     }
 
+    /// Model minutes accumulated towards the next extraction tick.
+    pub fn accumulator(&self) -> f64 {
+        self.accumulator
+    }
+
+    pub fn set_accumulator(&mut self, minutes: f64) {
+        self.accumulator = minutes;
+    }
+
     pub fn update(&mut self, world: &WorldState, rules: &Rules, grids: &Grids, dt: f64) -> Vec<DomainEvent> {
         self.accumulator += dt;
         let ticks = (self.accumulator + 1e-9).floor();

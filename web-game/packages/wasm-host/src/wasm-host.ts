@@ -12,7 +12,12 @@ interface Exports {
   sg_handle(len: number, nowMs: number): number;
   sg_tick(nowMs: number): number;
   sg_snapshot(nowMs: number): number;
+  sg_sync(len: number): number;
+  sg_view(nowMs: number): number;
 }
+
+/** Result of a sync message applied to the replica: its pushes, or why it can no longer follow. */
+export type SyncResult = { ok: true; out: WorkerMessage[] } | { ok: false; error: string };
 
 /** The ServerHost of the mock, implemented in Rust: same requests, same messages. */
 export interface WasmHost {
@@ -22,6 +27,10 @@ export interface WasmHost {
   tick(nowMs: number): WorkerMessage[];
   /** A snapshot push now. */
   snapshot(nowMs: number): WorkerMessage[];
+  /** Replica of a server world: applies a sync message (JSON text: reset, sync, hash). */
+  sync(json: string): SyncResult;
+  /** Replica loop tick: the frame after a step, the snapshot when something changed (≤ 10 Hz). */
+  view(nowMs: number): WorkerMessage[];
   /** Crate version of the module (major × 10000 + minor × 100 + patch). */
   readonly version: number;
 }
@@ -54,7 +63,13 @@ export async function createWasmHost(source: BufferSource | WebAssembly.Module, 
   exports = instance.exports as unknown as Exports;
   const ex = exports;
 
-  const read = (len: number): WorkerMessage[] => JSON.parse(decoder.decode(new Uint8Array(ex.memory.buffer, ex.sg_output_ptr(), len)));
+  const read = <T = WorkerMessage[]>(len: number): T => JSON.parse(decoder.decode(new Uint8Array(ex.memory.buffer, ex.sg_output_ptr(), len)));
+  const input = (text: string): number => {
+    const bytes = encoder.encode(text);
+    const ptr = ex.sg_input(bytes.length);
+    new Uint8Array(ex.memory.buffer, ptr, bytes.length).set(bytes);
+    return bytes.length;
+  };
   const guard = <T>(f: () => T): T => {
     try {
       return f();
@@ -66,15 +81,10 @@ export async function createWasmHost(source: BufferSource | WebAssembly.Module, 
 
   return {
     version: ex.sg_version(),
-    handle(message, nowMs) {
-      return guard(() => {
-        const bytes = encoder.encode(JSON.stringify(message));
-        const ptr = ex.sg_input(bytes.length);
-        new Uint8Array(ex.memory.buffer, ptr, bytes.length).set(bytes);
-        return read(ex.sg_handle(bytes.length, nowMs));
-      });
-    },
+    handle: (message, nowMs) => guard(() => read(ex.sg_handle(input(JSON.stringify(message)), nowMs))),
     tick: (nowMs) => guard(() => read(ex.sg_tick(nowMs))),
     snapshot: (nowMs) => guard(() => read(ex.sg_snapshot(nowMs))),
+    sync: (json) => guard(() => read<SyncResult>(ex.sg_sync(input(json)))),
+    view: (nowMs) => guard(() => read(ex.sg_view(nowMs))),
   };
 }

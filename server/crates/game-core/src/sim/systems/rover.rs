@@ -34,9 +34,31 @@ pub struct RoverSystem {
     active: HashMap<RoverId, ActiveDrive>,
 }
 
+/// A drive in progress, as saved in a checkpoint (`SimState`).
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct DriveState {
+    pub rover_id: RoverId,
+    pub path: Vec<usize>,
+    pub from: usize,
+    pub u: f64,
+}
+
 impl RoverSystem {
     pub fn new() -> RoverSystem {
         RoverSystem::default()
+    }
+
+    /// Drives in progress, ordered by rover id.
+    pub fn export(&self) -> Vec<DriveState> {
+        let mut out: Vec<DriveState> =
+            self.active.iter().map(|(id, d)| DriveState { rover_id: id.clone(), path: d.path.clone(), from: d.from, u: d.u }).collect();
+        out.sort_by(|a, b| a.rover_id.cmp(&b.rover_id));
+        out
+    }
+
+    pub fn import(&mut self, drives: &[DriveState]) {
+        self.active = drives.iter().map(|d| (d.rover_id.clone(), ActiveDrive { path: d.path.clone(), from: d.from, u: d.u })).collect();
     }
 
     /// Shortest tile path (excluding `from`, including `to`). Tiles with structures block, except

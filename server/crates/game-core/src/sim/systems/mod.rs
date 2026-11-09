@@ -16,5 +16,5 @@ pub mod transfer;
 pub use atanor::AtanorSystem;
 pub use extraction::ExtractionSystem;
 pub use mining::MiningSystem;
-pub use rover::RoverSystem;
+pub use rover::{DriveState, RoverSystem};
 pub use transfer::TransferSystem;

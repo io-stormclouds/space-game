@@ -1,5 +1,6 @@
-// Plan 02 B4: the e2e tests played through the network game server. Builds `game-server` (release),
-// then runs Playwright with E2E_REMOTE=1: the server starts in DEV_MODE on port 8090 with its data in
+// Plan 02 B4: the e2e tests played through the network game server. Builds `game-server` (release)
+// and the WebAssembly module (the client's replica of the world runs on it), then runs Playwright
+// with E2E_REMOTE=1: the server starts in DEV_MODE on port 8090 with its data in
 // server/target/e2e-data, and the `chromium-remote` project plays through it. Extra arguments go
 // to Playwright (e.g. a test file).
 import { execFileSync, spawnSync } from 'node:child_process';
@@ -14,6 +15,7 @@ const exe = process.platform === 'win32' ? '.exe' : '';
 const local = join(homedir(), '.cargo', 'bin', `cargo${exe}`);
 const cargo = existsSync(local) ? local : 'cargo';
 execFileSync(cargo, ['build', '--release', '-p', 'game-server'], { cwd: server, stdio: 'inherit' });
+execFileSync(process.execPath, [join(root, 'tools/conformance/build-wasm.mjs')], { cwd: root, stdio: 'inherit' });
 rmSync(join(server, 'target/e2e-data'), { recursive: true, force: true });
 const bin = join(server, 'target/release', `game-server${exe}`);
 const r = spawnSync('npx', ['playwright', 'test', '--project=chromium-remote', ...process.argv.slice(2)], {

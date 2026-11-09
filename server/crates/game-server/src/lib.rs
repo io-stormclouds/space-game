@@ -1,11 +1,13 @@
 //! Network game server (plan 02 B4): one authoritative world per player, run by `game-session` (the
-//! same code as the client's WebAssembly worker), behind a WebSocket that speaks the `GameApi`
-//! message protocol of the mock (`api/src/protocol.ts`).
+//! same code as the client's WebAssembly worker), behind a WebSocket.
 //!
-//! Connection: the client's first text frame is `{"type":"hello","protocolVersion":1,"callsign",
-//! "password"}`; the server answers `{"type":"welcome",…}` (or `{"type":"error",…}` and closes),
-//! then requests `{"id","request"}` and messages `{"type":"reply"|"snapshot"|"events"|"frame",…}`
-//! flow as JSON text frames. MessagePack frames (R-3 A) are the next step; the messages stay.
+//! Connection (JSON text frames): the client's first frame is `{"type":"hello","protocolVersion":2,
+//! "callsign","password"}`; the server answers `{"type":"welcome",…}` (or `{"type":"error",…}` and
+//! closes), then `{"type":"reset","checkpoint"}`. The client keeps a replica of the world in
+//! WebAssembly and answers the UI's queries itself; it sends requests that change the game
+//! (`{"id","request"}` of `api/src/protocol.ts`) and gets `{"type":"sync"}` (commands, tempo changes,
+//! steps) before the `{"type":"reply"}`, and `{"type":"hash"}` every 5 s; on a mismatch it sends
+//! `{"type":"resync"}` and gets a new reset. No snapshots or frames travel: the replica makes them.
 
 #![forbid(unsafe_code)]
 
@@ -23,8 +25,8 @@ use tokio::sync::Mutex;
 
 pub use config::Config;
 
-/// Version of the WebSocket protocol (hello / welcome); the client refuses another.
-pub const PROTOCOL_VERSION: u32 = 1;
+/// Version of the WebSocket protocol (hello / welcome); 2: the client keeps a replica.
+pub const PROTOCOL_VERSION: u32 = 2;
 
 pub struct AppState {
     pub cfg: Config,

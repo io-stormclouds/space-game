@@ -1,7 +1,8 @@
 # Single-box (plan 02 §9): Caddy serves the built client (web-game/dist/game/browser) and proxies
 # /ws and /health to the game server; worlds and accounts live in the `data` volume.
 # PostgreSQL joins when the repository adapter for it exists (R-15).
-# Usage: (cd web-game && npm run build) && docker compose -f deploy/docker-compose.yml up -d --build
+# Usage: (cd web-game && npm run wasm:build && npm run build) && docker compose -f deploy/docker-compose.yml up -d --build
+# (the client's replica of the world runs on the WebAssembly module, which the build copies from public/wasm)
 # NOT RUN YET on the development machine (Docker Desktop off, 2026-11-09).
 services:
   game-server:

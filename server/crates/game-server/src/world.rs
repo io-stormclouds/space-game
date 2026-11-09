@@ -1,8 +1,12 @@
 //! World scheduler (plan 02 §3, §4): one task per player's world. A world runs while someone is
 //! connected (and `idle_seconds` after), then it is written to the repository and stopped; the next
-//! connection restores it from the snapshot and the command log and catches up the time it slept
+//! connection restores it from the snapshot and the log tail and catches up the time it slept
 //! (1 model minute per step, up to the offline limit; the tempo change goes into the schedule, so
 //! the replay stays exact).
+//!
+//! Clients keep a replica of the world (plan 02 §6): on attach they get a checkpoint, then only
+//! what changed — commands and tempo changes at their steps, how far the steps went — and a state
+//! hash every few seconds. Replies go to the client that asked, after the changes they caused.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -10,15 +14,21 @@ use std::time::Duration;
 
 use tokio::sync::{Mutex, mpsc, oneshot};
 
-use game_session::{GameSession, Host, HostOptions, Outgoing, RequestMessage, SessionOptions};
+use game_session::{
+    Checkpoint, GameSession, Host, HostOptions, Outgoing, RecordedCommand, RequestMessage, SessionOptions, SyncCursor, SyncMessage,
+    TempoChange,
+};
 
 use crate::config::Config;
 use crate::repo::{LogEntry, Persister, RepoOp, StoredWorld, WorldRepository, combine};
 
 pub type ClientId = u64;
 
-/// A message for one client (JSON text of an `Outgoing` or of a server message).
+/// A message for one client (JSON text).
 pub type Wire = Arc<str>;
+
+/// How often clients get the state hash to compare with their replica [s].
+const HASH_SECONDS: f64 = 5.0;
 
 pub enum WorldMsg {
     Attach {
@@ -32,6 +42,10 @@ pub enum WorldMsg {
     Request {
         client: ClientId,
         json: String,
+    },
+    /// The client's replica no longer matches: send it a checkpoint.
+    Resync {
+        client: ClientId,
     },
     /// Write the world now and stop (shutdown).
     Stop {
@@ -61,13 +75,44 @@ fn session_options(cfg: &Config) -> SessionOptions {
     }
 }
 
-/// Restores a world: the scenario replayed with every logged command and tempo change (exact by
-/// construction). Falls back to the snapshot's world when the replay fails.
+fn new_host(cfg: &Config) -> Host {
+    Host::new(HostOptions { session: session_options(cfg), ..HostOptions::default() })
+}
+
+/// What the log adds after the snapshot: tempo changes, commands, and the last step they reach.
+fn tail(stored: &StoredWorld, log: &[LogEntry]) -> (Vec<TempoChange>, Vec<RecordedCommand>, u64) {
+    let (mut tempos, mut commands, mut step) = (Vec::new(), Vec::new(), stored.save.step);
+    for e in log {
+        match e {
+            LogEntry::Command { step: s, command } => {
+                commands.push(RecordedCommand { step: *s, command: command.clone() });
+                step = step.max(*s);
+            }
+            LogEntry::Tempo { step: s, tempo } => {
+                tempos.push(TempoChange { step: *s, tempo: *tempo });
+                step = step.max(*s);
+            }
+        }
+    }
+    (tempos, commands, step)
+}
+
+/// Restores a world: the snapshot's checkpoint followed by the log tail (the cost does not grow with
+/// the world's age). Snapshots without the step state (older files) and failures fall back to the
+/// replay of the whole log from the scenario's start, then to the snapshot's world alone.
 pub fn restore(cfg: &Config, stored: &StoredWorld, log: &[LogEntry]) -> Host {
-    let mut host = Host::new(HostOptions { session: session_options(cfg), ..HostOptions::default() });
-    let save = combine(stored, log);
-    if let Err(e) = host.session.replay(save) {
-        eprintln!("restore by replay failed ({e}); continuing from the snapshot");
+    if let Some(sim) = &stored.sim {
+        let mut host = new_host(cfg);
+        let (tempos, commands, step) = tail(stored, log);
+        let cp = Checkpoint { save: stored.save.clone(), sim: sim.clone() };
+        match host.session.restore(cp).and_then(|_| host.session.follow(step, &tempos, &commands)) {
+            Ok(_) => return host,
+            Err(e) => eprintln!("restore from the snapshot failed ({e}); replaying from the start"),
+        }
+    }
+    let mut host = new_host(cfg);
+    if let Err(e) = host.session.replay(combine(stored, log)) {
+        eprintln!("restore by replay failed ({e}); continuing from the snapshot's world");
         let _ = host.session.load(stored.save.clone());
     }
     host
@@ -92,22 +137,35 @@ pub fn catch_up(session: &mut GameSession, real_seconds: f64, limit_hours: f64) 
     fast + rest
 }
 
+fn wire(id: &str, m: &impl serde::Serialize) -> Option<Wire> {
+    match serde_json::to_string(m) {
+        Ok(j) => Some(j.into()),
+        Err(e) => {
+            eprintln!("world {id}: cannot serialise a message: {e}");
+            None
+        }
+    }
+}
+
 pub struct World {
     id: String,
     cfg: Config,
     host: Host,
     persister: Persister,
     clients: HashMap<ClientId, mpsc::UnboundedSender<Wire>>,
+    cursor: SyncCursor,
+    logged_generation: u64,
     logged_commands: usize,
-    logged_tempos: Vec<game_session::TempoChange>,
+    logged_tempos: Vec<TempoChange>,
     last_snapshot_ms: f64,
+    last_hash_ms: f64,
     idle_since_ms: Option<f64>,
 }
 
 impl World {
     /// Loads the world from the repository (or starts the default scenario) and catches up.
     pub fn open(id: &str, cfg: &Config, repo: &dyn WorldRepository, persister: Persister) -> World {
-        let (host, fresh) = match repo.load(id) {
+        let (mut host, fresh) = match repo.load(id) {
             Ok(Some((stored, log))) => {
                 let mut host = restore(cfg, &stored, &log);
                 if !cfg.dev_mode {
@@ -120,24 +178,30 @@ impl World {
                 }
                 (host, false)
             }
-            Ok(None) => (Host::new(HostOptions { session: session_options(cfg), ..HostOptions::default() }), true),
+            Ok(None) => (new_host(cfg), true),
             Err(e) => {
                 eprintln!("world {id}: cannot read ({e}); starting fresh");
-                (Host::new(HostOptions { session: session_options(cfg), ..HostOptions::default() }), true)
+                (new_host(cfg), true)
             }
         };
+        // a data dir from another mode (dev ↔ production): continue at this server's step length
+        let resized = host.session.step_seconds != cfg.step_seconds;
+        host.session.step_seconds = cfg.step_seconds;
         let mut w = World {
             id: id.to_string(),
             cfg: cfg.clone(),
+            cursor: SyncCursor::new(&host.session),
+            logged_generation: host.session.generation(),
             logged_commands: host.session.commands().len(),
             logged_tempos: host.session.tempos().to_vec(),
             host,
             persister,
             clients: HashMap::new(),
             last_snapshot_ms: mono_ms(),
+            last_hash_ms: mono_ms(),
             idle_since_ms: None,
         };
-        if fresh || !cfg.dev_mode {
+        if fresh || resized || !cfg.dev_mode {
             w.snapshot();
         }
         w
@@ -148,8 +212,10 @@ impl World {
     }
 
     fn snapshot(&mut self) {
-        let stored = StoredWorld { saved_at_ms: wall_ms(), save: self.host.session.save() };
+        let cp = self.host.session.checkpoint();
+        let stored = StoredWorld { saved_at_ms: wall_ms(), save: cp.save, sim: Some(cp.sim) };
         self.persister.send(RepoOp::Snapshot { world: self.id.clone(), stored: Box::new(stored) });
+        self.logged_generation = self.host.session.generation();
         self.logged_commands = self.host.session.commands().len();
         self.logged_tempos = self.host.session.tempos().to_vec();
         self.last_snapshot_ms = mono_ms();
@@ -158,10 +224,7 @@ impl World {
     /// Commands and tempo changes since the last snapshot or append go to the log.
     fn log_changes(&mut self) {
         let s = &self.host.session;
-        if s.commands().len() < self.logged_commands
-            || s.tempos().len() < self.logged_tempos.len()
-            || s.tempos().first() != self.logged_tempos.first()
-        {
+        if s.generation() != self.logged_generation {
             // the world was replaced (start, load, replay): a new baseline
             self.snapshot();
             return;
@@ -179,44 +242,54 @@ impl World {
         self.logged_tempos = tempos.to_vec();
     }
 
-    fn broadcast(&self, out: &[Outgoing], requester: Option<ClientId>) {
-        for m in out {
-            let json: Wire = match serde_json::to_string(m) {
-                Ok(j) => j.into(),
-                Err(e) => {
-                    eprintln!("world {}: cannot serialise a message: {e}", self.id);
-                    continue;
-                }
-            };
-            let is_reply = matches!(m, Outgoing::Reply(_));
-            for (id, tx) in &self.clients {
-                if !is_reply || Some(*id) == requester {
-                    let _ = tx.send(json.clone());
-                }
+    /// What changed since the last call, for every replica (also with no client, to keep the cursor current).
+    pub fn sync(&mut self) -> Option<SyncMessage> {
+        self.cursor.diff(&self.host.session)
+    }
+
+    fn send_all(&self, m: &impl serde::Serialize) {
+        if self.clients.is_empty() {
+            return;
+        }
+        if let Some(json) = wire(&self.id, m) {
+            for tx in self.clients.values() {
+                let _ = tx.send(json.clone());
             }
         }
     }
 
-    /// One request of a client; returns the outgoing messages (also used by tests without sockets).
-    pub fn request(&mut self, json: &str) -> Vec<Outgoing> {
-        let parsed: Option<RequestMessage> = serde_json::from_str(json).ok();
-        let kind = serde_json::from_str::<serde_json::Value>(json)
-            .ok()
-            .and_then(|v| v.get("request").and_then(|r| r.get("kind")).and_then(|k| k.as_str()).map(String::from));
-        if !self.cfg.dev_mode
-            && let (Some(msg), Some(kind)) = (&parsed, &kind)
-        {
+    fn send_to(&self, client: ClientId, m: &impl serde::Serialize) {
+        if let (Some(tx), Some(json)) = (self.clients.get(&client), wire(&self.id, m)) {
+            let _ = tx.send(json);
+        }
+    }
+
+    /// One request of a client; returns its reply (also used by tests without sockets). The changes
+    /// it made are in the next [`World::sync`].
+    pub fn request(&mut self, json: &str) -> Outgoing {
+        let msg: RequestMessage = match serde_json::from_str(json) {
+            Ok(m) => m,
+            Err(e) => {
+                let id = serde_json::from_str::<serde_json::Value>(json).ok().and_then(|v| v.get("id")?.as_u64()).unwrap_or(0);
+                return Outgoing::err(id, format!("bad request: {e}"));
+            }
+        };
+        if !self.cfg.dev_mode {
+            let kind = serde_json::from_str::<serde_json::Value>(json)
+                .ok()
+                .and_then(|v| v.get("request")?.get("kind")?.as_str().map(String::from))
+                .unwrap_or_default();
             if DEV_ONLY.contains(&kind.as_str()) {
-                return vec![Outgoing::err(msg.id, "niedostępne w świecie na serwerze (tylko tryb deweloperski)")];
+                return Outgoing::err(msg.id, "niedostępne w świecie na serwerze (tylko tryb deweloperski)");
             }
             // a production world is never restarted from the client: `start` attaches to it
             if kind == "start" && (self.host.session.step_index() > 0 || !self.host.session.commands().is_empty()) {
-                return vec![Outgoing::ok(msg.id, game_session::ReplyValue::Snapshot(Box::new(self.host.session.snapshot())))];
+                return Outgoing::ok(msg.id, game_session::ReplyValue::Snapshot(Box::new(self.host.session.snapshot())));
             }
         }
-        let out = self.host.handle_json(json, mono_ms());
+        let reply = self.host.answer(msg);
         self.log_changes();
-        out
+        reply
     }
 
     pub async fn run(mut self, mut rx: mpsc::Receiver<WorldMsg>, registry: Arc<Mutex<HashMap<String, mpsc::Sender<WorldMsg>>>>) {
@@ -226,9 +299,13 @@ impl World {
             tokio::select! {
                 _ = tick.tick() => {
                     let now = mono_ms();
-                    let out = self.host.tick(now);
-                    if !self.clients.is_empty() {
-                        self.broadcast(&out, None);
+                    self.host.advance(now);
+                    if let Some(m) = self.sync() {
+                        self.send_all(&m);
+                    }
+                    if !self.clients.is_empty() && now - self.last_hash_ms >= HASH_SECONDS * 1000.0 {
+                        self.last_hash_ms = now;
+                        self.send_all(&SyncMessage::hash(&self.host.session));
                     }
                     if now - self.last_snapshot_ms >= self.cfg.snapshot_seconds * 1000.0 {
                         self.snapshot();
@@ -250,10 +327,10 @@ impl World {
                 msg = rx.recv() => match msg {
                     None => { self.snapshot(); return; }
                     Some(WorldMsg::Attach { client, tx, done }) => {
+                        // the cursor is current (synced after every tick and request): the checkpoint is its baseline
                         self.clients.insert(client, tx);
                         self.idle_since_ms = None;
-                        let snap = self.host.push_snapshot(mono_ms());
-                        self.broadcast(&[snap], None);
+                        self.send_to(client, &SyncMessage::reset(&self.host.session));
                         let _ = done.send(());
                     }
                     Some(WorldMsg::Detach { client }) => {
@@ -264,8 +341,15 @@ impl World {
                         }
                     }
                     Some(WorldMsg::Request { client, json }) => {
-                        let out = self.request(&json);
-                        self.broadcast(&out, Some(client));
+                        let reply = self.request(&json);
+                        if let Some(m) = self.sync() {
+                            self.send_all(&m);
+                        }
+                        self.send_to(client, &reply);
+                    }
+                    Some(WorldMsg::Resync { client }) => {
+                        println!("world {}: client {client} resyncs at step {}", self.id, self.host.session.step_index());
+                        self.send_to(client, &SyncMessage::reset(&self.host.session));
                     }
                     Some(WorldMsg::Stop { done }) => {
                         self.snapshot();
@@ -292,6 +376,7 @@ mod tests {
             snapshot_seconds: 60.0,
             idle_seconds: 300.0,
             offline_limit_hours: 12.0,
+            max_requests_per_second: 20.0,
         }
     }
 
@@ -305,7 +390,12 @@ mod tests {
         format!(r#"{{"id":{id},"request":{request}}}"#)
     }
 
-    /// The world restored from the repository equals the uninterrupted one: snapshot + log = replay.
+    fn world_of(h: &Host) -> serde_json::Value {
+        serde_json::to_value((h.session.world(), h.session.simulation().export_state(), h.session.step_index(), h.session.tempo())).unwrap()
+    }
+
+    /// The world restored from the repository equals the uninterrupted one: snapshot + log tail =
+    /// the live world; an old snapshot without the step state restores by the full replay.
     #[test]
     fn restored_world_is_the_replay_of_its_log() {
         let dir = tmp("restore");
@@ -321,17 +411,21 @@ mod tests {
         w.request(&req(5, r#"{"kind":"command","command":{"type":"MOVE_SHIP","shipId":"nope","to":"x"}}"#));
         w.request(&req(6, r#"{"kind":"stepOnce","steps":800}"#));
         w.request(&req(7, r#"{"kind":"setTempo","tempo":60}"#));
-        w.request(&req(8, r#"{"kind":"command","command":{"type":"CHOOSE_COLONY_SITE","bodyId":"tau-ceti-e"}}"#));
+        w.request(&req(8, r#"{"kind":"command","command":{"type":"CHOOSE_COLONY_SITE","bodyId":"tc-e"}}"#));
         persister.flush();
 
         let (stored, log) = repo.load("acc-1").unwrap().unwrap();
+        assert!(stored.sim.is_some());
         assert_eq!(log.len(), 3, "two commands and a tempo change after the snapshot: {log:?}");
         let restored = restore(&c, &stored, &log);
-        let a = serde_json::to_value(w.host().session.world()).unwrap();
-        let b = serde_json::to_value(restored.session.world()).unwrap();
         assert_eq!(restored.session.step_index(), w.host().session.step_index());
-        assert_eq!(a, b);
+        assert_eq!(world_of(&restored), world_of(w.host()));
         assert_eq!(restored.session.commands().len(), 3);
+        assert_eq!(restored.session.state_hash(), w.host().session.state_hash());
+
+        let old = StoredWorld { sim: None, ..stored };
+        let replayed = restore(&c, &old, &log);
+        assert_eq!(world_of(&replayed), world_of(w.host()));
         let _ = std::fs::remove_dir_all(dir);
     }
 
@@ -343,13 +437,44 @@ mod tests {
         let repo = FileRepository::new(&dir);
         let mut w = World::open("acc-2", &c, &repo, persister.clone());
         let out = w.request(&req(1, r#"{"kind":"setTempo","tempo":600}"#));
-        assert!(matches!(&out[0], Outgoing::Reply(game_session::Reply::Err { .. })));
+        assert!(matches!(&out, Outgoing::Reply(game_session::Reply::Err { .. })));
         w.request(&req(2, r#"{"kind":"command","command":{"type":"SCAN_SYSTEM","shipId":"arka-1"}}"#));
         let before = w.host().session.commands().len();
         w.request(&req(3, r#"{"kind":"start","scenarioId":"planeta-matka"}"#));
         assert_eq!(w.host().session.commands().len(), before, "start attaches, does not reset");
         assert_eq!(w.host().session.scenario_id(), "tau-ceti");
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// A replica fed with the world's reset and sync messages (as JSON) stays equal to it.
+    #[test]
+    fn replica_follows_the_world() {
+        let dir = tmp("replica");
+        let c = cfg(&dir, true);
+        let persister = Persister::spawn(FileRepository::new(&dir));
+        let mut w = World::open("acc-3", &c, &FileRepository::new(&dir), persister);
+        let mut replica = Host::new(HostOptions::default());
+        let feed = |m: SyncMessage, r: &mut Host| {
+            let m = SyncMessage::from_json(&serde_json::to_string(&m).unwrap()).unwrap();
+            r.apply_sync(m).unwrap()
+        };
+        feed(SyncMessage::reset(&w.host().session), &mut replica);
+        w.request(&req(1, r#"{"kind":"start","scenarioId":"tau-ceti"}"#));
+        feed(w.sync().expect("start replaces the world"), &mut replica);
+        w.request(&req(2, r#"{"kind":"setTempo","tempo":600}"#));
+        w.request(&req(3, r#"{"kind":"command","command":{"type":"SCAN_SYSTEM","shipId":"arka-1"}}"#));
+        let out = feed(w.sync().unwrap(), &mut replica);
+        assert!(matches!(&out[0], Outgoing::Events { .. }), "the scan's events come from the replica");
+        for t in 0..300 {
+            w.host.advance(t as f64 * 16.0);
+            if let Some(m) = w.sync() {
+                feed(m, &mut replica);
+            }
+        }
+        assert!(w.host().session.step_index() > 200);
+        assert_eq!(world_of(&replica), world_of(w.host()));
+        feed(SyncMessage::hash(&w.host().session), &mut replica);
+        assert!(w.sync().is_none());
     }
 
     #[test]

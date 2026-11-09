@@ -14,6 +14,7 @@ use game_core::sim::flows::NominalFlows;
 
 use crate::contract::*;
 use crate::session::{GameSession, SessionOptions};
+use crate::sync::SyncMessage;
 
 #[derive(Deserialize, Clone, Debug, PartialEq)]
 #[serde(tag = "kind", rename_all = "camelCase", rename_all_fields = "camelCase")]
@@ -158,11 +159,71 @@ pub struct Host {
     snapshot_ms: f64,
     last: Option<f64>,
     last_snapshot: f64,
+    /// Replica: the game changed since the last pushed snapshot.
+    dirty: bool,
+    /// Replica: step of the last pushed frame.
+    frame_step: Option<u64>,
 }
 
 impl Host {
     pub fn new(opts: HostOptions) -> Host {
-        Host { session: GameSession::new(opts.session), snapshot_ms: opts.snapshot_ms, last: None, last_snapshot: f64::NEG_INFINITY }
+        Host {
+            session: GameSession::new(opts.session),
+            snapshot_ms: opts.snapshot_ms,
+            last: None,
+            last_snapshot: f64::NEG_INFINITY,
+            dirty: true,
+            frame_step: None,
+        }
+    }
+
+    /// Fixed steps for the real time passed since the last call (the server's world loop: no
+    /// frame, no snapshot; followers get the changes through [`crate::SyncCursor`]).
+    pub fn advance(&mut self, now_ms: f64) -> Vec<DomainEvent> {
+        let dt = self.last.map(|l| (now_ms - l) / 1000.0).unwrap_or(0.0);
+        self.last = Some(now_ms);
+        self.session.advance(dt)
+    }
+
+    /// One request → its reply only (the server: pushes go to followers as sync messages).
+    pub fn answer(&mut self, msg: RequestMessage) -> Outgoing {
+        let mut pushes = Vec::new();
+        match self.dispatch(msg.request, &mut pushes) {
+            Ok(value) => Outgoing::ok(msg.id, value),
+            Err(e) => Outgoing::err(msg.id, e),
+        }
+    }
+
+    /// Replica (the client's copy of the server's world): applies a sync message; returns the events
+    /// of the commands and steps it ran. An error means the copy needs a reset from the server.
+    pub fn apply_sync(&mut self, msg: SyncMessage) -> Result<Vec<Outgoing>, String> {
+        let reset = matches!(msg, SyncMessage::Reset { .. });
+        let events = msg.apply(&mut self.session)?;
+        self.dirty = true;
+        let mut out = Vec::new();
+        if !events.is_empty() {
+            out.push(Outgoing::Events { events });
+        }
+        if reset {
+            self.frame_step = None;
+        }
+        Ok(out)
+    }
+
+    /// Replica loop tick: the frame when a step was made, the snapshot (at most every
+    /// `snapshot_ms`) when something changed. The replica never steps on its own.
+    pub fn view(&mut self, now_ms: f64) -> Vec<Outgoing> {
+        let mut out = Vec::new();
+        let step = self.session.step_index();
+        if self.frame_step != Some(step) {
+            self.frame_step = Some(step);
+            out.push(Outgoing::Frame { frame: self.session.frame() });
+        }
+        if self.dirty && now_ms - self.last_snapshot >= self.snapshot_ms {
+            self.dirty = false;
+            out.push(self.push_snapshot(now_ms));
+        }
+        out
     }
 
     /// One loop tick: fixed steps for the real time passed, events, the frame, and a snapshot every `snapshot_ms`.

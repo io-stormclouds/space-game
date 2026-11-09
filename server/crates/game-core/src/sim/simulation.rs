@@ -37,6 +37,18 @@ pub struct ColonyReadout {
     pub crew: CrewBalance,
 }
 
+/// Step state the world does not hold: rover drives in progress and the sub-minute accumulators of
+/// mining and extraction. With it, a saved world continues exactly like the uninterrupted one
+/// (restore from a snapshot plus the log tail, the client's replica). Flights and Atanor engines are
+/// rebuilt from the world, so they are not here.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SimState {
+    pub drives: Vec<super::systems::DriveState>,
+    pub mining: Vec<(ShipId, f64)>,
+    pub extraction: f64,
+}
+
 #[derive(Default)]
 pub struct SimulationOptions {
     /// Economy with changed parameters (F6 designer panel); default catalog otherwise.
@@ -99,6 +111,18 @@ impl Simulation {
 
     pub fn time(&self) -> f64 {
         self.world.time
+    }
+
+    /// The step state outside the world (see [`SimState`]).
+    pub fn export_state(&self) -> SimState {
+        SimState { drives: self.rovers.export(), mining: self.mining.export(), extraction: self.extraction.accumulator() }
+    }
+
+    /// Restores the step state of [`Simulation::export_state`] (after `new` with the same world).
+    pub fn import_state(&mut self, state: &SimState) {
+        self.rovers.import(&state.drives);
+        self.mining.import(&state.mining);
+        self.extraction.set_accumulator(state.extraction);
     }
 
     /// Advances the world by `dt` model minutes. Returns the discrete events that occurred.

@@ -21,6 +21,17 @@ impl MiningSystem {
         MiningSystem::default()
     }
 
+    /// Model minutes accumulated towards the next mining tick, per ship, ordered by ship id.
+    pub fn export(&self) -> Vec<(ShipId, f64)> {
+        let mut out: Vec<(ShipId, f64)> = self.accumulators.iter().map(|(k, v)| (k.clone(), *v)).collect();
+        out.sort_by(|a, b| a.0.cmp(&b.0));
+        out
+    }
+
+    pub fn import(&mut self, accumulators: &[(ShipId, f64)]) {
+        self.accumulators = accumulators.iter().cloned().collect();
+    }
+
     pub fn update(&mut self, ships: &[Spacecraft], bodies: &[CelestialBody], cfg: &GameConstants, dt: f64) -> Vec<DomainEvent> {
         let mut events = Vec::new();
         for ship in ships {

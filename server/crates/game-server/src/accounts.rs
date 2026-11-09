@@ -71,18 +71,23 @@ impl AccountStore {
     }
 
     /// Checks the password; with `create`, an unknown callsign becomes a new account (dev mode, first login).
+    /// Argon2 runs on the blocking pool without the lock: a login never stalls the worlds' ticks or
+    /// the other logins.
     pub async fn authenticate(&self, callsign: &str, password: &str, create: bool) -> Result<Account, AuthError> {
         let callsign = callsign.trim();
         if !valid_callsign(callsign) {
             return Err(AuthError::BadCallsign);
         }
-        let mut accounts = self.accounts.lock().await;
-        if let Some(a) = accounts.get(&key(callsign)) {
-            let hash = PasswordHash::new(&a.password_hash).map_err(|e| AuthError::Storage(e.to_string()))?;
-            return match Argon2::default().verify_password(password.as_bytes(), &hash) {
-                Ok(()) => Ok(a.clone()),
-                Err(_) => Err(AuthError::WrongPassword),
-            };
+        let existing = self.accounts.lock().await.get(&key(callsign)).cloned();
+        if let Some(a) = existing {
+            let (stored, given) = (a.password_hash.clone(), password.to_string());
+            let ok = tokio::task::spawn_blocking(move || {
+                PasswordHash::new(&stored).map(|hash| Argon2::default().verify_password(given.as_bytes(), &hash).is_ok())
+            })
+            .await
+            .map_err(|e| AuthError::Storage(e.to_string()))?
+            .map_err(|e| AuthError::Storage(e.to_string()))?;
+            return if ok { Ok(a) } else { Err(AuthError::WrongPassword) };
         }
         if !create {
             return Err(AuthError::UnknownAccount);
@@ -90,9 +95,20 @@ impl AccountStore {
         if password.chars().count() < 6 {
             return Err(AuthError::WeakPassword);
         }
-        let salt = SaltString::generate(&mut OsRng);
-        let password_hash =
-            Argon2::default().hash_password(password.as_bytes(), &salt).map_err(|e| AuthError::Storage(e.to_string()))?.to_string();
+        let given = password.to_string();
+        let password_hash = tokio::task::spawn_blocking(move || {
+            let salt = SaltString::generate(&mut OsRng);
+            Argon2::default().hash_password(given.as_bytes(), &salt).map(|h| h.to_string())
+        })
+        .await
+        .map_err(|e| AuthError::Storage(e.to_string()))?
+        .map_err(|e| AuthError::Storage(e.to_string()))?;
+        let mut accounts = self.accounts.lock().await;
+        if accounts.contains_key(&key(callsign)) {
+            // made by a concurrent first login meanwhile: check against that one
+            drop(accounts);
+            return Box::pin(self.authenticate(callsign, password, false)).await;
+        }
         let account =
             Account { id: format!("acc-{}", accounts.len() + 1), callsign: callsign.to_string(), password_hash, created: now_secs() };
         accounts.insert(key(callsign), account.clone());

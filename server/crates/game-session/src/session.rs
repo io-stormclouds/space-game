@@ -18,7 +18,7 @@ use game_core::sim::objectives::{DEFAULT_OBJECTIVE_MATERIALS, colony_objectives}
 use game_core::sim::reducer::WorldState;
 use game_core::sim::scenario::top_tile;
 use game_core::sim::scenarios::{LoadLevel, scenario_by_id, start_simulation};
-use game_core::sim::simulation::{ColonyReadout, Simulation, SimulationOptions};
+use game_core::sim::simulation::{ColonyReadout, SimState, Simulation, SimulationOptions};
 use game_core::sim::systems::{build, colony};
 
 use crate::contract::*;
@@ -81,6 +81,16 @@ pub struct GameSession {
     accumulator: f64,
     timings: VecDeque<(f64, f64)>,
     doc_economy: Option<Economy>,
+    /// Bumped whenever the world is replaced (start, load, replay, resume): followers reset.
+    generation: u64,
+}
+
+/// A saved game that continues exactly: the save file plus the step state outside the world.
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Checkpoint {
+    pub save: SaveFile,
+    pub sim: SimState,
 }
 
 fn load_level(id: &str) -> Option<LoadLevel> {
@@ -122,7 +132,13 @@ impl GameSession {
             accumulator: 0.0,
             timings: VecDeque::new(),
             doc_economy: None,
+            generation: 0,
         }
+    }
+
+    /// How many times the world was replaced since this session was made.
+    pub fn generation(&self) -> u64 {
+        self.generation
     }
 
     fn fresh(id: &str, economy: Option<&EconomyParams>, galaxy: GalaxyOptions) -> SessionResult<(Simulation, GalaxySim, Economy)> {
@@ -177,6 +193,7 @@ impl GameSession {
         self.commands.clear();
         self.accumulator = 0.0;
         self.paused = false;
+        self.generation += 1;
         Ok(self.snapshot())
     }
 
@@ -198,6 +215,20 @@ impl GameSession {
         match self.tempos.last_mut() {
             Some(last) if last.step == self.step_index => last.tempo = tempo,
             _ => self.tempos.push(TempoChange { step: self.step_index, tempo }),
+        }
+        Ok(())
+    }
+
+    /// A tempo change of the schedule as it was recorded elsewhere: the same entry list as the
+    /// original, also when it kept a change back to the tempo before (`set_tempo` would skip it).
+    fn apply_tempo(&mut self, change: TempoChange) -> SessionResult<()> {
+        if change.tempo.is_nan() || change.tempo <= 0.0 || change.tempo.is_infinite() {
+            return Err(format!("tempo must be positive: {}", change.tempo));
+        }
+        self.tempo = change.tempo;
+        match self.tempos.last_mut() {
+            Some(last) if last.step == change.step => last.tempo = change.tempo,
+            _ => self.tempos.push(change),
         }
         Ok(())
     }
@@ -547,7 +578,66 @@ impl GameSession {
         self.step_index = file.step;
         self.commands = file.commands;
         self.accumulator = 0.0;
+        self.generation += 1;
         Ok(self.snapshot())
+    }
+
+    /// Save file plus the step state: [`GameSession::restore`] continues it exactly.
+    pub fn checkpoint(&self) -> Checkpoint {
+        Checkpoint { save: self.save(), sim: self.sim.export_state() }
+    }
+
+    /// Continues a checkpoint exactly where it was taken, at its step length.
+    pub fn restore(&mut self, cp: Checkpoint) -> SessionResult<()> {
+        self.step_seconds = cp.save.step_seconds;
+        self.load(cp.save)?;
+        self.sim.import_state(&cp.sim);
+        Ok(())
+    }
+
+    /// Follows changes made elsewhere (the server's world, a log tail): at each step from the current
+    /// one, its tempo changes and commands, then the step, up to `step`; the changes at `step` itself
+    /// come last. Same order as `replay`, so the result is the same world. Returns the events.
+    pub fn follow(&mut self, step: u64, tempos: &[TempoChange], commands: &[RecordedCommand]) -> SessionResult<Vec<DomainEvent>> {
+        let from = self.step_index;
+        if step < from {
+            return Err(format!("cannot follow back to step {step} from {from}"));
+        }
+        let in_range = |s: u64| (from..=step).contains(&s);
+        if !tempos.windows(2).all(|w| w[0].step <= w[1].step) || !tempos.iter().all(|t| in_range(t.step)) {
+            return Err(format!("tempo changes outside steps {from}..={step}"));
+        }
+        if !commands.windows(2).all(|w| w[0].step <= w[1].step) || !commands.iter().all(|c| in_range(c.step)) {
+            return Err(format!("commands outside steps {from}..={step}"));
+        }
+        let (mut ti, mut ci) = (0usize, 0usize);
+        let mut events = Vec::new();
+        loop {
+            let s = self.step_index;
+            while ti < tempos.len() && tempos[ti].step == s {
+                self.apply_tempo(tempos[ti])?;
+                ti += 1;
+            }
+            while ci < commands.len() && commands[ci].step == s {
+                events.extend(self.command(commands[ci].command.clone()).events);
+                ci += 1;
+            }
+            if s >= step {
+                return Ok(events);
+            }
+            events.extend(self.step());
+        }
+    }
+
+    /// FNV-1a 64 of everything that decides the future of the game (world, step state, simulated
+    /// players, step, tempo), as hex. Equal on the server and on the client's replica.
+    pub fn state_hash(&self) -> String {
+        // into a byte buffer (the serialiser the module already has), then FNV-1a 64
+        let galaxy = self.galaxy.save();
+        let bytes =
+            serde_json::to_vec(&(&self.sim.world, self.sim.export_state(), &galaxy, self.step_index, self.tempo)).unwrap_or_default();
+        let hash = bytes.iter().fold(0xcbf2_9ce4_8422_2325u64, |h, &b| (h ^ b as u64).wrapping_mul(0x0000_0100_0000_01b3));
+        format!("{hash:016x}")
     }
 
     /// Re-runs the scenario from its start with the file's commands and tempos, up to its step.
@@ -573,6 +663,7 @@ impl GameSession {
                 self.step();
             }
         }
+        self.generation += 1;
         Ok(ReplayResult { snapshot: self.snapshot(), replay_stats: ReplayStats { commands: file.commands.len() as u64, rejected } })
     }
 

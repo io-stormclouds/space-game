@@ -15,7 +15,7 @@
 
 use std::cell::RefCell;
 
-use game_session::{Host, HostOptions, Outgoing, SessionOptions};
+use game_session::{Host, HostOptions, Outgoing, SessionOptions, SyncMessage};
 
 #[cfg(target_arch = "wasm32")]
 mod js {
@@ -125,6 +125,35 @@ pub extern "C" fn sg_tick(now_ms: f64) -> usize {
 pub extern "C" fn sg_snapshot(now_ms: f64) -> usize {
     with(|s| {
         let out = [s.host.push_snapshot(now_ms)];
+        write_output(s, &out)
+    })
+}
+
+/// Replica of a server world (plan 02 §6): applies the sync message in the input buffer (`len`
+/// bytes of JSON `SyncMessage`). Result: `{"ok":true,"out":[messages]}`, or `{"ok":false,"error"}`
+/// when the copy can no longer follow and needs a reset.
+#[unsafe(no_mangle)]
+pub extern "C" fn sg_sync(len: usize) -> usize {
+    with(|s| {
+        let result = std::str::from_utf8(&s.input[..len.min(s.input.len())])
+            .map_err(|e| format!("bad sync message: {e}"))
+            .and_then(SyncMessage::from_json)
+            .and_then(|m| s.host.apply_sync(m));
+        let value = match result {
+            Ok(out) => serde_json::json!({ "ok": true, "out": out }),
+            Err(error) => serde_json::json!({ "ok": false, "error": error }),
+        };
+        s.output.clear();
+        serde_json::to_writer(&mut s.output, &value).expect("result serialises");
+        s.output.len()
+    })
+}
+
+/// Replica loop tick: frame after a step, snapshot when changed (≤ every 100 ms); returns the result length.
+#[unsafe(no_mangle)]
+pub extern "C" fn sg_view(now_ms: f64) -> usize {
+    with(|s| {
+        let out = s.host.view(now_ms);
         write_output(s, &out)
     })
 }

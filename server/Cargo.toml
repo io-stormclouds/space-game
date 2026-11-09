@@ -10,20 +10,25 @@ publish = false
 
 [workspace.dependencies]
 serde = { version = "1", features = ["derive"] }
-serde_json = { version = "1", features = ["preserve_order"] }
+# float_roundtrip: numbers parse to the nearest f64 (as JSON.parse does). Without it the last bit can
+# differ, and a world that went through JSON (checkpoint, replica reset) would drift from the original.
+serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
 indexmap = { version = "2", features = ["serde"] }
 # fdlibm-derived sin/cos (musl port): bit-identical with V8's Math.sin/cos for the Atanor trajectory sampling
 libm = "0.2"
 
+# Unwinding panics: a panic in one world's task ends that task only (tokio catches it); the server
+# keeps the other worlds, and the next connection restores the world from its snapshot and log.
 [profile.release]
 opt-level = 3
 lto = "fat"
 codegen-units = 1
-panic = "abort"
 
-# Small, fast-starting WebAssembly for the client worker (plan 02 §3.1: game-wasm).
+# Small, fast-starting WebAssembly for the client worker (plan 02 §3.1: game-wasm). A panic traps;
+# the worker reports it (sg_panic) and the page shows the error.
 [profile.wasm]
 inherits = "release"
 opt-level = "z"
 debug = false
 strip = true
+panic = "abort"

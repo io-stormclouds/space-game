@@ -1,6 +1,6 @@
 # server — backend gry w Rust
 
-Workspace Cargo z portem domeny gry i narzędziami zgodności (plan `docs/plan/02-BACKEND-RUST.md`). Stan: **B0, B1 i B2 wykonane 2026-11-08** (port całej domeny z silnikiem Atanora i rejestrem gwiazd, złote powtórki, scenariusze `fabryka` i obciążenia S/M/L, pomiar kroku i WASM). **B3 wykonane 2026-11-09**: `GameApi` na WebAssembly w workerze klienta, przełącznik `mock-ts` / `wasm`, zgodność z mockiem. **B4 w wersji MVP 2026-11-09**: `game-server` (konta, świat na gracza, WebSocket, harmonogram światów, zapis i odtworzenie) oraz tryb `remote` w kliencie. Szczegóły i braki: sekcje B3 i B4 niżej.
+Workspace Cargo z portem domeny gry i narzędziami zgodności (plan `docs/plan/02-BACKEND-RUST.md`). Stan: **B0, B1 i B2 wykonane 2026-11-08** (port całej domeny z silnikiem Atanora i rejestrem gwiazd, złote powtórki, scenariusze `fabryka` i obciążenia S/M/L, pomiar kroku i WASM). **B3 wykonane 2026-11-09**: `GameApi` na WebAssembly w workerze klienta, przełącznik `mock-ts` / `wasm`, zgodność z mockiem. **B4 w toku**: `game-server` (konta, świat na gracza, WebSocket, harmonogram światów, zapis i odtworzenie z punktu kontrolnego i końcówki dziennika, limity) oraz tryb `remote`, w którym klient trzyma kopię świata w WASM i dostaje od serwera tylko rozkazy, kroki i skrót stanu (R-18). Szczegóły i braki: sekcje B3 i B4 niżej.
 
 ```bash
 cargo test --workspace                 # testy jednostkowe + zgodność z TS (wektory, powtórki)
@@ -26,9 +26,9 @@ W `web-game/`: `npm run wasm:build` (moduł do `apps/game/public/wasm/`), `npm r
 | `crates/game-core/src/sim/scenarios/{factory,load}.rs` | światy `fabryka` i `load-s/m/l` z generatorem Mulberry32; w TS leżą obok mocka, serwer Rust musi je startować sam (R-11) | `mock-server/src/{factory,load,rng}.ts` |
 | `crates/game-core/data/catalog.json` | katalog ekonomii wyeksportowany z `catalog-data.ts` (`npm run conformance:catalog` w `web-game/`). Liczby zmienia się w TS i eksportuje ponownie | `economy/catalog-data.ts` |
 | `crates/game-core/data/stars.json` | 41 gwiazd PoC galaktyki (`npm run conformance:stars`) | `galaxy/stars.data.ts` |
-| `crates/game-session` | gra jednego gracza za kontraktem `GameApi`. `GameSession`: stały krok, tempa, dziennik rozkazów, zapis, wczytanie, powtórka i zapytania UI (katalog, dostępność, duch budowy, karta i sugestia pola, tabele ekonomii, przepływy). `GalaxySim`: symulowani gracze i rynek. `Host`: protokół wiadomości (żądanie → odpowiedź i pushe snapshot / events / frame). Bez I/O i bez zegara | `mock-server` (`server.ts`, `host.ts`, `galaxy-sim.ts`), `api` (`contract.ts`, `protocol.ts`) |
-| `crates/game-wasm` | `game-session` dla przeglądarki: zwykłe ABI C (`sg_input`, `sg_handle`, `sg_tick`, `sg_snapshot`, `sg_output_ptr`) z wiadomościami JSON w pamięci liniowej, importy `env.sg_now` i `env.sg_panic`. Bez `wasm-bindgen` i bez generatora kleju (R-13) | `mock-server/src/worker.ts`; loader w `web-game/packages/wasm-host` |
-| `crates/game-server` | serwer sieciowy (B4): Axum + Tokio, WebSocket `/ws`, `/health`, konta (argon2id), świat na konto, harmonogram (aktywny / uśpiony / nadrabianie), zapis migawki i dziennika przez wątek I/O, odtworzenie powtórką | `mock-server` + nowe |
+| `crates/game-session` | gra jednego gracza za kontraktem `GameApi`. `GameSession`: stały krok, tempa, dziennik rozkazów, zapis, wczytanie, powtórka i zapytania UI (katalog, dostępność, duch budowy, karta i sugestia pola, tabele ekonomii, przepływy). `GalaxySim`: symulowani gracze i rynek. `Host`: protokół wiadomości (żądanie → odpowiedź i pushe snapshot / events / frame). `sync`: punkt kontrolny (`Checkpoint`), dalszy bieg według cudzych zmian (`follow`), skrót stanu, komunikaty kopii i `SyncCursor` serwera (R-18). Bez I/O i bez zegara | `mock-server` (`server.ts`, `host.ts`, `galaxy-sim.ts`), `api` (`contract.ts`, `protocol.ts`); `sync` nowe |
+| `crates/game-wasm` | `game-session` dla przeglądarki: zwykłe ABI C (`sg_input`, `sg_handle`, `sg_tick`, `sg_snapshot`, `sg_sync`, `sg_view`, `sg_output_ptr`) z wiadomościami JSON w pamięci liniowej, importy `env.sg_now` i `env.sg_panic`. Bez `wasm-bindgen` i bez generatora kleju (R-13) | `mock-server/src/worker.ts`; loader, worker i kopia świata w `web-game/packages/wasm-host` |
+| `crates/game-server` | serwer sieciowy (B4): Axum + Tokio, WebSocket `/ws`, `/health`, konta (argon2id), świat na konto, harmonogram (aktywny / uśpiony / nadrabianie), zapis punktu kontrolnego i dziennika przez wątek I/O, odtworzenie z punktu kontrolnego i końcówki dziennika, komunikaty dla kopii klientów, limit żądań | `mock-server` + nowe |
 | `conformance` | biblioteka i narzędzie: powtórka `SaveFile` z mocka i porównanie świata, zdarzeń i odrzuceń; sprawdzenie wektorów liczbowych; `bench` | `tools/conformance/*.ts` nagrywa wzorce |
 | `conformance/vectors`, `conformance/replays` | nagrane wzorce (rewizja w `expected.json` → `source.revision`) | — |
 
@@ -38,7 +38,8 @@ Moduły `game-core` odpowiadają plikom TS jeden do jednego (`math/goldberg.rs` 
 
 - **Ten sam JSON.** `serde` z `camelCase`, pola opcjonalne pomijane jak `undefined`, `null` tam, gdzie TS ma `null` (`Structure.batch`, `ArmState.trackId` rozróżniają brak klucza od `null`). Słowniki ilości (`Qty`) to `IndexMap`: kolejność kluczy jak w obiekcie JS, bo widać ją w tekstach („brakuje FER 10 · SIL 10”) i w kolejności sumowania. Grafy cząsteczek też trzymają porządek wstawiania (pierwsza zgłoszona kolizja, kolejność atomów w składowej).
 - **Ta sama arytmetyka.** `Math.hypot` (normalizacja + sumowanie Kahana), `Math.round`, `toFixed`, `Math.imul`, `|0` są odtworzone w `math/js.rs` bit w bit. W silniku Atanora `sin`/`cos` tablicy obrotów idą przez crate `libm` (port fdlibm, ten sam algorytm co `Math` w V8), bo decydują o kolizjach, polu i wyjściu poza planszę, gdzie tolerancja nic nie daje (R-10). Pozostałe funkcje przestępne (`pow`, `atan2`) mogą różnić się o ulp; porównania używają tolerancji 1e-9 dla liczb niecałkowitych.
-- **Ta sama kolejność.** `Simulation::step` wykonuje systemy w kolejności TS; stan ciągły (loty, jazdy, akumulatory, silniki maszyn) żyje w systemach, nie w świecie, tak samo jak w TS. Silnik maszyny Atanora jest funkcją liczby wykonanych taktów, więc po wczytaniu zapisu odtwarza się go, wykonując `ticks` taktów.
+- **Ta sama kolejność.** `Simulation::step` wykonuje systemy w kolejności TS; stan ciągły (loty, jazdy, akumulatory, silniki maszyn) żyje w systemach, nie w świecie, tak samo jak w TS. Silnik maszyny Atanora jest funkcją liczby wykonanych taktów, więc po wczytaniu zapisu odtwarza się go, wykonując `ticks` taktów. Loty liczą się z planu w świecie. Resztę (jazdy łazików w toku, akumulatory wydobycia i ekstrakcji) `Simulation::export_state` zapisuje w `SimState`; zapis z nim (`Checkpoint`) wznawia się bit w bit, co sprawdza test `checkpoint_resumes_exactly` na wszystkich złotych powtórkach. `SaveFile` mocka zostaje bez zmian.
+- **Ten sam JSON w obie strony.** `serde_json` z `float_roundtrip`: liczba wraca z tekstu do tego samego `f64` (jak `JSON.parse`). Bez tego ostatni bit liczb potrafił się różnić i świat po przejściu przez JSON rozjeżdżał się z oryginałem.
 - **Dane katalogu w jednym miejscu.** Rust czyta `catalog.json` i `stars.json` wygenerowane z TS; po osiągnięciu parytetu kierunek się odwraca (plan 02 §5.3, pytanie R-6).
 
 ## Wyniki B0–B2 (2026-11-08, ten komputer, build release)
@@ -69,41 +70,68 @@ Bezpośredni port liczył krok L w 2,7 ms; tabela specyfikacji budynków w `Rule
   - tempa, pauza, krok, rozkazy z odmowami, zapis;
   - **8 złotych powtórek** przez `replay`, dalsze kroki, `load` i znów dalsze kroki;
   - pętla z `tick`.
-- e2e: projekt Playwright `chromium-wasm` (`npm run e2e:wasm`) uruchamia te same testy z `sg.api=wasm`. Wynik na tym komputerze (2026-11-09, Chrome, 2 workery, `flow.spec.ts`):
+- e2e: projekt Playwright `chromium-wasm` (`npm run e2e:wasm`) uruchamia te same testy z `sg.api=wasm`. Wynik na tym komputerze (Chrome, `flow.spec.ts`):
   - test presetu przechodzi na `mock-ts`, `wasm` i `remote`;
-  - „Play flow” (logowanie → kolonia) przechodzi na `mock-ts` (50 s) i `remote` (13 s), a na `wasm` jest **niestabilny** (1 z 2 przebiegów, 2,2 min). Pada limit 5 s na kliknięcie portu w pętli budowy.
-  - Logika jest ta sama co w `remote` (ten sam `game-session`), więc to wydajność w przeglądarce: worker serializuje cały świat do JSON co 100 ms, a strona go parsuje.
-  - Do zrobienia: migawki rzadziej lub przyrostowo, `postMessage` z obiektem zamiast tekstu, `wasm-opt`.
-  - Pełnego zestawu e2e nie przepuszczono na żadnym trybie; wcześniejsze masowe porażki dawał zawieszony `ng serve` na porcie testów.
+  - „Play flow” (logowanie → kolonia), powtórzony 2026-11-09 po południu na nieobciążonej maszynie: **4 z 4** (`mock-ts` 29 s, `wasm` 26 s, po dwa przebiegi). Rano na `wasm` przeszedł 1 z 2. Tamtą niestabilność dawało obciążenie komputera: zawieszony `ng serve` i równoległy build. Pomiar w Node to potwierdza: migawka z WASM kosztuje 0,2–0,4 ms (`load-m`: 1,6 ms), a tick 0,03–0,2 ms, tyle co w mocku.
+  - Pełnego zestawu e2e nie przepuszczono na żadnym trybie.
+- Rozmiar modułu po B4 (kopia świata, `float_roundtrip`): **1339 kB, 356 kB gzip**.
 - Zmienne Playwrighta: `E2E_CHANNEL=chrome` uruchamia zainstalowanego Chrome'a (przeglądarka Playwrighta 1248 nie jest tu pobrana), a `E2E_PORT` pozwala ominąć działający już `ng serve` na 4420, który Playwright użyłby ponownie.
 
-## B4: serwer sieciowy, MVP (2026-11-09)
+## B4: serwer sieciowy (MVP 2026-11-09, protokół kopii tego samego dnia)
 
 Zrobione:
-- **Połączenie:** WebSocket `/ws`. Pierwsza ramka to `{"type":"hello","protocolVersion":1,"callsign","password","register"?}`, a odpowiedź to `welcome` (konto, świat, `devMode`, `stepSeconds`, czas serwera) albo `error` i zamknięcie. Potem płyną te same wiadomości co w workerze, jako ramki tekstowe JSON (R-3: JSON na start, MessagePack później).
+- **Połączenie:** WebSocket `/ws`, ramki tekstowe JSON (R-3). Pierwsza ramka to `{"type":"hello","protocolVersion":2,"callsign","password","register"?}`, a odpowiedź to `welcome` (konto, świat, `devMode`, `stepSeconds`, czas serwera) albo `error` i zamknięcie.
+- **Kopia świata u klienta (R-18):**
+  - Zaraz po `welcome` serwer wysyła `reset`: punkt kontrolny świata, czyli zapis plus stan kroków spoza świata.
+  - Potem wysyła tylko zmiany. `sync` zawiera rozkazy i zmiany tempa przypięte do kroków oraz krok, do którego doszedł świat; w `DEV_MODE` przychodzi co tick (16 ms), w produkcji co krok (1 s). Co 5 s przychodzi `hash`, czyli FNV-1a stanu.
+  - Klient (`packages/wasm-host/src/replica.ts`, worker `replica-worker.ts`) prowadzi ten sam `game-session` w WASM tymi rozkazami i krokami. Sam robi zdarzenia, klatki i migawki dla UI.
+  - Zapytania UI (duch budowy, karta pola, dostępność, katalog, zapis) liczy kopia, bez podróży do serwera. Do serwera idą tylko żądania zmieniające grę, a odpowiedź przychodzi po `sync` z ich skutkiem.
+  - Inny skrót albo luka w krokach powoduje `{"type":"resync"}` i nowy `reset`.
+  - Po sieci nie płyną migawki ani klatki. Wcześniej, w MVP, serwer wysyłał cały świat co 100 ms; teraz po sieci idą rozkazy i kroki, a pełny świat raz na połączenie. Ruchu w bajtach nie mierzyłem.
+- **Testy kopii:**
+  - `sync::tests` w `game-session`: punkt kontrolny wznawia się bit w bit we wszystkich 8 złotych powtórkach, a kopia prowadzona przez `SyncCursor` przez JSON zostaje równa także przy pauzie, zmianach tempa i restarcie świata;
+  - `world::tests::replica_follows_the_world`;
+  - `tests/ws.rs` przez prawdziwy WebSocket: skrót się zgadza, a zapis z kopii jest identyczny z zapisem serwera;
+  - `replica.spec.ts` w TS.
 - **Konta:** znak wywoławczy + hasło (argon2id) w `DATA_DIR/accounts.json`. W `DEV_MODE` pierwsze logowanie zakłada konto; w produkcji konto powstaje tylko z `register: true`.
 - **Świat na gracza** (Model C): zadanie Tokio z `Host`. W produkcji krok trwa 1 s w tempie ×1 (R-4); w `DEV_MODE` 1/60 s i dostępne są wszystkie tempa jak w mocku. W produkcji klient nie zmienia tempa, nie pauzuje, nie wczytuje i nie restartuje świata (`start` zwraca bieżącą migawkę).
 - **Harmonogram:** świat bez połączenia zapisuje się i usypia po `IDLE_SECONDS`. Przy wybudzeniu nadrabia przespany czas krokami po 1 min modelu, z limitem `OFFLINE_LIMIT_HOURS` (R-5: 12 h). Zmiana tempa trafia do harmonogramu, więc powtórka zostaje dokładna.
 - **Zapis:**
-  - Migawka (`SaveFile`: świat, harmonogram temp, wszystkie rozkazy od startu) powstaje co `SNAPSHOT_SECONDS`, po rozłączeniu, przy uśpieniu i przy zamknięciu.
+  - Migawka (punkt kontrolny: `SaveFile` ze światem, harmonogramem temp i wszystkimi rozkazami od startu, plus `SimState`) powstaje co `SNAPSHOT_SECONDS`, po rozłączeniu, przy uśpieniu i przy zamknięciu.
   - Między migawkami rośnie dziennik `log.jsonl` (rozkazy, zmiany tempa).
   - Zapisuje jeden wątek I/O przez kanał, więc pętla świata nie czeka na dysk.
-  - **Odtworzenie = powtórka** scenariusza z rozkazami migawki i dziennika (ten sam kod co złote powtórki). Sprawdzają to test `restored_world_is_the_replay_of_its_log` i test WebSocket z restartem serwera (`tests/ws.rs`).
+  - **Odtworzenie = punkt kontrolny + końcówka dziennika** (`GameSession::follow`, ten sam kod co kopia klienta). Koszt nie rośnie z wiekiem świata.
+  - Migawki bez `SimState` (pliki sprzed zmiany) i każdy błąd przechodzą na powtórkę całego dziennika od startu scenariusza.
+  - Sprawdzają to:
+    - test `restored_world_is_the_replay_of_its_log`: świat odtworzony obiema drogami równa się żywemu światu;
+    - test WebSocket z restartem serwera (`tests/ws.rs`).
+- **Limity i awarie:**
+  - Każde połączenie ma wiadro żetonów: `MAX_REQUESTS_PER_SECOND` (20/s, chwilowo do 40). Nadmiar dostaje odpowiedź z błędem „za dużo żądań”, a połączenie zostaje; `resync` kosztuje 10 żetonów.
+  - Profil `release` ma `panic = unwind` (R-19). Panika kończy tylko zadanie świata; jego klienci są rozłączani, a następne połączenie odtwarza świat z dysku.
 - **Klient:**
-  - `createRemoteWorker` w `packages/api` to WebSocket udający Worker; tryb `?api=remote`, adres serwera `?server=ws://…/ws` (domyślnie port 8080 tego hosta).
+  - Tryb `?api=remote` uruchamia worker kopii (`game-replica.worker.ts`). Potrzebuje modułu WASM (`npm run wasm:build`). Adres serwera: `?server=ws://…/ws`, domyślnie port 8080 tego hosta.
+  - Dane logowania idą do workera przy pierwszym żądaniu (`connectOnFirstRequest` w `packages/api`).
+  - Zerwane połączenie kopia ponawia z rosnącym odstępem: 1, 2, 4 s i dalej, najwyżej 10 s, maksymalnie 8 prób bez nowego punktu kontrolnego.
+    - Żądania w drodze dostają błąd, bo nie wiadomo, czy dotarły do świata.
+    - Zapytania UI kopia dalej odpowiada z ostatniego stanu.
+    - Nowe rozkazy czekają na następny `reset`.
+    - Odmowa logowania kończy połączenie bez ponawiania.
   - Strona logowania zapisuje znak wywoławczy; bez logowania gracz dostaje konto gościa.
   - Kod dostępu to sekret przechowywany w przeglądarce, bo pole hasła w formularzu jest jeszcze makietą.
-- **e2e:** `npm run e2e:remote` buduje serwer, startuje go w `DEV_MODE` na porcie 8090 (dane w `target/e2e-data`) i uruchamia projekt `chromium-remote`. Każdy test to nowe konto gościa.
-- **`deploy/`:** `Dockerfile` serwera i `docker-compose.yml` (serwer + Caddy ze statycznym klientem). **Nie uruchamiane na tym komputerze**, bo Docker Desktop jest wyłączony.
+- **e2e:** `npm run e2e:remote` buduje serwer i moduł WASM, startuje serwer w `DEV_MODE` na porcie 8090 (dane w `target/e2e-data`) i uruchamia projekt `chromium-remote`. Każdy test to nowe konto gościa. Wyniki pełnego zestawu (17 testów, Chrome, 2026-11-09 wieczorem):
+  - `mock-ts`, 4 workery: 17 z 17 (2,4 min).
+  - `remote`, 4 workery: 16 z 17 i 15 z 17. Za każdym razem padał inny test zależny od czasu: liczniki GPU po 20 przełączeniach, karta Arki zaraz po wejściu, opis „w locie” w trakcie krótkiego lotu. Każdy z nich przechodzi powtarzany przy 2 workerach (3 z 3 na `mock-ts` i na `remote`). Tryb `remote` jest bardziej wrażliwy na obciążenie: w każdym teście dochodzi logowanie, kompilacja modułu i punkt kontrolny.
+  - `remote`, 2 workery (jak w CI), po przeniesieniu argon2 poza wątki runtime: **17 z 17** (1,8 min).
+  - Przechodzą wszystkie testy panelu projektanta F6 (tabele ekonomii, przepływy, powtórka gry, eksport i import zapisu): liczy je kopia w kliencie, tym samym kodem co serwer.
+- **Logowanie:** argon2 liczy się w puli `spawn_blocking`, poza blokadą kont, więc logowanie nie wstrzymuje ticków światów ani innych logowań.
+- **`deploy/`:** `Dockerfile` serwera i `docker-compose.yml` (serwer + Caddy ze statycznym klientem). **Nie uruchamiane na tym komputerze**, bo Docker Desktop jest wyłączony. Obraz klienta musi teraz zawierać moduł WASM.
 
-Zmienne: `ADDR` (127.0.0.1:8080), `DATA_DIR` (./data), `DEV_MODE`, `WORLD_STEP_SECONDS` (1; dev 1/60), `SNAPSHOT_SECONDS` (60), `IDLE_SECONDS` (300), `OFFLINE_LIMIT_HOURS` (12).
+Zmienne: `ADDR` (127.0.0.1:8080), `DATA_DIR` (./data), `DEV_MODE`, `WORLD_STEP_SECONDS` (1; dev 1/60), `SNAPSHOT_SECONDS` (60), `IDLE_SECONDS` (300), `OFFLINE_LIMIT_HOURS` (12), `MAX_REQUESTS_PER_SECOND` (20).
 
 Brakuje względem planu 02 §11 B4 (następne kroki):
 - PostgreSQL (`sqlx`, migracje, tabele z §7) zamiast plików. Interfejs `WorldRepository` jest gotowy, adapter plikowy działa. Na tym komputerze nie ma PostgreSQL ani działającego Dockera.
-- MessagePack i uzgadnianie stanu (`Events` + `StateHash`, klient z WASM) zamiast migawki całego świata ~10 Hz. Dziś serwer wysyła to samo co worker: migawkę co 100 ms i klatkę co tick.
-- Odtworzenie z migawki i ogona dziennika zamiast powtórki od startu. Dziś odtworzenie jest dokładne z konstrukcji, ale jego koszt rośnie z wiekiem świata.
-- Limity (rozkazy/s, `PreviewBuild`/s), metryki Prometheus, sesje w cookie i jednorazowy token WS, prawdziwe pole hasła i rejestracja w kliencie.
-- `panic = "abort"` w profilu `release`: panika w jednym świecie kończy cały proces. Serwer potrzebuje osobnego profilu z `unwind` i `catch_unwind` wokół kroku.
+- Metryki Prometheus, sesje w cookie i jednorazowy token WS, prawdziwe pole hasła i rejestracja w kliencie.
+- MessagePack (R-3, odłożony) i kompresja `reset` dla dużych światów, po pomiarze.
 
 ### Toolchain na tym komputerze
 
