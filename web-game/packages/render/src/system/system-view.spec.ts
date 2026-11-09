@@ -12,6 +12,7 @@ import {
   SHIP_ID,
   Simulation,
   TAU_CETI_SCENARIO,
+  TC_C,
   TC_E,
   footprintTiles,
   tileIndexOf,
@@ -380,6 +381,41 @@ describe('SystemView (planet + system kinds, one scene)', () => {
     h.input = { ...h.input, placement: null };
     h.frames(1);
     expect(s.ghostObjects.every((g) => !g.visible)).toBe(true);
+  });
+
+  it('Tau Ceti c: hex-kit terrain replaces the fan grid near the camera, the fan stays the pick proxy, and it all disposes', async () => {
+    const tc = new Simulation(TAU_CETI_SCENARIO);
+    tc.dispatch({ type: 'SCAN_SYSTEM', shipId: ARK_ID });
+    while (tc.world.scan.state !== 'DONE') tc.step(0.5);
+    h = mount(snapshotOf(tc.world, 'tau-ceti'), { loadModels: true });
+    h.input = { ...h.input, focusBodyId: TC_C };
+    h.view.setKind('planet');
+    h.frames(Math.ceil(TRANSITION_SECONDS * 60) + 5);
+    const s = scene(h);
+    await vi.waitFor(() => expect(s.bodyParts(TC_C)!.terrain?.ready).toBe(true), { timeout: 10000 });
+    h.frames(3);
+    const c = s.bodyParts(TC_C)!;
+    expect(c.terrainDecor!.instances).toBeGreaterThan(50);
+    // near: terrain and decor drawn, the fan mesh hidden but still the raycast surface
+    expect(c.terrain!.visual.visible).toBe(true);
+    expect(c.terrainDecor!.group.visible).toBe(true);
+    expect(c.grid!.mesh.visible).toBe(false);
+    expect(c.grid!.edges.visible).toBe(false);
+    expect(c.surface).toBe(c.grid!.mesh);
+    expect(h.pickAt(s.screenOf(TC_C))).toMatchObject({ kind: 'TILE', bodyId: TC_C });
+    // other gridded bodies keep the plain grid
+    expect(s.bodyParts(TC_E)!.terrain).toBeNull();
+    // far (system overview): the cheap fan grid again
+    h.view.setKind('system');
+    h.frames(Math.ceil(TRANSITION_SECONDS * 60) + 5);
+    expect(c.terrain!.visual.visible).toBe(false);
+    expect(c.grid!.mesh.visible).toBe(true);
+
+    const owned = resources(s.scene);
+    const disposed = new Set<unknown>();
+    for (const r of owned) r.addEventListener('dispose', () => disposed.add(r));
+    h.view.dispose();
+    expect([...owned].filter((r) => !disposed.has(r)).map((r) => r.type)).toEqual([]);
   });
 
   it('dispose frees every geometry and material it created and removes its DOM and listeners', async () => {

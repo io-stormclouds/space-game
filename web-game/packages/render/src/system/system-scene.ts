@@ -4,12 +4,14 @@ import {
   OrbitSolver,
   asteroidShape,
   buildWorldGrids,
+  buildWorldTerrain,
   isWorking,
   tileIndexOf,
   vec3,
   type BodyId,
   type CelestialBody,
   type PlanetGrid,
+  type TerrainPlan,
   type Structure,
   type TileId,
   type Vec3,
@@ -20,6 +22,7 @@ import { AsteroidView } from './asteroid-view';
 import { BeltView, mulberry32 } from './belt-view';
 import { LineBuffer } from './buffers';
 import { CameraRig, type CameraGoal, type CameraMode } from './camera-rig';
+import { HexKit, type KitModel } from './hex-kit';
 import { LabelLayer } from './labels';
 import { ModelKit } from './model-kit';
 import type { FetchBytes } from './model-library';
@@ -29,6 +32,8 @@ import { createFrame, defaultFocus, dockingOffsetOf, fitDistance, footprintFrame
 import { PlanetGridView } from './planet-grid-view';
 import { ScreenOverlay, pixelRadius, projectPoint, ringHit, type ScreenPoint } from './screen-overlay';
 import { StructureLayer, partMatrix } from './structure-layer';
+import { TerrainDecor } from './terrain-decor';
+import { TerrainView } from './terrain-view';
 import { UnitsLayer, type UnitContext } from './units-layer';
 
 export interface SystemSceneOptions {
@@ -55,6 +60,9 @@ interface BodyView {
   /** Material owned by this body (spheres); grid/rock views own theirs. */
   ownMaterial: THREE.Material | null;
   grid: PlanetGridView | null;
+  /** Hex-kit terrain and decor of a body with a terrain plan; drawn near, the fan grid far and for picking. */
+  terrain: TerrainView | null;
+  terrainDecor: TerrainDecor | null;
   asteroid: AsteroidView | null;
   belt: BeltView | null;
   structures: StructureLayer | null;
@@ -108,6 +116,10 @@ export class SystemScene {
   private order: BodyView[] = [];
   private bodySig = '';
   private grids: ReadonlyMap<BodyId, PlanetGrid> = new Map();
+  private terrainPlans: ReadonlyMap<BodyId, TerrainPlan> = new Map();
+  private hexKit: HexKit;
+  private hexModels: Promise<ReadonlyMap<string, KitModel>> | null = null;
+  private readonly loadModels: boolean;
   private solver: OrbitSolver | null = null;
   private extent = 1;
   private root: BodyView | null = null;
@@ -172,6 +184,8 @@ export class SystemScene {
     this.scene.add(this.starfield);
 
     this.kit = new ModelKit(opts.assetsBase, opts.fetchBytes);
+    this.hexKit = new HexKit(opts.assetsBase, opts.fetchBytes);
+    this.loadModels = opts.loadModels !== false;
     this.units = new UnitsLayer(this.kit);
     this.scene.add(this.units.group);
     for (let i = 0; i < 2; i++) {
@@ -376,8 +390,8 @@ export class SystemScene {
   bodyParts(id: BodyId) {
     const bv = this.bodies.get(id);
     if (!bv) return null;
-    const { group, surface, grid, structures, outline, belt, orbit, revealed, world, docking } = bv;
-    return { group, surface, grid, structures, outline, belt, orbit, revealed, world, docking } as const;
+    const { group, surface, grid, terrain, terrainDecor, structures, outline, belt, orbit, revealed, world, docking } = bv;
+    return { group, surface, grid, terrain, terrainDecor, structures, outline, belt, orbit, revealed, world, docking } as const;
   }
 
   /** Placement ghost objects (tests). */
@@ -395,6 +409,7 @@ export class SystemScene {
     this.disposed = true;
     this.unloadModels();
     this.clearWorld();
+    this.hexKit.dispose();
     this.units.dispose();
     for (const g of this.ghosts) g.removeFromParent();
     this.starfield.geometry.dispose();
@@ -452,9 +467,14 @@ export class SystemScene {
       if (bv.asteroid) bv.asteroid.setDepletion(minerals(body));
       const ex = exhausted.get(body.id) ?? EMPTY_SET;
       if (bv.grid && bv.revealed) {
-        for (const t of this.grids.get(body.id)!.tiles) if (t.deposit) bv.grid.setExhausted(t.index, ex.has(t.index));
+        for (const t of this.grids.get(body.id)!.tiles) {
+          if (!t.deposit) continue;
+          bv.grid.setExhausted(t.index, ex.has(t.index));
+          bv.terrain?.setExhausted(t.index, ex.has(t.index));
+        }
       }
       if (bv.structures?.sync(byBody.get(body.id) ?? NO_STRUCTURES, ex)) this.overlaysDirty = true;
+      if (bv.structures && bv.terrainDecor) bv.terrainDecor.setHidden(bv.structures.tileOwner.keys());
     }
     this.defaultFocusId = defaultFocus(world);
   }
@@ -463,6 +483,8 @@ export class SystemScene {
     this.clearWorld();
     this.bodySig = sig;
     this.grids = buildWorldGrids(bodies);
+    this.terrainPlans = buildWorldTerrain(bodies, this.grids);
+    this.hexModels = null;
     this.solver = new OrbitSolver(bodies);
     this.extent = systemExtent(bodies);
     const pending = [...bodies];
@@ -497,6 +519,8 @@ export class SystemScene {
       structures: null,
       outline: null,
       orbit: null,
+      terrain: null,
+      terrainDecor: null,
       revealed: body.revealed !== false,
       docking: vec3(0, body.radius * body.orbitalAltitudeFactor, 0),
       minerals0: minerals(body),
@@ -536,6 +560,7 @@ export class SystemScene {
       bv.group.add(bv.grid.edges);
       bv.structures = new StructureLayer(grid, this.kit, this.siteMat, true);
       bv.group.add(bv.structures.group);
+      this.attachTerrain(bv);
     } else if (body.shape) {
       bv.asteroid = new AsteroidView(asteroidShape(body), body.color, bv.minerals0);
       bv.asteroid.setDepletion(minerals(body));
@@ -551,6 +576,37 @@ export class SystemScene {
     this.rebuildPickables();
   }
 
+  /** Terrain of a body with a plan: built from the hex kit once its files have loaded (fan grid until then). */
+  private attachTerrain(bv: BodyView): void {
+    const plan = this.terrainPlans.get(bv.id);
+    const grid = bv.grid?.grid;
+    if (!plan || !grid || !this.loadModels) return;
+    const terrain = new TerrainView(grid, plan);
+    bv.terrain = terrain;
+    bv.group.add(terrain.visual);
+    if (!this.hexModels) {
+      const ids = new Set<string>();
+      for (const p of this.terrainPlans.values()) {
+        for (const v of p.variants) if (v) ids.add(v.id);
+        for (const d of p.decor) ids.add(d.model);
+      }
+      this.hexModels = this.hexKit.loadAll(ids);
+    }
+    this.hexModels.then(
+      (models) => {
+        if (this.disposed || bv.terrain !== terrain) return;
+        terrain.applyKit(models);
+        const decor = new TerrainDecor(grid, plan, terrain.frames, models);
+        bv.terrainDecor = decor;
+        bv.group.add(decor.group);
+        decor.group.visible = false;
+        if (bv.structures) decor.setHidden(bv.structures.tileOwner.keys());
+        this.overlaysDirty = true;
+      },
+      (err) => console.warn('Hex kit unavailable, keeping the flat grid', err),
+    );
+  }
+
   private disposeSurface(bv: BodyView): void {
     if (bv.surface) {
       bv.surface.removeFromParent();
@@ -562,6 +618,12 @@ export class SystemScene {
     bv.grid?.edges.removeFromParent();
     bv.grid?.dispose();
     bv.grid = null;
+    bv.terrain?.visual.removeFromParent();
+    bv.terrain?.dispose();
+    bv.terrain = null;
+    bv.terrainDecor?.group.removeFromParent();
+    bv.terrainDecor?.dispose();
+    bv.terrainDecor = null;
     bv.asteroid?.dispose();
     bv.asteroid = null;
     bv.belt?.dispose();
@@ -627,8 +689,12 @@ export class SystemScene {
     const hov = this.hov;
     for (const bv of this.order) {
       if (!bv.grid) continue;
-      bv.grid.setSelected(sel.kind === 'TILE' && sel.bodyId === bv.id ? sel.tileIndex : null);
-      bv.grid.setHover(hov?.kind === 'TILE' && hov.bodyId === bv.id ? hov.tileIndex : null);
+      const selTile = sel.kind === 'TILE' && sel.bodyId === bv.id ? sel.tileIndex : null;
+      const hovTile = hov?.kind === 'TILE' && hov.bodyId === bv.id ? hov.tileIndex : null;
+      bv.grid.setSelected(selTile);
+      bv.grid.setHover(hovTile);
+      bv.terrain?.setSelected(selTile);
+      bv.terrain?.setHover(hovTile);
       const out = bv.outline ?? this.makeOutline(bv);
       let n = 0;
       const add = (tiles: ReadonlyArray<number>, hex: number) => {
@@ -759,7 +825,12 @@ export class SystemScene {
     for (const bv of this.order) {
       if (!bv.grid) continue;
       const pr = this.apparentRadius(bv);
-      bv.grid.edges.visible = pr >= EDGES_MIN_PX;
+      // near: hex-kit terrain (when built) instead of the fan grid, whose mesh stays the raycast proxy
+      const terrain = bv.terrain?.ready === true && pr >= EDGES_MIN_PX;
+      bv.grid.mesh.visible = !terrain;
+      bv.grid.edges.visible = pr >= EDGES_MIN_PX && !bv.terrain;
+      if (bv.terrain) bv.terrain.visual.visible = terrain;
+      if (bv.terrainDecor) bv.terrainDecor.group.visible = terrain;
       if (bv.structures) bv.structures.group.visible = pr >= STRUCTURES_MIN_PX;
       if (bv.outline) bv.outline.lines.visible = pr >= STRUCTURES_MIN_PX && bv.outline.lines.geometry.drawRange.count > 0;
     }

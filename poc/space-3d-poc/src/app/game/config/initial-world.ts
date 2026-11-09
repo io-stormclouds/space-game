@@ -19,6 +19,9 @@ export const COLONY_B_ID = bodyId('colony-b');
 export const COLONY_C_ID = bodyId('colony-c');
 export const COLONY_IDS: ReadonlyArray<BodyId> = [COLONY_A_ID, COLONY_B_ID, COLONY_C_ID];
 
+/** Medieval planet: hex-kit terrain (KayKit Medieval Hexagon) with a ruined settlement, next to the colonies. */
+export const MEDIEVAL_ID = bodyId('medieval');
+
 /**
  * Same orbit, radius, grid and deposit seed for all three, so their layouts are tile-for-tile identical.
  * They fly in formation 12° apart (~260 units): close enough to see side by side, lit almost the same.
@@ -93,6 +96,10 @@ export const INITIAL_BODIES: ReadonlyArray<CelestialBody> = [
   colony(COLONY_A_ID, 'Kolonia A · KayKit', COLONY_PHASE - COLONY_SPACING),
   colony(COLONY_B_ID, 'Kolonia B · Kenney', COLONY_PHASE),
   colony(COLONY_C_ID, 'Kolonia C · mieszana', COLONY_PHASE + COLONY_SPACING),
+  {
+    ...colony(MEDIEVAL_ID, 'Średniowiecze', COLONY_PHASE + 2 * COLONY_SPACING),
+    surfaceGrid: { ...COLONY_SURFACE, terrain: { biome: 'medieval', seed: 2 } },
+  },
 ];
 
 export const INITIAL_SHIPS: ReadonlyArray<Spacecraft> = [

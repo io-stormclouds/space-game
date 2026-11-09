@@ -1,7 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { GAME_CONSTANTS } from '../game/config/game-constants';
 import { INITIAL_BODIES } from '../game/config/initial-world';
-import { COLONY_LAYOUTS, WORLD_GRIDS, landingPadTile, padDockingOffset } from '../game/config/world';
+import { COLONY_LAYOUTS, WORLD_GRIDS, WORLD_TERRAIN, landingPadTile, padDockingOffset } from '../game/config/world';
 import { FrameSnapshot, createSnapshot } from '../game/frame-snapshot';
 import { AsteroidShape, asteroidShape } from '../game/math/asteroid-shape';
 import { OrbitSolver } from '../game/math/orbit-solver';
@@ -36,6 +36,8 @@ export class SimulationService {
   readonly grids: ReadonlyMap<BodyId, PlanetGrid> = WORLD_GRIDS;
   /** Showcase-colony layouts (visual dressing + their real pad and solar panel). */
   readonly colonies = COLONY_LAYOUTS;
+  /** Hex-kit terrain plans (tiles, settlement, decor) of bodies that have them. */
+  readonly terrain = WORLD_TERRAIN;
   /** Irregular meshes of bodies with a seeded shape (asteroids), generated once. */
   readonly shapes: ReadonlyMap<BodyId, AsteroidShape> = new Map(
     INITIAL_BODIES.filter((b) => b.shape).map((b) => [b.id, asteroidShape(b)]),

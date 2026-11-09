@@ -131,3 +131,9 @@ host.pick(x, y, input);         // piksele względem kontenera
 6. **Etykiety:** zostają w pakiecie `render` (DOM), czy aplikacja wolałaby rysować je sama, na przykład z dodatkowymi danymi?
 7. **Ścieżki lotu:** krzywa z domeny (uniesienie +Y) potrafi przejść przez gwiazdę, na przykład lot Arki z e do f. Czy domena ma ją omijać?
 8. **Placement:** nie ma pola `rotation`. Czy duch HQ ma się obracać, czy orientacja wynika z kolejności `tiles` (kotwica pierwsza)?
+
+## Teren z kafelków hex (Tau Ceti c)
+
+Ciała z planem terenu (`TERRAIN_CONFIG` w domenie, dziś tylko Tau Ceti c: biom `medieval`) rysują się z kafelków KayKit Medieval Hexagon (`apps/game/public/assets/kaykit-hex/`). Dane liczy czysta domena (`packages/domain/src/sim/terrain/`: klasy pól, kafelek i obrót na heks, osada, drzewa, skały). Render: `hex-kit.ts` (ładowanie GLB przez `fetchBytes`), `terrain-view.ts` (jedna siatka, warp kafelków na pola Goldberga, pięciokąty jako płyty), `terrain-decor.ts` (instancje; `setHidden` chowa dekor pod budowlami i przywraca po rozbiórce), `terrain-tones.ts` (kolor z nazwy materiału).
+
+`PlanetGridView` zostaje: jej siatka wachlarzy to **raycast proxy** (ukryta w pobliżu, ale dalej pickowalna) i daleki LOD; kafelki i dekor rysują się od `EDGES_MIN_PX`. Do czasu załadowania plików planeta wygląda jak dotąd. Plan i wnioski: `docs/planet-terrain-poc-wnioski-i-plan.md`.

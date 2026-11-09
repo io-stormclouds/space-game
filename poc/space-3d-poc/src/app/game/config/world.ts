@@ -4,6 +4,8 @@ import { buildGoldbergGrid } from '../math/goldberg-grid';
 import { Vec3, scale, vec3 } from '../math/vec3';
 import { PlanetGrid, Tile, TileId, tileId } from '../models/planet-grid.model';
 import { Rover } from '../models/rover.model';
+import { generateTerrain } from '../terrain/terrain-generator';
+import { TerrainPlan } from '../terrain/terrain-types';
 import { Structure } from '../models/structure.model';
 import { WorldState } from '../reducer';
 import { GAME_CONSTANTS } from './game-constants';
@@ -15,6 +17,20 @@ export const WORLD_GRIDS: ReadonlyMap<BodyId, PlanetGrid> = new Map(
     b.id,
     buildGoldbergGrid(b.id, b.radius, b.surfaceGrid!.frequency, b.surfaceGrid!.depositSeed),
   ]),
+);
+
+/**
+ * Terrain plans of bodies with `surfaceGrid.terrain` (hex-kit tiles, settlement, decor), generated once.
+ * The settlement faces the sun as seen from the body at t = 0, like the showcase colonies.
+ */
+export const WORLD_TERRAIN: ReadonlyMap<BodyId, TerrainPlan> = new Map(
+  INITIAL_BODIES.flatMap((b) => {
+    const grid = WORLD_GRIDS.get(b.id);
+    const terrain = b.surfaceGrid?.terrain;
+    if (!grid || !terrain) return [];
+    const aim = vec3(-Math.cos(b.initialAngle), 0.9, -Math.sin(b.initialAngle));
+    return [[b.id, generateTerrain(grid, { biome: terrain.biome, seed: terrain.seed, aim })] as const];
+  }),
 );
 
 /** The tile closest to the body's local +Y: where the home landing pad goes. */

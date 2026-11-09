@@ -15,6 +15,11 @@ import { ModelAsset, ModelLibrary } from './model-library';
 import { ALL_MODELS, ModelSpec, ROVER_MODEL, SHIP_MODEL, baseLift, fitScale, pickVariant, themeOf } from './model-registry';
 import { PlanetGridView } from './planet-grid-view';
 import { StructureView, tileCornerYaw } from './structure-view';
+import { HexKit } from './hex-kit';
+import { SurfaceView } from './surface-view';
+import { TerrainDecor } from './terrain-decor';
+import { TerrainView } from './terrain-view';
+import { TerrainPlan } from '../game/terrain/terrain-types';
 
 const FORWARD = new THREE.Vector3(0, 0, 1);
 const UP = new THREE.Vector3(0, 1, 0);
@@ -51,6 +56,8 @@ export interface WorldViews {
   rovers: ReadonlyArray<Rover>;
   /** Showcase-colony dressing per body (visual only). */
   colonies: ReadonlyMap<BodyId, ColonyLayout>;
+  /** Hex-kit terrain per body (tiles, settlement, decor); bodies without an entry keep the plain grid. */
+  terrain?: ReadonlyMap<BodyId, TerrainPlan>;
   /** Docking point per body in its local frame. */
   dockingOffset: (bodyId: BodyId) => { x: number; y: number; z: number };
 }
@@ -79,6 +86,10 @@ export class SceneManager {
   private ghostRef: GhostRef | null = null;
   private readonly ghostMaterial = new THREE.MeshStandardMaterial({ color: GHOST_OK, transparent: true, opacity: 0.55, depthWrite: false });
   private grids: ReadonlyMap<BodyId, PlanetGrid> = new Map();
+  private terrainPlans: ReadonlyMap<BodyId, TerrainPlan> = new Map();
+  private readonly hexKit = new HexKit();
+  /** Tiles that carry a real structure, per body: the hex-kit decor must not be drawn there. */
+  private readonly builtTiles = new Map<BodyId, Set<number>>();
 
   private readonly tmpV = new THREE.Vector3();
   private readonly tmpV2 = new THREE.Vector3();
@@ -119,6 +130,7 @@ export class SceneManager {
   /** Builds the SOI hierarchy: each body's group is a child of its parent's group. */
   buildWorld(bodies: ReadonlyArray<CelestialBody>, ships: ReadonlyArray<Spacecraft>, views: WorldViews): void {
     this.grids = views.grids;
+    this.terrainPlans = views.terrain ?? new Map();
     const pending = [...bodies];
     // parents first
     while (pending.length) {
@@ -175,10 +187,35 @@ export class SceneManager {
         (err) => console.warn(`Model ${spec.file} unavailable, keeping a placeholder box`, err),
       ),
     );
-    return Promise.all([ship, rover, ...others]).then(
+    const terrain = this.loadTerrain().catch((err) => console.warn('Hex kit unavailable, keeping the flat grid', err));
+    return Promise.all([ship, rover, terrain, ...others]).then(
       () => undefined,
       (err) => console.warn('Models unavailable, keeping placeholder meshes', err),
     );
+  }
+
+  /**
+   * Loads the hex-kit files the terrain plans need (tiles, trees, rocks, settlement) once, dresses every
+   * body that has a plan and hides decor under real structures. Bodies stay playable on flat fans until then.
+   */
+  async loadTerrain(): Promise<void> {
+    const views = [...this.registry.bodies.values()].filter((v) => v.grid instanceof TerrainView);
+    if (views.length === 0) return;
+    const ids = new Set<string>();
+    for (const view of views) {
+      const plan = this.terrainPlans.get(view.id)!;
+      for (const v of plan.variants) if (v) ids.add(v.id);
+      for (const d of plan.decor) ids.add(d.model);
+    }
+    const kit = await this.hexKit.loadAll(ids);
+    for (const view of views) {
+      const terrain = view.grid as TerrainView;
+      terrain.applyKit(kit);
+      const decor = new TerrainDecor(terrain.grid, terrain.plan, terrain.frames, kit);
+      view.group.add(decor.group);
+      view.terrainDecor = decor;
+      for (const tile of this.builtTiles.get(view.id) ?? []) decor.remove(tile);
+    }
   }
 
   /** Hover highlight on a tile grid (engine-only state, not a Signal). */
@@ -237,6 +274,10 @@ export class SceneManager {
     }
     sv.add(tile);
     view.decor?.remove(tile.index);
+    view.terrainDecor?.remove(tile.index);
+    const built = this.builtTiles.get(structure.bodyId) ?? new Set<number>();
+    built.add(tile.index);
+    this.builtTiles.set(structure.bodyId, built);
     // a real building clears the showcase dressing (and any corridor or pipe) on its tile
     for (const d of view.dressing.values()) d.remove(tile.index);
   }
@@ -458,14 +499,15 @@ export class SceneManager {
     group.name = `${body.name}_Group`;
 
     let mesh: THREE.Mesh;
-    let gridView: PlanetGridView | null = null;
+    let gridView: SurfaceView | null = null;
     let asteroidView: AsteroidView | null = null;
     let decor: StructureView | null = null;
     const theme = themeOf(body.id);
     if (grid) {
-      gridView = new PlanetGridView(grid, body.color);
+      const plan = this.terrainPlans.get(body.id);
+      gridView = plan ? new TerrainView(grid, plan, body.color) : new PlanetGridView(grid, body.color);
       mesh = gridView.mesh;
-      group.add(gridView.edges);
+      for (const extra of gridView.extras) group.add(extra);
       decor = new StructureView(grid.tileEdge * Math.sqrt(3), theme.deposit, 0x78716c);
       decor.mesh.name = 'Deposits';
       const rocks = this.loaded.get(theme.deposit.file);

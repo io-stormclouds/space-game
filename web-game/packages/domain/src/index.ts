@@ -28,6 +28,7 @@ export { asteroidShape, depletionScale, type AsteroidShape } from './sim/math/as
 export { BezierPath } from './sim/math/bezier-path';
 export { OrbitSolver } from './sim/math/orbit-solver';
 export { footprintTiles } from './sim/math/footprint';
+export { hash3 } from './sim/math/seeded-noise';
 
 // galaxy
 export * from './galaxy/stars';
@@ -44,3 +45,11 @@ export type { ColonizationParams } from './sim/systems/colony-system';
 export { POC_SCENARIO } from './sim/scenarios/poc';
 export * from './sim/scenarios/tau-ceti';
 export * from './sim/config/initial-world';
+
+// hex-kit terrain: classes, kit tile per hexagon, settlement, decor (pure, deterministic)
+export * from './sim/terrain/terrain-types';
+export { generateTerrain, MAX_TREES, MAX_ROCKS, type TerrainOptions } from './sim/terrain/terrain-generator';
+export { buildTileFrames, kitScale, KIT_CORNER_RADIUS, KIT_TOP, type TileFrame } from './sim/terrain/tile-frame';
+export { warpPoint } from './sim/terrain/tile-warp';
+export { ROAD_MASKS, SHORE_MASKS, chooseVariant } from './sim/terrain/tile-variant';
+export { TERRAIN_CONFIG, buildWorldTerrain, type TerrainConfig } from './sim/terrain/world-terrain';

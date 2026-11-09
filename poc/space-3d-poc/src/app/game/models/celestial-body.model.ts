@@ -1,4 +1,5 @@
 import { BodyId } from '../../shared/ids';
+import { TerrainBiome } from '../terrain/terrain-types';
 import { Cost } from './resource.model';
 
 export type BodyKind = 'STAR' | 'PLANET' | 'MOON' | 'ASTEROID';
@@ -23,8 +24,11 @@ export interface CelestialBody {
   /** Minable by a docked ship (asteroids). */
   resources?: Cost;
   color: number;
-  /** Goldberg GP(n,0) surface grid; tiles = 10·n² + 2. Only bodies with a grid can be built on. */
-  surfaceGrid?: { frequency: number; depositSeed?: number };
+  /**
+   * Goldberg GP(n,0) surface grid; tiles = 10·n² + 2. Only bodies with a grid can be built on.
+   * `terrain` dresses the hexagons with hex-kit tiles (pentagons stay plain plates) plus decor.
+   */
+  surfaceGrid?: { frequency: number; depositSeed?: number; terrain?: { biome: TerrainBiome; seed: number } };
   /** Irregular, seeded mesh instead of a sphere (asteroids). */
   shape?: { seed: number; roughness: number };
 }

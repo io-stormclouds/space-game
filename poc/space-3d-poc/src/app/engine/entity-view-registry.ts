@@ -3,7 +3,8 @@ import { StructureKind } from '../game/models/structure.model';
 import { BodyId, RoverId, ShipId } from '../shared/ids';
 import { AsteroidView } from './asteroid-view';
 import { ModelTheme } from './model-registry';
-import { PlanetGridView } from './planet-grid-view';
+import { SurfaceView } from './surface-view';
+import { TerrainDecor } from './terrain-decor';
 import { StructureView } from './structure-view';
 
 export interface BodyView {
@@ -16,7 +17,7 @@ export interface BodyView {
   orbitLine: THREE.LineLoop | null;
   /** Where docked ships sit, in the body's local frame. */
   dockingOffset: THREE.Vector3;
-  grid: PlanetGridView | null;
+  grid: SurfaceView | null;
   asteroid: AsteroidView | null;
   /** One instanced mesh per structure kind. */
   structures: Map<StructureKind, StructureView>;
@@ -26,6 +27,8 @@ export interface BodyView {
   theme: ModelTheme;
   /** Showcase-colony dressing: one instanced mesh per model file (buildings, props, connectors). */
   dressing: Map<string, StructureView>;
+  /** Hex-kit decor (trees, rocks, settlement) of a body with terrain; filled when the kit has loaded. */
+  terrainDecor?: TerrainDecor | null;
 }
 
 export interface ShipView {
