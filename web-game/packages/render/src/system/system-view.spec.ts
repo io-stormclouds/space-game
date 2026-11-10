@@ -475,6 +475,20 @@ describe('SystemView (planet + system kinds, one scene)', () => {
     expect([...owned].filter((r) => !disposed.has(r)).map((r) => r.type)).toEqual([]);
   });
 
+  it('rebuilds the surface when only the terrain style of a body changes (a save from before T8 has none)', () => {
+    const tc = new Simulation(TAU_CETI_SCENARIO);
+    tc.dispatch({ type: 'SCAN_SYSTEM', shipId: ARK_ID }); // surfaces are built once the bodies are revealed
+    while (tc.world.scan.state !== 'DONE') tc.step(0.5);
+    const withTerrain = snapshotOf(tc.world, 'tau-ceti');
+    h = mount(withTerrain, { loadModels: true });
+    h.frames(2);
+    expect(scene(h).bodyParts(TC_C)!.terrain).not.toBeNull();
+    const bodies = tc.world.bodies.map((b) => (b.id === TC_C ? { ...b, surfaceGrid: { ...b.surfaceGrid!, terrain: undefined } } : b));
+    h.input = { ...h.input, snapshot: snapshotOf({ ...tc.world, bodies }, 'tau-ceti') };
+    h.frames(2);
+    expect(scene(h).bodyParts(TC_C)!.terrain).toBeNull();
+  });
+
   it('Tau Ceti c (medieval biome): structures use the medieval models, loaded only for that skin; tc-e keeps Space Base Bits; ghost and picking use the kit', async () => {
     const tc = new Simulation(TAU_CETI_SCENARIO);
     const urls: string[] = [];

@@ -435,7 +435,10 @@ export class SystemScene {
     this.snapshot = snapshot;
     const world = snapshot.world;
     this.world = world;
-    const sig = world.bodies.map((b) => `${b.id}<${b.parentId ?? ''}:${b.kind}`).join('|');
+    // the terrain style is part of the identity: a save from before T8 (no terrain) must rebuild the grids,
+    // so the scene draws the same surface the simulation builds on
+    const terrainOf = (b: CelestialBody): string => (b.surfaceGrid?.terrain ? `~${b.surfaceGrid.terrain.biome}/${b.surfaceGrid.terrain.seed}` : '');
+    const sig = world.bodies.map((b) => `${b.id}<${b.parentId ?? ''}:${b.kind}${terrainOf(b)}`).join('|');
     if (sig !== this.bodySig) this.buildWorld(world.bodies, sig);
 
     this.structureById.clear();
