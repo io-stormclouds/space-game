@@ -575,3 +575,27 @@ Pomiar na innym komputerze niż raport z 2026-11-07 (Ryzen 7 8840HS, Radeon 780M
 - **Zrzuty:** `docs/img/planet-terrain/biome-<ciało>-{orbit,close}.png` dla tc-b, tc-c, tc-d, tc-e, tc-f, Planety Matki i Księżyca (`render/harness/system/shot-biomes.mjs`).
 - **Budżet:** planeta w fokusie 19–129 tys. trójkątów własnych, kadr najwyżej 134 tys.
 - **Zostaje (znane):** na tc-e kilka drzew biomu mixed stoi nad zatoką wody pól brzegowych i wisi ok. 0,4 j.; poprawka zmienia plan dekoru mixed (golden), więc odłożona.
+
+### Weryfikacja końcowa (2026-11-10)
+
+| Bramka | Wynik |
+|---|---|
+| `npx vitest run` (web-game) | 62 pliki, 507 testów |
+| `npm run test:app` | 24 testy |
+| `cargo test --workspace` | 56 testów; wektory 20/20 (70 klasyfikacji terenu), powtórki 9/9 (36 porównań) |
+| Parytet WASM (`packages/wasm-host`) | 23/23 |
+| `npm run e2e` (mock TS, Chrome) | 17/17; przy 6 wątkach 5 testów (`atanor`, `flow` klawisze i szerokość laptopa) przekroczyło 5 s czekania na tym laptopie, w jednym wątku wszystkie przechodzą |
+| `npm run e2e:wasm` (kopia świata w Rust, 2 wątki) | 17/17, w tym Play flow |
+| `npm run perf` (Radeon 780M, 120 Hz) | brak „PRZEKROCZONY”; M planet 161 870, teren-M 193 510, L planet 278 944 trójkątów (UWAGA) i 119 draw calli; pierwsze pobranie 5,1 MB (1,9 MB gzip) przy budżecie 15 MB |
+
+### Decyzje czekające na użytkownika
+
+| ID | Co | Stan |
+|---|---|---|
+| T-15 | wartości kar terenu (las +10 %/+50 %, skała +40 %/+25 %, śnieg +20 %/+40 %, piasek +10 %/+20 %, lód +25 %/+50 %, droga −15 %/−25 %) | wdrożone wg rekomendacji, do strojenia po playteście |
+| T-22 | mapowanie typów budowli na modele (Space Base Bits i skórka medieval) | stykówki w `docs/img/structures/` |
+| T-23 | siła przygaszenia ruin (×0,8, 30 % do szarości) | wdrożone wg rekomendacji |
+| T-7 | grupa `terrain` w tokenach DS | dodana jako propozycja, po akceptacji zrzutów biomów |
+| T-8 | licencja KayKit Medieval (CC0 do potwierdzenia na stronie autora) | akcja użytkownika |
+| T-13 | budżet planety w fokusie 200 tys. | trzymany we wszystkich scenariuszach poza L planet |
+| — | pośredni LOD budowli na ciele w fokusie (L planet) | propozycja w `web-game/docs/PERF-REPORT.md` |
