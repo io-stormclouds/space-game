@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { KENNEY } from '@space-game/domain';
 import type { FetchBytes } from './model-library';
 import { hexKitUrl } from './model-registry';
 
@@ -29,10 +30,13 @@ export function ownBuffer(bytes: ArrayBuffer): ArrayBuffer {
 }
 
 /**
- * Loader for the KayKit Medieval Hexagon subset (`.gltf.glb`, no textures: colour is the material name).
- * Keeps the geometry as plain arrays per material so the terrain layer can warp tiles vertex by vertex
- * and colour them from the palette. Each file is fetched once. Player structures of the medieval skin
- * go through `ModelLibrary` instead, which uses the same `flattenKitScene` + `kitGeometry`.
+ * Loader for the terrain kit: the KayKit Medieval Hexagon subset (`.gltf.glb`) and the Kenney Space Kit
+ * decor (`kenney:<file>` ids, `assets/kenney/<file>.glb`, see `hexKitUrl`). No textures in either: colour
+ * is the material name. Keeps the geometry as plain arrays per material so the terrain layer can warp
+ * tiles vertex by vertex and colour them from the palette. Each file is fetched once. Kenney models are
+ * authored off the origin (their node sits at x = 2, z = 1.5), so they are centred on x/z after loading.
+ * Player structures of the medieval skin go through `ModelLibrary` instead, which uses the same
+ * `flattenKitScene` + `kitGeometry`.
  */
 export class HexKit {
   private readonly loader = new GLTFLoader();
@@ -64,9 +68,33 @@ export class HexKit {
 
   private parse(id: string, bytes: ArrayBuffer): Promise<KitModel> {
     return new Promise((resolve, reject) => {
-      this.loader.parse(ownBuffer(bytes), '', (gltf) => resolve(flattenKitScene(id, gltf.scene)), reject);
+      this.loader.parse(
+        ownBuffer(bytes),
+        '',
+        (gltf) => {
+          const model = flattenKitScene(id, gltf.scene);
+          resolve(id.startsWith(KENNEY) ? centreXZ(model) : model);
+        },
+        reject,
+      );
     });
   }
+}
+
+/** The model moved on x/z so its bounding box is centred on the origin (y kept: the base stays where it is). */
+export function centreXZ(model: KitModel): KitModel {
+  const cx = (model.box.min.x + model.box.max.x) / 2;
+  const cz = (model.box.min.z + model.box.max.z) / 2;
+  if (cx === 0 && cz === 0) return model;
+  for (const part of model.parts) {
+    for (let i = 0; i < part.pos.length; i += 3) {
+      part.pos[i] = part.pos[i]! - cx;
+      part.pos[i + 2] = part.pos[i + 2]! - cz;
+    }
+  }
+  const shift = new THREE.Vector3(-cx, 0, -cz);
+  model.box.translate(shift);
+  return model;
 }
 
 /**

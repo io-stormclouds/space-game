@@ -6,6 +6,7 @@ import {
   TC_E,
   dressTerrain,
   footprintTiles,
+  isNatureDecor,
   shipId as toShipId,
   roverId as toRoverId,
   standingStructure,
@@ -165,7 +166,7 @@ export function terrainColony(sim: Simulation, body: BodyId, count: number, exis
   if (!grid?.terrain) throw new Error(`terrainColony: ${body} has no terrain`);
   const plan = dressTerrain(grid);
   const rules = sim.rules.terrain();
-  const ruins = new Set(plan.decor.filter((d) => !d.model.startsWith('detail_') && d.model !== 'mountain').map((d) => d.tile));
+  const ruins = new Set(plan.decor.filter((d) => !isNatureDecor(d.model)).map((d) => d.tile));
   const used = new Set(existing.filter((s) => s.bodyId === body).flatMap((s) => s.tiles.map(tileIndexOf)));
   const ok = (i: number) => !used.has(i) && !ruins.has(i) && tileBuildable(grid.tiles[i]!, rules);
   // tiles by ring around the centre (breadth-first over neighbours: deterministic)

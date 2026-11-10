@@ -113,7 +113,7 @@ function downloadSize() {
   const initial = new Set([...html.matchAll(/(?:src|href)="([^"]+\.(?:js|css))"/g)].map((m) => m[1]));
   const sum = (list) => list.reduce((s, f) => ({ raw: s.raw + statSync(f).size, gzip: s.gzip + gzipSync(readFileSync(f)).length }), { raw: 0, gzip: 0 });
   const code = files.filter((f) => /\.(js|css|html|woff2?)$/.test(f));
-  const assets = files.filter((f) => /assets[\\/]kaykit/.test(f));
+  const assets = files.filter((f) => /assets[\\/](kaykit|kenney)/.test(f));
   const fontsUsed = code.filter((f) => /jetbrains-mono-latin(-ext)?-(400|500|700)-normal-[A-Z0-9]+\.woff2$/.test(f));
   return {
     initial: sum(code.filter((f) => initial.has(relative(dist, f).replaceAll('\\', '/')))),

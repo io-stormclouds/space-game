@@ -2,14 +2,17 @@
 // Plays the canvas flow on Tau Ceti in the page (MockServer in-thread), renders it through
 // RenderHost and exposes `window.systemHarness` for Playwright (kinds, stats, mount/dispose cycles).
 // `?colony=c`: the colony on Tau Ceti c instead of e (medieval skin, next to the settlement ruins).
+// `?scenario=planeta-matka`: the PoC planet and moon instead of Tau Ceti (biome shots, `shot-biomes.mjs`).
 import { MockServer } from '@space-game/mock-server';
 import type { FrameData, GameSnapshot } from '@space-game/api';
 import {
   ARK_ID,
+  PLANET_ID,
   TC_C,
   TC_E,
   dressTerrain,
   footprintTiles,
+  isNatureDecor,
   standingStructure,
   storageOf,
   tileBuildable,
@@ -30,11 +33,14 @@ const hud = document.getElementById('hud')!;
 
 // ---------------------------------------------------------------- the game: canvas flow on Tau Ceti
 
+const query = new URLSearchParams(location.search);
+/** `?scenario=planeta-matka`: the PoC home planet and its moon (scanned from the start, no colony played). */
+const POC = query.get('scenario') === 'planeta-matka';
+
 const server = new MockServer();
-server.start('tau-ceti', undefined, 60);
+server.start(POC ? 'planeta-matka' : 'tau-ceti', undefined, 60);
 const sim = server.simulation;
 
-const query = new URLSearchParams(location.search);
 /** Body of the colony: Tau Ceti e (default) or c (`?colony=c`, terrain with water and ruins). */
 const COLONY: BodyId = query.get('colony') === 'c' ? TC_C : TC_E;
 
@@ -52,7 +58,7 @@ function ok(cmd: Command, quiet = false): boolean {
  */
 function siteOrder(grid: PlanetGrid, near: number): number[] {
   const plan = grid.terrain ? dressTerrain(grid) : undefined;
-  const ruins = new Set((plan?.decor ?? []).filter((d) => !d.model.startsWith('detail_') && d.model !== 'mountain').map((d) => d.tile));
+  const ruins = new Set((plan?.decor ?? []).filter((d) => !isNatureDecor(d.model)).map((d) => d.tile));
   const c = grid.tiles[near]!.normal;
   const dot = (t: PlanetGrid['tiles'][number]) => t.normal.x * c.x + t.normal.y * c.y + t.normal.z * c.z;
   return grid.tiles
@@ -105,7 +111,7 @@ function playColony(): void {
   runUntil(() => sim.world.structures.some((s) => s.state === 'CONSTRUCTING'), 10);
 }
 // ?arrival: the scenario start (unknown objects before the scan); default: a colony being built
-const arrival = query.has('arrival');
+const arrival = query.has('arrival') || POC;
 if (!arrival) playColony();
 
 /**
@@ -151,7 +157,7 @@ function pushSnapshot(): void {
 const input: ViewInput = {
   snapshot,
   frame,
-  focusBodyId: arrival ? null : COLONY,
+  focusBodyId: POC ? PLANET_ID : arrival ? null : COLONY,
   selection: { kind: 'NONE' },
   hover: null,
   placement: null,

@@ -13,7 +13,7 @@ import { PlanetGrid } from '../models/planet-grid.model';
 import { buildWorldGrids } from '../scenario';
 import { TAU_CETI_BODIES, TC_B, TC_C, TC_D, TC_E, TC_F } from '../scenarios/tau-ceti';
 import { BIOMES } from './terrain-biomes';
-import { MAX_ROCKS, MAX_TREES, generateTerrain } from './terrain-generator';
+import { MAX_GROUND_DECOR, MAX_ROCKS, MAX_TREES, generateTerrain } from './terrain-generator';
 import { TerrainBiome, TerrainConfig, TerrainKind, TerrainPlan } from './terrain-types';
 import { TileFrame, buildTileFrames } from './tile-frame';
 import { ROAD_MASKS, SHORE_MASKS } from './tile-variant';
@@ -31,11 +31,16 @@ const KIT_DIR = resolve(
   '../../../../../apps/game/public/assets/kaykit-hex',
 );
 const KIT_SUFFIX = '.gltf.glb';
-const KIT_FILES = new Set(
-  readdirSync(KIT_DIR)
+/** Kenney Space Kit decor: `kenney:<file>` ids, `assets/kenney/<file>.glb`. */
+const KENNEY_DIR = resolve(KIT_DIR, '../kenney');
+const KIT_FILES = new Set([
+  ...readdirSync(KIT_DIR)
     .filter((f) => f.endsWith(KIT_SUFFIX))
     .map((f) => f.slice(0, -KIT_SUFFIX.length)),
-);
+  ...readdirSync(KENNEY_DIR)
+    .filter((f) => f.endsWith('.glb'))
+    .map((f) => `kenney:${f.slice(0, -'.glb'.length)}`),
+]);
 
 // ---------------------------------------------------------------------------------------------- matrix
 
@@ -172,8 +177,13 @@ function expectNone(failures: string[]): void {
 
 const TREES = new Set(['detail_treeA', 'detail_treeB', 'detail_treeC']);
 const ROCKS = new Set(['detail_rocks', 'detail_rocks_small', 'mountain']);
+/** Kenney Space Kit decor of the dry and winter bodies (T5 phase 3). */
+const CRATERS = new Set(['kenney:crater', 'kenney:craterLarge']);
+const BOULDERS = new Set(['kenney:rock_largeA', 'kenney:rock_largeB']);
+const CRYSTALS = new Set(['kenney:rock_crystals', 'kenney:rock_crystalsLargeA']);
+const isKenney = (model: string): boolean => model.startsWith('kenney:');
 /** Settlement models (everything that is not scattered nature). */
-const isBuilding = (model: string): boolean => !model.startsWith('detail_') && model !== 'mountain';
+const isBuilding = (model: string): boolean => !model.startsWith('detail_') && model !== 'mountain' && !isKenney(model);
 
 /** Classes drawn as a lowered basin (`hex_water`): lakes, frozen lakes, dune hollows and dried lake beds. */
 const BASINS = new Set<TerrainKind>(['water', 'ice', 'dune']);
@@ -654,13 +664,35 @@ describe(`terrain generator properties (${COMBOS.length} combinations)`, () => {
 
   /*
    * Decor: trees on forest (temperate and winter), and in dry a few small trees as bushes (`sm` < 1) on the
-   * ground; mountains and rock piles on rock; small rocks also on the ground in winter and dry. Only models
-   * of the hex kit, within the budget.
+   * ground; mountains and rock piles on rock; small rocks also on the ground in winter and dry. Kenney models
+   * (T5 phase 3) only on dry and winter bodies and only on a plain `hex_forest` tile: crystals on rock (dry,
+   * winter), boulders on rock (winter) or on the ground (dry), craters on the ground (dry). Only models of
+   * the two kits, within the budgets (the Kenney craters and boulders on the ground have their own).
    */
   it('places decor on existing tiles within budget: trees and rocks where the biome puts them, one building per tile', () => {
     const counts: Record<string, number> = {};
     expectNone(
       collect(runs(), ({ grid, plan, biome }, fail) => {
+        let groundDecor = 0;
+        // the render bends each Kenney model onto the sphere once per body: one size per model
+        const size = new Map<string, number>();
+        for (const d of plan.decor) {
+          if (!isKenney(d.model)) continue;
+          const i = d.tile;
+          const k = plan.kinds[i];
+          const s = d.fill * (d.sm ?? 1);
+          if ((size.get(d.model) ?? s) !== s) fail(i, `${d.model} drawn at ${s} and ${size.get(d.model)}`);
+          size.set(d.model, s);
+          if (biome !== 'dry' && biome !== 'winter') fail(i, `${d.model} in ${biome}`);
+          if (plan.variants[i]?.id !== 'hex_forest') fail(i, `${d.model} on ${plan.variants[i]?.id ?? grid.tiles[i]?.kind}`);
+          const onRock = k === 'rock' && (CRYSTALS.has(d.model) || (biome === 'winter' && BOULDERS.has(d.model)));
+          const onGround = biome === 'dry' && k === plan.ground && (CRATERS.has(d.model) || BOULDERS.has(d.model));
+          if (!onRock && !onGround) fail(i, `${d.model} on ${k} in ${biome}`);
+          if (onGround) groundDecor++;
+          const what = CRATERS.has(d.model) ? 'craters' : CRYSTALS.has(d.model) ? 'crystals' : 'boulders';
+          counts[`${biome} ${what}`] = (counts[`${biome} ${what}`] ?? 0) + 1;
+        }
+        if (groundDecor > MAX_GROUND_DECOR) fail(null, `${groundDecor} craters and boulders on the ground > ${MAX_GROUND_DECOR}`);
         const buildingOn = new Map<number, string>();
         for (const d of plan.decor) {
           if (!isBuilding(d.model)) continue;
@@ -688,20 +720,32 @@ describe(`terrain generator properties (${COMBOS.length} combinations)`, () => {
             const onGround = d.model === 'detail_rocks_small' && k === plan.ground && (biome === 'winter' || biome === 'dry');
             if (onGround) counts[`${biome} ground rocks`] = (counts[`${biome} ground rocks`] ?? 0) + 1;
             if (k !== 'rock' && !onGround) fail(i, `${d.model} on ${k} in ${biome}`);
+          } else if (isKenney(d.model)) {
+            if (k === 'rock') rocks++; // crystals and winter boulders take the place of a rock pile
           } else if (grid.tiles[i].kind !== 'HEX' || grid.tiles[i].deposit) {
             fail(i, `${d.model} on ${grid.tiles[i].kind} deposit=${!!grid.tiles[i].deposit}`);
           }
-          if ((TREES.has(d.model) || ROCKS.has(d.model)) && (plan.road.has(i) || buildingOn.has(i)))
-            fail(i, `${d.model} on a road or under ${buildingOn.get(i)}`);
-          if ((TREES.has(d.model) || ROCKS.has(d.model)) && grid.tiles[i].deposit) fail(i, `${d.model} on a deposit`);
+          const nature = TREES.has(d.model) || ROCKS.has(d.model) || isKenney(d.model);
+          if (nature && (plan.road.has(i) || buildingOn.has(i))) fail(i, `${d.model} on a road or under ${buildingOn.get(i)}`);
+          if (nature && grid.tiles[i].deposit) fail(i, `${d.model} on a deposit`);
         }
         if (trees > MAX_TREES) fail(null, `${trees} trees > ${MAX_TREES}`);
-        if (rocks > MAX_ROCKS) fail(null, `${rocks} rocks and mountains > ${MAX_ROCKS}`);
+        if (rocks > MAX_ROCKS) fail(null, `${rocks} rocks, mountains and crystals > ${MAX_ROCKS}`);
+        // one scattered model per tile, except the 2–3 trees of a forest tile
+        const scattered = new Map<number, string[]>();
+        for (const d of plan.decor) if (!isBuilding(d.model)) scattered.set(d.tile, [...(scattered.get(d.tile) ?? []), d.model]);
+        for (const [i, models] of scattered) if (models.length > 1 && !models.every((m) => TREES.has(m))) fail(i, `${models} on one tile`);
       }),
     );
     expect(counts['dry bush']).toBeGreaterThan(0);
     expect(counts['dry ground rocks']).toBeGreaterThan(0);
     expect(counts['winter ground rocks']).toBeGreaterThan(0);
+    expect(counts['dry craters']).toBeGreaterThan(0);
+    expect(counts['dry boulders']).toBeGreaterThan(0);
+    expect(counts['dry crystals']).toBeGreaterThan(0);
+    expect(counts['winter crystals']).toBeGreaterThan(0);
+    expect(counts['winter boulders']).toBeGreaterThan(0);
+    expect(counts['mixed craters'] ?? 0).toBe(0);
   });
 
   /*

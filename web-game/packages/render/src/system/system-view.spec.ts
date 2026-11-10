@@ -775,7 +775,7 @@ describe('SystemView (planet + system kinds, one scene)', () => {
     // before the scan no body shows a grid: only Space Base Bits are loaded, nothing from the hex kit
     expect(s.kit.isLoaded('basemodule_A')).toBe(true);
     expect(s.kit.isLoaded('house')).toBe(false);
-    expect(urls.filter((u) => u.includes('kaykit-hex/'))).toEqual([]);
+    expect(urls.filter((u) => u.includes('kaykit-hex/') || u.includes('kenney/'))).toEqual([]);
 
     tc.dispatch({ type: 'SCAN_SYSTEM', shipId: ARK_ID });
     while (tc.world.scan.state !== 'DONE') tc.step(0.5);

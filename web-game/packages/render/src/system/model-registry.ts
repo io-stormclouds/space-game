@@ -1,4 +1,4 @@
-import type { CelestialBody, StructureKind } from '@space-game/domain';
+import { KENNEY, type CelestialBody, type StructureKind } from '@space-game/domain';
 
 /**
  * Which KayKit model stands for what, and how it is fitted to the surface.
@@ -424,8 +424,12 @@ export function baseLift(spec: ModelSpec, scale: number): number {
 
 const slash = (assetsBase: string) => (assetsBase === '' || assetsBase.endsWith('/') ? assetsBase : `${assetsBase}/`);
 
-/** `${base}kaykit-hex/<id>.gltf.glb` (Medieval Hexagon); `base` is the app's assets base ('assets/' or '/assets/'). */
+/**
+ * File of a terrain kit id: `${base}kaykit-hex/<id>.gltf.glb` (Medieval Hexagon), or for a `kenney:<file>`
+ * decor id `${base}kenney/<file>.glb` (Kenney Space Kit, CC0); `base` is the app's assets base ('assets/' or '/assets/').
+ */
 export function hexKitUrl(assetsBase: string, id: string): string {
+  if (id.startsWith(KENNEY)) return `${slash(assetsBase)}kenney/${id.slice(KENNEY.length)}.glb`;
   return `${slash(assetsBase)}kaykit-hex/${id}.gltf.glb`;
 }
 

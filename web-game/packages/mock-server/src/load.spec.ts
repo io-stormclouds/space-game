@@ -1,4 +1,4 @@
-import { TC_C, computeEconomy, dressTerrain, tileIndexOf } from '@space-game/domain';
+import { TC_C, computeEconomy, dressTerrain, isNatureDecor, tileIndexOf } from '@space-game/domain';
 import { LOAD_SPECS, buildLoad } from './load';
 import { MockServer } from './server';
 
@@ -39,7 +39,7 @@ describe('load scenarios (F5)', () => {
     for (const [t, d] of ring) for (const n of grid.tiles[t]!.neighbors) if (!ring.has(n)) ring.set(n, d + 1);
     const tiles = colony.flatMap((s) => s.tiles.map(tileIndexOf));
     expect(Math.max(...tiles.map((t) => ring.get(t)!))).toBeLessThanOrEqual(5);
-    const ruins = new Set(plan.decor.filter((d) => !d.model.startsWith('detail_') && d.model !== 'mountain').map((d) => d.tile));
+    const ruins = new Set(plan.decor.filter((d) => !isNatureDecor(d.model)).map((d) => d.tile));
     expect(tiles.filter((t) => ruins.has(t))).toEqual([]);
     const all = w.structures.filter((s) => s.bodyId === TC_C).flatMap((s) => s.tiles);
     expect(new Set(all).size).toBe(all.length);

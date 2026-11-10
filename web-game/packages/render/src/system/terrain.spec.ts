@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import * as THREE from 'three';
-import { TAU_CETI_BODIES, TC_C, buildWorldGrids, dressTerrain, type TerrainPlan } from '@space-game/domain';
+import { INITIAL_BODIES, TAU_CETI_BODIES, TC_C, TC_D, TC_F, buildWorldGrids, dressTerrain, type TerrainPlan } from '@space-game/domain';
 import { HemisphereCuller } from './hemisphere-culler';
 import { HexKit, hexKitUrl, type KitModel } from './hex-kit';
 import { LOD_TREE, TerrainDecor } from './terrain-decor';
@@ -50,6 +50,90 @@ describe('HexKit', () => {
     const ids = idsOf(plan);
     const models = await new HexKit('assets/', fromDisk).loadAll(ids);
     expect(models.size).toBe(ids.size);
+  });
+
+  it('loads the Kenney decor (`kenney:<file>`) from assets/kenney, centred on x/z with the base on y = 0', async () => {
+    expect(hexKitUrl('assets/', 'kenney:crater')).toBe('assets/kenney/crater.glb');
+    expect(hexKitUrl('/assets', 'kenney:rock_largeA')).toBe('/assets/kenney/rock_largeA.glb');
+    const kit = new HexKit('assets/', fromDisk);
+    const want: Record<string, number> = { crater: 60, craterLarge: 60, rock_largeA: 176, rock_largeB: 172, rock_crystals: 364, rock_crystalsLargeA: 384 };
+    for (const [file, triangles] of Object.entries(want)) {
+      const m = await kit.load(`kenney:${file}`);
+      expect(m.triangles, file).toBe(triangles);
+      // authored at x = 2, z = 1.5: centred so the tile frame puts it in the middle of the tile
+      expect(Math.abs(m.box.min.x + m.box.max.x), file).toBeLessThan(1e-6);
+      expect(Math.abs(m.box.min.z + m.box.max.z), file).toBeLessThan(1e-6);
+      expect(Math.abs(m.box.min.y), file).toBeLessThan(1e-3);
+      const xs = m.parts.flatMap((p) => Array.from(p.pos.filter((_, i) => i % 3 === 0)));
+      expect(Math.min(...xs)).toBeCloseTo(m.box.min.x, 5);
+    }
+  });
+
+  it('has a file for every id the plans of all terrain bodies use', async () => {
+    const all = new Set<string>();
+    for (const [, g] of [...buildWorldGrids(INITIAL_BODIES), ...grids]) if (g.terrain) for (const id of idsOf(dressTerrain(g))) all.add(id);
+    expect([...all].filter((id) => id.startsWith('kenney:')).length).toBeGreaterThan(3);
+    const models = await new HexKit('assets/', fromDisk).loadAll(all);
+    expect(models.size).toBe(all.size);
+  });
+});
+
+describe('TerrainDecor on the dry and winter bodies (T5)', () => {
+  const colourOf = (decor: TerrainDecor, id: string, kit: ReadonlyMap<string, KitModel>, mat: string): number => {
+    const mesh = decor.group.children.find((o) => o.name === `Decor_${id}`) as THREE.InstancedMesh;
+    const color = mesh.geometry.getAttribute('color');
+    let v = 0;
+    for (const part of kit.get(id)!.parts) {
+      if (part.mat === mat) return new THREE.Color(color.getX(v), color.getY(v), color.getZ(v)).getHex();
+      v += part.pos.length / 3;
+    }
+    throw new Error(`${id} has no ${mat}`);
+  };
+
+  it('Tau Ceti d (dry regolith): craters in the ground tone stand on their tiles, crystals on rock; bushes olive', async () => {
+    const g = grids.get(TC_D)!;
+    const p = dressTerrain(g);
+    const kit = await new HexKit('assets/', fromDisk).loadAll(idsOf(p));
+    const view = new TerrainView(g, p);
+    const decor = new TerrainDecor(g, p, view.frames, kit);
+    expect(decor.instances).toBe(p.decor.length);
+    const craters = p.decor.filter((d) => d.model.startsWith('kenney:crater'));
+    expect(craters.length).toBeGreaterThan(5);
+    expect(colourOf(decor, 'kenney:crater', kit, 'rock')).toBe(new THREE.Color(TONE.regolith).getHex());
+    expect(colourOf(decor, 'detail_treeA', kit, 'GreenDark')).toBe(new THREE.Color(TONE.olive).getHex());
+    // a crater instance sits on its tile: its base at the body radius, its centre over the tile centre
+    const mesh = decor.group.children.find((o) => o.name === 'Decor_kenney:craterLarge') as THREE.InstancedMesh;
+    const first = p.decor.find((d) => d.model === 'kenney:craterLarge')!;
+    const m = new THREE.Matrix4();
+    mesh.getMatrixAt(decor.slotsOn(first.tile).find((s) => s.mesh === mesh.name)!.slot, m);
+    const pos = new THREE.Vector3().setFromMatrixPosition(m);
+    const n = g.tiles[first.tile]!.normal;
+    expect(pos.length()).toBeCloseTo(g.radius, 2);
+    expect(pos.clone().normalize().dot(new THREE.Vector3(n.x, n.y, n.z))).toBeGreaterThan(0.9999);
+    // the Kenney models are cheap: the whole decor stays below the old KayKit-only budget
+    expect(decor.triangles).toBeLessThan(60000);
+    decor.dispose();
+    view.dispose();
+  });
+
+  it('Tau Ceti f (winter): crowns in the ice tone, darker trunks', async () => {
+    const g = grids.get(TC_F)!;
+    const p = dressTerrain(g);
+    const kit = await new HexKit('assets/', fromDisk).loadAll(idsOf(p));
+    const view = new TerrainView(g, p);
+    const decor = new TerrainDecor(g, p, view.frames, kit);
+    expect(colourOf(decor, 'detail_treeA', kit, 'GreenDark')).toBe(new THREE.Color(TONE.ice).getHex());
+    expect(colourOf(decor, 'detail_treeA', kit, 'BrownDark')).toBe(new THREE.Color(objectTone('BrownDark', p)).getHex());
+    expect(objectTone('BrownDark', p)).not.toBe(objectTone('BrownDark'));
+    // the LOD trees share the crowns
+    decor.setLod(true);
+    const lod = decor.group.children.find((o) => o.name === 'Decor_lod_trees') as THREE.InstancedMesh;
+    const c = lod.geometry.getAttribute('color');
+    const crowns = new Set<number>();
+    for (let i = 0; i < c.count; i++) crowns.add(new THREE.Color(c.getX(i), c.getY(i), c.getZ(i)).getHex());
+    expect(crowns.has(new THREE.Color(TONE.ice).getHex())).toBe(true);
+    decor.dispose();
+    view.dispose();
   });
 });
 
@@ -335,6 +419,6 @@ describe('ruin tones (T-23)', () => {
 
   it('treats settlement models as ruins, not trees, rocks or mountains', () => {
     for (const id of ['castle', 'house', 'farm_plot', 'mill', 'well', 'watchtower']) expect(isRuinBuilding(id), id).toBe(true);
-    for (const id of ['detail_treeA', 'detail_rocks', 'detail_rocks_small', 'mountain']) expect(isRuinBuilding(id), id).toBe(false);
+    for (const id of ['detail_treeA', 'detail_rocks', 'detail_rocks_small', 'mountain', 'kenney:crater', 'kenney:rock_crystals']) expect(isRuinBuilding(id), id).toBe(false);
   });
 });

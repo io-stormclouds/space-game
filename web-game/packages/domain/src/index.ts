@@ -60,7 +60,18 @@ export {
   type SettlementRings,
   type TerrainClassification,
 } from './sim/terrain/terrain-classify';
-export { generateTerrain, dressTerrain, MAX_TREES, MAX_ROCKS, type TerrainOptions } from './sim/terrain/terrain-generator';
+export {
+  generateTerrain,
+  dressTerrain,
+  isKenneyModel,
+  isNatureDecor,
+  KENNEY,
+  KENNEY_DECOR,
+  MAX_GROUND_DECOR,
+  MAX_TREES,
+  MAX_ROCKS,
+  type TerrainOptions,
+} from './sim/terrain/terrain-generator';
 export { scaleCost, scaleTime, siteTerrain, tileBuildable, tileTerrain, type SiteTerrain, type TileTerrain } from './sim/terrain/terrain-rules';
 export { buildTileFrames, kitScale, KIT_CORNER_RADIUS, KIT_TOP, type TileFrame } from './sim/terrain/tile-frame';
 export { warpPoint } from './sim/terrain/tile-warp';

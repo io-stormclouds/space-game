@@ -1,11 +1,9 @@
 import * as THREE from 'three';
-import { hash3, type DecorItem, type PlanetGrid, type TerrainPlan, type TileFrame } from '@space-game/domain';
+import { hash3, isKenneyModel, type DecorItem, type PlanetGrid, type TerrainPlan, type TileFrame } from '@space-game/domain';
 import { drawnInstances } from './buffers';
 import { CulledInstances, type HemisphereCuller } from './hemisphere-culler';
 import { kitGeometry, type KitModel } from './hex-kit';
 import { isRuinBuilding, objectTone, ruinTone } from './terrain-tones';
-
-const ruinObjectTone = (mat: string): number => ruinTone(objectTone(mat));
 
 /** Tree model drawn for every tree in the LOD band (the cheapest of the three, 287 triangles). */
 export const LOD_TREE = 'detail_treeA';
@@ -13,6 +11,33 @@ export const LOD_TREE = 'detail_treeA';
 export const LOD_TREE_KEEP = 0.5;
 
 export const isTree = (model: string): boolean => model.startsWith('detail_tree');
+
+/** Lift of the Kenney models above the tile surface [tile widths]: keeps a crater floor out of the ground's depth. */
+export const KENNEY_LIFT = 0.004;
+
+/** Model → body scale of a decor item: `fill` of the tile width over the model's footprint, times `sm`. */
+const scaleOf = (d: DecorItem, model: KitModel, tileWidth: number): number => ((tileWidth * d.fill) / Math.max(model.size.x, model.size.z)) * (d.sm ?? 1);
+
+/**
+ * Bends a flat-based model (model units, base on y = 0, centred on x/z) onto a sphere of radius `R` (body units)
+ * for the scale `s` it is drawn at: every vertex drops by the sphere's sag at its distance from the axis, so the
+ * base follows the curved tile instead of touching it only in the middle; then everything rises by `lift`
+ * (body units). Every instance of a Kenney model on one body has the same `fill`, so one bent geometry fits all.
+ */
+export function bendToSphere(geometry: THREE.BufferGeometry, R: number, s: number, lift = 0): void {
+  const p = geometry.getAttribute('position') as THREE.BufferAttribute;
+  const Rm = R / s;
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i);
+    const z = p.getZ(i);
+    const r2 = Math.min(x * x + z * z, Rm * Rm);
+    p.setY(i, p.getY(i) - (Rm - Math.sqrt(Rm * Rm - r2)) + lift / s);
+  }
+  p.needsUpdate = true;
+  geometry.computeVertexNormals();
+  geometry.computeBoundingBox();
+  geometry.computeBoundingSphere();
+}
 
 /** One model's instances: the mesh draws the culled, compacted `set`. */
 interface DecorMesh {
@@ -29,9 +54,11 @@ interface Slot {
 
 /**
  * Trees, rocks and the settlement as instanced meshes, one per model. Every instance stands on its tile,
- * turned to the tile frame. Settlement buildings are ruins in faded tones (`ruinTone`, T-23), trees,
- * rocks and mountains keep theirs. `setHidden(tiles)` hides everything on the given tiles (a structure stands
- * there) and restores it when a tile leaves the set (the structure was demolished).
+ * turned to the tile frame. Colours come from `objectTone` with the plan's biome and ground (winter crowns in
+ * ice, dry bushes olive, Kenney craters in the ground's tone); settlement buildings are ruins in faded tones
+ * (`ruinTone`, T-23), trees, rocks, mountains, craters and crystals keep theirs. `setHidden(tiles)` hides
+ * everything on the given tiles (a structure stands there) and restores it when a tile leaves the set (the
+ * structure was demolished).
  *
  * T4: with the body's culler only instances in the camera's visible cap are drawn (`recull` each frame), and in
  * the LOD band (`setLod`, the scene decides by apparent radius) every tree is drawn as `LOD_TREE`, about half of
@@ -64,6 +91,8 @@ export class TerrainDecor {
     private readonly culler: HemisphereCuller | null = null,
   ) {
     this.group.name = `${grid.bodyId}_TerrainDecor`;
+    const tone = (mat: string): number => objectTone(mat, plan);
+    const ruinObjectTone = (mat: string): number => ruinTone(objectTone(mat, plan));
     const tileWidth = grid.tileEdge * Math.sqrt(3);
     const R = grid.radius;
     const byModel = new Map<string, DecorItem[]>();
@@ -85,7 +114,7 @@ export class TerrainDecor {
     /** Model → body matrix of a decor item drawn as `model`, turned by its yaw (`n`: its index among its model's). */
     const place = (d: DecorItem, n: number, model: KitModel, out: THREE.Matrix4): number => {
       const f = frames[d.tile]!;
-      const s = ((tileWidth * d.fill) / Math.max(model.size.x, model.size.z)) * (d.sm ?? 1);
+      const s = scaleOf(d, model, tileWidth);
       X.set(f.x.x, f.x.y, f.x.z);
       Y.set(f.y.x, f.y.y, f.y.z);
       Z.set(f.z.x, f.z.y, f.z.z);
@@ -112,7 +141,9 @@ export class TerrainDecor {
       const model = kit.get(id);
       if (!model) continue;
       // settlement buildings are ruins: faded, so the player's own (full-tone) buildings stand out
-      const geometry = kitGeometry(model, isRuinBuilding(id) ? ruinObjectTone : objectTone);
+      const geometry = kitGeometry(model, isRuinBuilding(id) ? ruinObjectTone : tone);
+      // a flat Kenney crater as wide as the tile would float at its rim on the curved tile: bend it onto the sphere
+      if (isKenneyModel(id)) bendToSphere(geometry, R, scaleOf(items[0]!, model, tileWidth), tileWidth * KENNEY_LIFT);
       const mesh = new THREE.InstancedMesh(geometry, this.material, items.length);
       mesh.name = `Decor_${id}`;
       mesh.frustumCulled = false; // instances span the whole sphere; the bounding sphere is the model's
@@ -138,7 +169,7 @@ export class TerrainDecor {
     const treeCount = trees.reduce((n, [, items]) => n + items.length, 0);
     if (lodModel && treeCount > 0) {
       const shared = this.parts.find((p) => p.id === LOD_TREE)?.mesh.geometry;
-      const mesh = new THREE.InstancedMesh(shared ?? kitGeometry(lodModel, objectTone), this.material, treeCount);
+      const mesh = new THREE.InstancedMesh(shared ?? kitGeometry(lodModel, tone), this.material, treeCount);
       mesh.name = 'Decor_lod_trees';
       mesh.frustumCulled = false;
       mesh.visible = false;
