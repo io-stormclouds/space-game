@@ -566,3 +566,12 @@ Biomy, nowe rodzaje (`Sand`, `Dune`, `Ice`, `Regolith`), `TerrainBasin`/`Terrain
 | teren-M planet-far | 74 → 41 | 453 252 → 195 253 |
 
 Pomiar na innym komputerze niż raport z 2026-11-07 (Ryzen 7 8840HS, Radeon 780M, ekran 120 Hz): FPS 120 wszędzie (vsync), więc o budżecie decydują trójkąty i draw calle. Nigdzie nie ma „PRZEKROCZONY”. Powyżej 200 tys. zostaje tylko L planet: pełne modele budowli (140 tys.) i jednostek (49 tys.) na Tau Ceti e w fokusie. Dalej (zadania w `web-game/docs/PERF-REPORT.md`): pośredni LOD budowli na ciele w fokusie albo lżejsze modele. `BatchedMesh` i podział siatki terenu nie są potrzebne (≤ 112 draw calli, teren ≤ 53 tys. trójkątów w 1 draw callu).
+
+### T5 etap 3 (render): wykonany (2026-11-10)
+
+- **Dekor Kenney** (CC0, `apps/game/public/assets/kenney/`, 6 modeli, 89 KB): kratery, głazy i kryształy na ciałach dry (tc-d: 35 kraterów, 5 kryształów, 4 głazy; tc-b: 8 / 2 / 10; Księżyc: 9 / 5 / 1) i rzadkie kryształy na skałach tc-f. Id z prefiksem `kenney:`, modele wycentrowane i dogięte do sfery (płaskie kratery wisiały na krawędzi zakrzywionych pól), osobny limit `MAX_GROUND_DECOR` = 60.
+- **Tony obiektów:** zimą korony drzew w tonie lodu i ciemne pnie, na suchych ciałach oliwkowe krzewy; materiały Kenney według gruntu ciała. Mixed i medieval bez zmian (golden).
+- **Design system:** grupa tokenów `terrain` w `design-system/src/tokens/design-tokens.ts` (`--hud-terrain-*`), test zgodności z `terrain-tones.ts`. To propozycja T-7 czekająca na akceptację zrzutów.
+- **Zrzuty:** `docs/img/planet-terrain/biome-<ciało>-{orbit,close}.png` dla tc-b, tc-c, tc-d, tc-e, tc-f, Planety Matki i Księżyca (`render/harness/system/shot-biomes.mjs`).
+- **Budżet:** planeta w fokusie 19–129 tys. trójkątów własnych, kadr najwyżej 134 tys.
+- **Zostaje (znane):** na tc-e kilka drzew biomu mixed stoi nad zatoką wody pól brzegowych i wisi ok. 0,4 j.; poprawka zmienia plan dekoru mixed (golden), więc odłożona.
