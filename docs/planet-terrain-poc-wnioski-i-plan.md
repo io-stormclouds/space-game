@@ -523,3 +523,24 @@ Na ciałach z biomem `medieval` (dziś Tau Ceti c) budowle gracza stoją jako mo
 - **UI:** wiersz „Teren” w panelu pola, cena i czas po terenie w karcie ustawiania, slotach i katalogu otwartym z pola; aplikacja nie importuje logiki domeny (reguła F2), więc zaokrąglenie jest powtórzone w `format.ts` i sprawdzane testem przeciw `previewBuild` mocka.
 - **Render:** `TERRAIN_CONFIG` i `buildWorldTerrain` usunięte, render ubiera siatki z `terrain`.
 - **Odstępstwo od §9.4:** `fabryka` też wymaga ponownego nagrania (świat zawiera ciało Tau Ceti c), a nie tylko pola `source`.
+- **Recenzja TS ↔ Rust (krok F):** bez rozbieżności i bez błędu wyniku gry. Poprawione dwa błędy UI: katalog otwarty z pola włączał wiersze według ceny katalogowej zamiast ceny na polu; render nie przebudowywał siatek, gdy zmieniał się tylko styl terenu (zapis sprzed T8). Luki w pokryciu: powtórka `teren` nie ma rozbiórki, ulepszenia ani śniegu (ulepszenie bez `timePct` sprawdza test TS).
+
+### T8: część Rust wykonana (2026-11-09)
+
+`classify_terrain` zgodny z TS bit w bit od pierwszego przebiegu; reguły, port kosmiczny, `time_pct`, `load.rs` i `game-session` jak w TS. Nowa powtórka `teren` (port na wodzie odrzucony, ceny i czasy po terenie, zwrot 75 % ceny po terenie). `cargo test` 54/54, wektory 20/20 (w tym 21 klasyfikacji), powtórki 9/9, parytet WASM 22/22 (w tym `tileInfo` na wszystkich 252 polach Tau Ceti c).
+
+### T5 etap 1 (TS): wykonany (2026-11-10)
+
+| Ciało | `surfaceGrid.terrain` | Udziały klas |
+|---|---|---|
+| Planeta Matka (PoC) | `{biome: mixed, seed: 7, landingCap: 0.9}` | trawa, woda ok. 23 %, las, śnieg, skała; strefa lądowania trawiasta |
+| Księżyc (PoC) | `{biome: dry, seed: 8, ground: regolith}` | regolit 80 %, skała 19 %, wydma 1 % |
+| Tau Ceti b | `{biome: dry, seed: 3}` | piasek 70 %, skała 21 %, wydma 10 % |
+| Tau Ceti c | `{biome: medieval, seed: 2, basin: dune}` | trawa 48 %, las 21 %, wyschnięte jeziora (wydma) 17 %, śnieg 9 %, skała 5 % |
+| Tau Ceti d | `{biome: dry, seed: 4, ground: regolith}` | regolit 81 %, skała 14 %, wydma 5 % |
+| Tau Ceti e (start) | `{biome: mixed, seed: 5, basinLevel: 0.39, landingCap: 0.6}` | woda 14,6 %; strefa n.y > 0,6 (129 pól) w całości trawą, więc port pierwszej sesji kosztuje tyle, co w kanwie |
+| Tau Ceti f | `{biome: winter, seed: 6}` | śnieg 56 %, lód 30 %, las 10 %, skała 4 % |
+
+- Tabela biomów (`terrain-biomes.ts`) zamiast flagi `settle`; nowe rodzaje: piasek 110/120, wydma niebudowalna, lód 125/150, regolit 100/100. Wydma i lód używają geometrii basenu wody; w biomie dry nie ma przejść.
+- Odstępstwo: strefa lądowania to próg szerokości (`landingCap`), nie pierścienie wokół szczytu (siatki n = 3 i 5 mają remis najwyższego `normal.y`, który Rust mógłby rozstrzygnąć inaczej). Cała strefa jest zwykłym gruntem, nie tylko bez wody: szczyt tc-e leży w czapie śniegu, a port na śniegu kosztowałby ×1,2–1,4.
+- Testy właściwości: 854 kombinacje, margines progów 1,48e-6 (n.y/landingCap 8,9e-4). Scenariusz L ma 1400 budowli zamiast 1500, bo z terenem na wszystkich ciałach budowalnych jest ok. 1690 pól.
