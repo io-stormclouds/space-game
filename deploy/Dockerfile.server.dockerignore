@@ -1,0 +1,4 @@
+# Build context of Dockerfile.server (the repository root): only the server's sources.
+*
+!server/
+server/target/

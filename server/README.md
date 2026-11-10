@@ -137,6 +137,20 @@ Zrobione:
   - Sprawdzają to:
     - test `restored_world_is_the_replay_of_its_log`: świat odtworzony obiema drogami równa się żywemu światu;
     - test WebSocket z restartem serwera (`tests/ws.rs`).
+- **PostgreSQL (R-26, 2026-11-10):**
+  - `DATABASE_URL` przenosi do bazy konta, sesje, światy (migawka i dziennik) i stan rynku (`src/storage.rs`, `tokio-postgres`); bez tej zmiennej zostają pliki w `DATA_DIR`.
+  - Migracje leżą w `migrations/` i stosują się przy starcie, każda raz (`schema_migrations`).
+  - Dane to JSON w kolumnach `json`, bez zmian tekstu, więc liczby wracają bit w bit. Tabele: `accounts`, `sessions`, `world_snapshots`, `world_log`, `galaxy_state`.
+  - Nowa migawka czyści dziennik świata w tym samym poleceniu.
+  - Wątki I/O światów i rynku wykonują zapytania na runtime serwera (`Handle::block_on`). Nic, co czeka na zapis, nie blokuje wątku runtime: zamknięcie czeka na rynek asynchronicznie.
+  - Utrata połączenia kończy proces, a nadzorca (`restart: unless-stopped`) go wznawia.
+  - Test `the_server_on_postgres_survives_a_restart` (`tests/ws.rs`) działa przy `TEST_DATABASE_URL`, każdy przebieg we własnym schemacie; bez tej zmiennej jest pomijany. Po restarcie serwera na tej samej bazie wracają:
+    - konto i sesja z ciasteczka;
+    - świat z rozkazami;
+    - rynek z przesyłką w hubie;
+    - a w plikach nie ma nic.
+
+    Na tym komputerze: kontener `postgres:16-alpine` na `127.0.0.1:55432`, przebieg 1,9 s.
 - **Limity i awarie:**
   - Każde połączenie ma wiadro żetonów: `MAX_REQUESTS_PER_SECOND` (20/s, chwilowo do 40). Nadmiar dostaje odpowiedź z błędem „za dużo żądań”, a połączenie zostaje; `resync` kosztuje 10 żetonów.
   - Profil `release` ma `panic = unwind` (R-19). Panika kończy tylko zadanie świata; jego klienci są rozłączani, a następne połączenie odtwarza świat z dysku.
@@ -161,12 +175,18 @@ Zrobione:
   - `remote`, 2 workery (jak w CI), po przeniesieniu argon2 poza wątki runtime: **17 z 17** (1,8 min).
   - Przechodzą wszystkie testy panelu projektanta F6 (tabele ekonomii, przepływy, powtórka gry, eksport i import zapisu): liczy je kopia w kliencie, tym samym kodem co serwer.
 - **Logowanie:** argon2 liczy się w puli `spawn_blocking`, poza blokadą kont, więc logowanie nie wstrzymuje ticków światów ani innych logowań.
-- **`deploy/`:** `Dockerfile` serwera i `docker-compose.yml` (serwer + Caddy ze statycznym klientem). **Nie uruchamiane na tym komputerze**, bo Docker Desktop jest wyłączony. Obraz klienta musi teraz zawierać moduł WASM.
+- **`deploy/`:** `Dockerfile.server` (kontekst tylko `server/`, przez `Dockerfile.server.dockerignore`) i `docker-compose.yml`: PostgreSQL 17, serwer i Caddy ze statycznym klientem; Caddy wystawia `/ws`, `/api` i `/health`, a nie `/metrics`. **Uruchomione 2026-11-10 na tym komputerze** (Docker Desktop 27):
+  - komenda: `POSTGRES_PASSWORD=… HTTP_PORT=8088 docker compose -p space-game -f deploy/docker-compose.yml up -d --build`;
+  - obraz serwera (distroless) ma 30,5 MB, build w kontenerze trwa 1,5 min;
+  - serwer startuje na PostgreSQL w trybie produkcyjnym, a migracja 1 stosuje się sama;
+  - `e2e/login.spec.ts` z `E2E_BASE_URL=http://localhost:8088` (projekt `chromium-remote`, bez `ng serve`) przechodzi na tym stosie: rejestracja, gra, wylogowanie, zły kod, logowanie;
+  - po teście w bazie jest konto, sesja, migawka świata i stan rynku;
+  - `docker compose restart game-server` kończy serwer łagodnie, bo obsługuje SIGTERM (przedtem tylko Ctrl-C).
 
-Zmienne: `ADDR` (127.0.0.1:8080), `DATA_DIR` (./data), `DEV_MODE`, `WORLD_STEP_SECONDS` (1; dev 1/60), `SNAPSHOT_SECONDS` (60), `IDLE_SECONDS` (300), `OFFLINE_LIMIT_HOURS` (12), `MAX_REQUESTS_PER_SECOND` (20). Konta i sesje: `REGISTRATION`, `GUEST_ACCOUNTS`, `PASSWORD_HELLO`, `COOKIE_SECURE`, `SESSION_DAYS`, `SIGNUPS_PER_MINUTE`, `METRICS_TOKEN`.
+Zmienne: `ADDR` (127.0.0.1:8080), `DATA_DIR` (./data), `DEV_MODE`, `WORLD_STEP_SECONDS` (1; dev 1/60), `SNAPSHOT_SECONDS` (60), `IDLE_SECONDS` (300), `OFFLINE_LIMIT_HOURS` (12), `MAX_REQUESTS_PER_SECOND` (20). Konta i sesje: `REGISTRATION`, `GUEST_ACCOUNTS`, `PASSWORD_HELLO`, `COOKIE_SECURE`, `SESSION_DAYS`, `SIGNUPS_PER_MINUTE`, `METRICS_TOKEN`. Baza: `DATABASE_URL`.
 
 Brakuje względem planu 02 §11 B4 (następne kroki):
-- PostgreSQL (`sqlx`, migracje, tabele z §7) zamiast plików. Interfejs `WorldRepository` jest gotowy, adapter plikowy działa.
+- Osobne tabele zleceń, przesyłek i korporacji z transakcjami SQL (plan §7–§8), gdy rynek wyjdzie poza jeden węzeł; dziś cały stan rynku to jeden wiersz `galaxy_state`. Kompresja migawek (zstd) po pomiarze.
 - Zmiana hasła, e-mail i reset kodu (06-PANEL); limit logowań po adresie IP (za Caddy potrzebny zaufany `X-Forwarded-For`).
 - MessagePack (R-3, odłożony) i kompresja `reset` dla dużych światów, po pomiarze.
 
@@ -175,6 +195,7 @@ Brakuje względem planu 02 §11 B4 (następne kroki):
 - Rust 1.99.1 z rustup, toolchain `stable-x86_64-pc-windows-gnu`, bo nie ma tu MSVC Build Tools.
 - `cargo` leży w `%USERPROFILE%\.cargo\bin`. PATH nie był zmieniany; skrypty `web-game` szukają `cargo` w tym katalogu.
 - Toolchain `gnu` bez MinGW nie ma `dlltool`, a wymagają go crate'y z `windows-link` (`raw-dylib`). Dlatego `Cargo.lock` przypina wersje oparte na `windows-sys 0.59` / `windows-targets`: `tokio 1.47.1`, `mio 1.0.4`, `socket2 0.6.0`, `getrandom 0.2.15` i `0.3.1`.
+- Z tego samego powodu PostgreSQL ma przypięte: `tokio-postgres 0.7.13`, `postgres-protocol 0.6.8` i `postgres-types 0.2.9` (`rand 0.9` zamiast `0.10` z `getrandom 0.4`) oraz `parking_lot 0.12.3` / `parking_lot_core 0.9.10` (na `windows-targets` zamiast `windows-link`).
 - Na Linuksie i w kontenerze te przypięcia nie są potrzebne.
 
 ## B6: usługa galaktyki (w toku od 2026-11-09)

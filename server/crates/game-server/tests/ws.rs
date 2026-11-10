@@ -18,6 +18,7 @@ fn config(dir: &std::path::Path, dev: bool) -> Config {
     Config {
         addr: "127.0.0.1:0".parse().unwrap(),
         data_dir: dir.to_path_buf(),
+        database_url: None,
         dev_mode: dev,
         step_seconds: if dev { 1.0 / 60.0 } else { 1.0 },
         snapshot_seconds: 60.0,
@@ -80,7 +81,7 @@ async fn connect_with_ticket(url: &str, cookie: &str) -> (Ws, Value) {
 }
 
 async fn start(cfg: Config) -> (String, std::sync::Arc<AppState>) {
-    let state = AppState::open(cfg).unwrap();
+    let state = AppState::open(cfg).await.unwrap();
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     let app = router(state.clone());
@@ -211,6 +212,19 @@ impl Client {
 
     fn stored(&self, body: &str, mat: &str) -> f64 {
         self.replica.session.world().storage_of(body).get(mat).copied().unwrap_or(0.0)
+    }
+}
+
+impl Client {
+    /// Logs in with a ticket of the session's cookie; the checkpoint follows the welcome.
+    async fn with_ticket(url: &str, cookie: &str) -> Client {
+        let (mut ws, welcome) = connect_with_ticket(url, cookie).await;
+        assert_eq!(welcome["type"], "welcome", "{welcome}");
+        let reset = next(&mut ws).await;
+        assert_eq!(reset["type"], "reset");
+        let mut c = Client { ws, replica: Host::new(HostOptions::default()), hashes: 0, galaxy: None };
+        c.apply(reset);
+        c
     }
 }
 
@@ -674,5 +688,68 @@ async fn a_corporation_of_three_accounts_with_a_deposit_and_a_withdrawal_in_its_
         );
         assert_eq!(v["corporations"][0]["members"], 3);
     }
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// R-26: the whole server on PostgreSQL (`TEST_DATABASE_URL`, e.g. `postgres://sg:sg@127.0.0.1:55432/sg`;
+/// skipped without it), each run in a schema of its own. An account and its session, a world with
+/// its commands, and the market with a shipment that reached its hub all come back after a restart,
+/// and nothing of it is in files.
+#[tokio::test]
+async fn the_server_on_postgres_survives_a_restart() {
+    let Ok(base) = std::env::var("TEST_DATABASE_URL") else {
+        eprintln!("skipped: TEST_DATABASE_URL is not set");
+        return;
+    };
+    let schema =
+        format!("it_{}_{}", std::process::id(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis());
+    let (admin, connection) = tokio_postgres::connect(&base, tokio_postgres::NoTls).await.expect("TEST_DATABASE_URL reachable");
+    tokio::spawn(connection);
+    admin.batch_execute(&format!("CREATE SCHEMA {schema}")).await.unwrap();
+    let db = format!("{base}{}options=-c%20search_path%3D{schema}", if base.contains('?') { '&' } else { '?' });
+
+    let dir = tmp("postgres");
+    let cfg = Config { database_url: Some(db.clone()), ..config(&dir, true) };
+    let (url, state) = start(cfg.clone()).await;
+    let (status, cookie, me) =
+        http(&url, "POST", "/api/register", None, Some(json!({ "callsign": "Sokol", "password": "haslo-123" }))).await;
+    assert_eq!(status, 200, "{me}");
+    let cookie = cookie.unwrap();
+    let mut c = Client::with_ticket(&url, &cookie).await;
+    c.ask(1, json!({ "kind": "start", "scenarioId": "planeta-matka" })).await;
+    let (body, mat) = c.port_and_stock(10.0);
+    let sent = c
+        .ask(2, json!({ "kind": "command", "command": { "type": "SHIP_TO_HUB", "bodyId": body, "hubId": "hub-sirius", "cargo": { &mat: 10 } } }))
+        .await;
+    assert_eq!(sent["value"]["ok"], true, "{sent}");
+    let at_hub = |v: &Value| hub(v, "hub-sirius")["stock"][mat.as_str()].as_f64().unwrap_or(0.0);
+    c.wait(|c| c.galaxy.as_ref().is_some_and(|v| at_hub(v) == 10.0), "the cargo at the hub").await;
+    c.ask(3, json!({ "kind": "pause" })).await;
+    let before = c.ask(4, json!({ "kind": "save" })).await["value"].clone();
+    c.ws.close(None).await.unwrap();
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    state.shutdown().await;
+    for f in ["accounts.json", "sessions.json", "galaxy.json", "worlds"] {
+        assert!(!dir.join(f).exists(), "{f} is in PostgreSQL, not in files");
+    }
+    let tables: i64 = admin
+        .query_one(&format!("SELECT count(*) FROM {schema}.world_snapshots WHERE world_id = $1"), &[&me["accountId"].as_str().unwrap()])
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(tables, 1);
+
+    // a new server on the same database: the session, the world and the market are back
+    let (url, _state) = start(cfg).await;
+    let (status, _, again) = http(&url, "GET", "/api/session", Some(&cookie), None).await;
+    assert_eq!((status, &again["callsign"]), (200, &me["callsign"]));
+    let mut c = Client::with_ticket(&url, &cookie).await;
+    let after = c.ask(1, json!({ "kind": "save" })).await["value"].clone();
+    assert_eq!(after["commands"], before["commands"]);
+    assert_eq!(after["world"], before["world"], "paused: the same world");
+    let view = c.wait(|c| c.galaxy.is_some(), "the galaxy view").await.galaxy.clone().unwrap();
+    assert_eq!(at_hub(&view), 10.0, "the market came back with the cargo in the hub");
+    // a second migration run changes nothing; the schema goes away
+    admin.batch_execute(&format!("DROP SCHEMA {schema} CASCADE")).await.unwrap();
     let _ = std::fs::remove_dir_all(dir);
 }

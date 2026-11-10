@@ -1,6 +1,6 @@
 # game-server (plan 02 §9, single-box). Build from the repository root:
 #   docker build -f deploy/Dockerfile.server -t space-game/server .
-# NOT RUN YET on the development machine (Docker Desktop off, 2026-11-09).
+# The context is only server/ (Dockerfile.server.dockerignore).
 FROM rust:1.96-bookworm AS build
 WORKDIR /src
 COPY server/ ./server/

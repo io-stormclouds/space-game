@@ -11,6 +11,10 @@ pub struct Config {
     pub addr: SocketAddr,
     /// `DATA_DIR`: accounts, worlds and the galaxy (default ./data).
     pub data_dir: PathBuf,
+    /// `DATABASE_URL` (`postgres://user:password@host:port/db`): accounts, sessions, worlds and
+    /// the market in PostgreSQL instead of files (R-26); `DATA_DIR` then keeps only what cannot be
+    /// read back (a broken market's copy).
+    pub database_url: Option<String>,
     /// `DEV_MODE=true`: test tempos, pause, step, load/replay, scenario restarts, and accounts made on
     /// first login (the mock's behaviour, for the designer panel and the e2e tests).
     pub dev_mode: bool,
@@ -130,6 +134,7 @@ impl Config {
         Config {
             addr: var("ADDR").and_then(|a| a.parse().ok()).unwrap_or_else(|| SocketAddr::from(([127, 0, 0, 1], 8080))),
             data_dir: var("DATA_DIR").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("data")),
+            database_url: var("DATABASE_URL"),
             dev_mode,
             step_seconds: num("WORLD_STEP_SECONDS", if dev_mode { 1.0 / 60.0 } else { 1.0 }),
             snapshot_seconds: num("SNAPSHOT_SECONDS", 60.0),

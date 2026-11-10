@@ -4,9 +4,9 @@
 //! result equals the replay of the whole command log from the scenario's start (tested), which stays
 //! the fallback.
 //!
-//! Adapter for one node: files under `DATA_DIR/worlds/<world>/` (`world.json`, `log.jsonl`), written
-//! by one I/O thread fed through a channel, so a world's loop never waits for the disk (rule from
-//! `init.md`). PostgreSQL (`world_snapshots`, `world_commands`, `world_schedule`) is the next adapter.
+//! Adapters: files under `DATA_DIR/worlds/<world>/` (`world.json`, `log.jsonl`) and PostgreSQL
+//! (`world_snapshots`, `world_log`; `storage.rs`, R-26). Either is written by one I/O thread fed
+//! through a channel, so a world's loop never waits for the disk (rule from `init.md`).
 
 use std::fs::{self, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
@@ -47,6 +47,20 @@ pub trait WorldRepository: Send + 'static {
     /// New snapshot; the log restarts empty after it.
     fn write_snapshot(&self, world: &str, stored: &StoredWorld) -> std::io::Result<()>;
     fn append(&self, world: &str, entry: &LogEntry) -> std::io::Result<()>;
+}
+
+impl<T: WorldRepository + ?Sized> WorldRepository for Box<T> {
+    fn load(&self, world: &str) -> std::io::Result<Option<(StoredWorld, Vec<LogEntry>)>> {
+        (**self).load(world)
+    }
+
+    fn write_snapshot(&self, world: &str, stored: &StoredWorld) -> std::io::Result<()> {
+        (**self).write_snapshot(world, stored)
+    }
+
+    fn append(&self, world: &str, entry: &LogEntry) -> std::io::Result<()> {
+        (**self).append(world, entry)
+    }
 }
 
 pub struct FileRepository {

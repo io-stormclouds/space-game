@@ -79,8 +79,8 @@ fn view(a: &Account) -> serde_json::Value {
 }
 
 /// A new session of the account: its view and the cookie.
-fn logged_in(state: &AppState, account: &Account) -> Response {
-    match state.sessions.create(&account.id) {
+async fn logged_in(state: &AppState, account: &Account) -> Response {
+    match state.sessions.create(&account.id).await {
         Ok(token) => {
             let mut r = json(StatusCode::OK, view(account));
             r.headers_mut().insert(header::SET_COOKIE, cookie(state, &token, state.cfg.auth.session_seconds));
@@ -103,7 +103,7 @@ fn bad_credentials() -> Response {
 
 /// The account of the request's session cookie.
 async fn session_account(state: &AppState, headers: &HeaderMap) -> Option<Account> {
-    let id = state.sessions.account_of(&cookie_token(headers)?)?;
+    let id = state.sessions.account_of(&cookie_token(headers)?).await?;
     state.accounts.by_id(&id).await
 }
 
@@ -123,7 +123,7 @@ pub async fn register(State(state): State<Arc<AppState>>, headers: HeaderMap, bo
     match state.accounts.register(&c.callsign, &c.password, false).await {
         Ok(a) => {
             println!("account {} registered", a.id);
-            logged_in(&state, &a)
+            logged_in(&state, &a).await
         }
         Err(e) => auth_error(e),
     }
@@ -143,7 +143,7 @@ pub async fn login(State(state): State<Arc<AppState>>, headers: HeaderMap, body:
         Ok(a) => {
             crate::metrics::inc(&m.logins_ok);
             state.sessions.succeeded(&k);
-            logged_in(&state, &a)
+            logged_in(&state, &a).await
         }
         Err(e @ (AuthError::WrongPassword | AuthError::UnknownAccount)) => {
             crate::metrics::inc(&m.logins_refused);
@@ -171,7 +171,7 @@ pub async fn metrics(State(state): State<Arc<AppState>>, headers: HeaderMap) -> 
     let moment = crate::metrics::Moment {
         worlds_running,
         accounts: state.accounts.count().await,
-        sessions: state.sessions.count(),
+        sessions: state.sessions.count().await,
         uptime_seconds: state.started.elapsed().as_secs_f64(),
     };
     let body = crate::metrics::render(&crate::metrics::METRICS, &moment);
@@ -194,7 +194,7 @@ pub async fn guest(State(state): State<Arc<AppState>>, headers: HeaderMap) -> Re
         return error(StatusCode::TOO_MANY_REQUESTS, "za dużo nowych kont na raz: spróbuj za minutę");
     }
     match state.accounts.create_guest().await {
-        Ok(a) => logged_in(&state, &a),
+        Ok(a) => logged_in(&state, &a).await,
         Err(e) => auth_error(e),
     }
 }
@@ -204,7 +204,7 @@ pub async fn logout(State(state): State<Arc<AppState>>, headers: HeaderMap) -> R
         return error(StatusCode::FORBIDDEN, OTHER_ORIGIN);
     }
     if let Some(token) = cookie_token(&headers)
-        && let Err(e) = state.sessions.revoke(&token)
+        && let Err(e) = state.sessions.revoke(&token).await
     {
         eprintln!("sessions: {e}");
     }

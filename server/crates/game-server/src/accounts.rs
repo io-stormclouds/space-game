@@ -1,9 +1,11 @@
-//! Accounts (plan 02 §7 `accounts`, §8): callsign + password hashed with argon2id, kept in
-//! `DATA_DIR/accounts.json`. One account = one player's world (Model C). A PostgreSQL adapter replaces
-//! the file later; the API stays.
+//! Accounts (plan 02 §7 `accounts`, §8): callsign + password hashed with argon2id, in memory and in
+//! the storage (`accounts.json` or the `accounts` table, R-26). One account = one player's world
+//! (Model C).
 
 use std::collections::BTreeMap;
-use std::path::PathBuf;
+use std::sync::Arc;
+
+use crate::storage::Storage;
 
 use argon2::Argon2;
 use argon2::password_hash::rand_core::OsRng;
@@ -49,7 +51,7 @@ impl std::fmt::Display for AuthError {
 }
 
 pub struct AccountStore {
-    path: PathBuf,
+    storage: Arc<Storage>,
     accounts: Mutex<BTreeMap<String, Account>>,
 }
 
@@ -68,13 +70,9 @@ fn now_secs() -> u64 {
 }
 
 impl AccountStore {
-    pub fn open(path: PathBuf) -> std::io::Result<AccountStore> {
-        let accounts = match std::fs::read_to_string(&path) {
-            Ok(text) => serde_json::from_str(&text).map_err(std::io::Error::other)?,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => BTreeMap::new(),
-            Err(e) => return Err(e),
-        };
-        Ok(AccountStore { path, accounts: Mutex::new(accounts) })
+    pub async fn open(storage: Arc<Storage>) -> std::io::Result<AccountStore> {
+        let accounts = storage.load_accounts().await?;
+        Ok(AccountStore { storage, accounts: Mutex::new(accounts) })
     }
 
     /// Checks the password; with `create`, an unknown callsign becomes a new account (dev mode, first login).
@@ -137,12 +135,12 @@ impl AccountStore {
             created: now_secs(),
             guest,
         };
-        accounts.insert(key(callsign), account.clone());
-        let text = serde_json::to_string_pretty(&*accounts).map_err(|e| AuthError::Storage(e.to_string()))?;
-        if let Some(dir) = self.path.parent() {
-            std::fs::create_dir_all(dir).map_err(|e| AuthError::Storage(e.to_string()))?;
+        let k = key(callsign);
+        accounts.insert(k.clone(), account.clone());
+        if let Err(e) = self.storage.add_account(&accounts, &k, &account).await {
+            accounts.remove(&k);
+            return Err(AuthError::Storage(e.to_string()));
         }
-        write_atomic(&self.path, text.as_bytes()).map_err(|e| AuthError::Storage(e.to_string()))?;
         Ok(account)
     }
 
@@ -184,16 +182,16 @@ mod tests {
     #[tokio::test]
     async fn create_then_login() {
         let dir = std::env::temp_dir().join(format!("sg-acc-{}", std::process::id()));
-        let path = dir.join("accounts.json");
-        let _ = std::fs::remove_file(&path);
-        let store = AccountStore::open(path.clone()).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+        let files = || Arc::new(Storage::Files(dir.clone()));
+        let store = AccountStore::open(files()).await.unwrap();
         assert_eq!(store.authenticate("Kestrel", "secret1", false).await.unwrap_err(), AuthError::UnknownAccount);
         assert_eq!(store.authenticate("x", "secret1", true).await.unwrap_err(), AuthError::BadCallsign);
         assert_eq!(store.authenticate("Kestrel", "123", true).await.unwrap_err(), AuthError::WeakPassword);
         let a = store.authenticate("Kestrel", "secret1", true).await.unwrap();
         assert_eq!(store.authenticate("kestrel", "secret1", false).await.unwrap().id, a.id);
         assert_eq!(store.authenticate("Kestrel", "wrong!!", true).await.unwrap_err(), AuthError::WrongPassword);
-        let reopened = AccountStore::open(path).unwrap();
+        let reopened = AccountStore::open(files()).await.unwrap();
         assert_eq!(reopened.authenticate("KESTREL", "secret1", false).await.unwrap().id, a.id);
         assert_eq!(reopened.register("kestrel", "other-1", false).await.unwrap_err(), AuthError::Taken);
         let g = reopened.create_guest().await.unwrap();

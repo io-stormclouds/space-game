@@ -206,8 +206,18 @@ pub struct World {
 impl World {
     /// Loads the world from the repository (or starts the default scenario) and catches up.
     pub fn open(id: &str, cfg: &Config, repo: &dyn WorldRepository, persister: Persister) -> World {
+        World::from_loaded(id, cfg, repo.load(id), persister)
+    }
+
+    /// The world of what its repository holds (or the default scenario), caught up.
+    pub fn from_loaded(
+        id: &str,
+        cfg: &Config,
+        loaded: std::io::Result<Option<(StoredWorld, Vec<LogEntry>)>>,
+        persister: Persister,
+    ) -> World {
         let mut unreported = Vec::new();
-        let (mut host, fresh) = match repo.load(id) {
+        let (mut host, fresh) = match loaded {
             Ok(Some((stored, log))) => {
                 let (mut host, tail_departures) = restore(cfg, &stored, &log);
                 unreported = tail_departures;
@@ -502,6 +512,7 @@ mod tests {
         Config {
             addr: "127.0.0.1:0".parse().unwrap(),
             data_dir: dir.to_path_buf(),
+            database_url: None,
             dev_mode: dev,
             step_seconds: if dev { 1.0 / 60.0 } else { 1.0 },
             snapshot_seconds: 60.0,

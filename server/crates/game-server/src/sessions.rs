@@ -1,6 +1,6 @@
 //! Sessions (plan 02 §8, R-25). A login over HTTP gets a random token in an `HttpOnly` cookie; the
-//! server keeps only its hash (BLAKE2s) with the account and the expiry, in `DATA_DIR/sessions.json`,
-//! so a copy of the file logs nobody in. A WebSocket logs in with a one-time ticket (30 s) that the
+//! server keeps only its hash (BLAKE2s) with the account and the expiry, in the storage
+//! (`sessions.json` or the `sessions` table, R-26), so a copy of it logs nobody in. A WebSocket logs in with a one-time ticket (30 s) that the
 //! client gets for its cookie (`POST /api/ticket`): the socket's hello never carries the password,
 //! and a page of another site cannot open the game in the player's name (it cannot read the ticket).
 //!
@@ -8,14 +8,13 @@
 //! (registrations and guests) per minute on the whole server.
 
 use std::collections::{BTreeMap, HashMap, VecDeque};
-use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use axum::http::HeaderMap;
 use blake2::{Blake2s256, Digest};
 use serde::{Deserialize, Serialize};
 
-use crate::accounts::write_atomic;
+use crate::storage::{SessionChange, Storage};
 
 /// Name of the session cookie.
 pub const COOKIE: &str = "sg_session";
@@ -41,11 +40,11 @@ struct Ticket {
 }
 
 pub struct SessionStore {
-    path: PathBuf,
+    storage: Arc<Storage>,
     lifetime: u64,
     signups_per_minute: u32,
-    /// Token hash → session.
-    sessions: Mutex<BTreeMap<String, Session>>,
+    /// Token hash → session (held while the storage writes, so changes land in order).
+    sessions: tokio::sync::Mutex<BTreeMap<String, Session>>,
     tickets: Mutex<HashMap<String, Ticket>>,
     /// Callsign key → (failures, first failure of the window).
     failures: Mutex<HashMap<String, (u32, u64)>>,
@@ -86,64 +85,54 @@ pub fn cookie_token(headers: &HeaderMap) -> Option<String> {
 
 impl SessionStore {
     /// `lifetime` of a session [s]; `signups_per_minute` 0 = no limit.
-    pub fn open(path: PathBuf, lifetime: u64, signups_per_minute: u32) -> std::io::Result<SessionStore> {
-        let mut sessions: BTreeMap<String, Session> = match std::fs::read_to_string(&path) {
-            Ok(text) => serde_json::from_str(&text).unwrap_or_else(|e| {
-                // sessions are not worth a server that does not start: everyone logs in again
-                eprintln!("sessions: unreadable {} ({e}), starting empty", path.display());
-                BTreeMap::new()
-            }),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => BTreeMap::new(),
-            Err(e) => return Err(e),
-        };
+    pub async fn open(storage: Arc<Storage>, lifetime: u64, signups_per_minute: u32) -> std::io::Result<SessionStore> {
+        let mut sessions = storage.load_sessions().await?;
         let now = now_secs();
         sessions.retain(|_, s| s.expires > now);
         Ok(SessionStore {
-            path,
+            storage,
             lifetime,
             signups_per_minute,
-            sessions: Mutex::new(sessions),
+            sessions: tokio::sync::Mutex::new(sessions),
             tickets: Mutex::new(HashMap::new()),
             failures: Mutex::new(HashMap::new()),
             signups: Mutex::new(VecDeque::new()),
         })
     }
 
-    fn save(&self, sessions: &BTreeMap<String, Session>) -> std::io::Result<()> {
-        if let Some(dir) = self.path.parent() {
-            std::fs::create_dir_all(dir)?;
-        }
-        let text = serde_json::to_string_pretty(sessions).map_err(std::io::Error::other)?;
-        write_atomic(&self.path, text.as_bytes())
-    }
-
     /// A new session of the account; the token goes to the cookie, only its hash is kept.
-    pub fn create(&self, account: &str) -> std::io::Result<String> {
+    pub async fn create(&self, account: &str) -> std::io::Result<String> {
         let token = random_token();
+        let hash = digest(&token);
         let now = now_secs();
-        let mut sessions = self.sessions.lock().expect("sessions lock");
+        let session = Session { account: account.to_string(), created: now, expires: now + self.lifetime };
+        let mut sessions = self.sessions.lock().await;
         sessions.retain(|_, s| s.expires > now);
-        sessions.insert(digest(&token), Session { account: account.to_string(), created: now, expires: now + self.lifetime });
-        self.save(&sessions)?;
+        sessions.insert(hash.clone(), session.clone());
+        if let Err(e) = self.storage.save_sessions(&sessions, SessionChange::Added { hash: &hash, session: &session }, now).await {
+            sessions.remove(&hash);
+            return Err(e);
+        }
         Ok(token)
     }
 
     /// Live sessions.
-    pub fn count(&self) -> usize {
+    pub async fn count(&self) -> usize {
         let now = now_secs();
-        self.sessions.lock().expect("sessions lock").values().filter(|s| s.expires > now).count()
+        self.sessions.lock().await.values().filter(|s| s.expires > now).count()
     }
 
     /// The account of a live session.
-    pub fn account_of(&self, token: &str) -> Option<String> {
-        let sessions = self.sessions.lock().expect("sessions lock");
+    pub async fn account_of(&self, token: &str) -> Option<String> {
+        let sessions = self.sessions.lock().await;
         sessions.get(&digest(token)).filter(|s| s.expires > now_secs()).map(|s| s.account.clone())
     }
 
-    pub fn revoke(&self, token: &str) -> std::io::Result<()> {
-        let mut sessions = self.sessions.lock().expect("sessions lock");
-        if sessions.remove(&digest(token)).is_some() {
-            self.save(&sessions)?;
+    pub async fn revoke(&self, token: &str) -> std::io::Result<()> {
+        let hash = digest(token);
+        let mut sessions = self.sessions.lock().await;
+        if sessions.remove(&hash).is_some() {
+            self.storage.save_sessions(&sessions, SessionChange::Removed { hash: &hash }, now_secs()).await?;
         }
         Ok(())
     }
@@ -214,22 +203,22 @@ impl SessionStore {
 mod tests {
     use super::*;
 
-    #[test]
-    fn sessions_tickets_and_failed_logins() {
+    #[tokio::test]
+    async fn sessions_tickets_and_failed_logins() {
         let dir = std::env::temp_dir().join(format!("sg-sessions-{}", std::process::id()));
-        let path = dir.join("sessions.json");
-        let _ = std::fs::remove_file(&path);
-        let store = SessionStore::open(path.clone(), 3600, 2).unwrap();
-        let token = store.create("acc-1").unwrap();
-        assert_eq!(store.account_of(&token).as_deref(), Some("acc-1"));
-        assert_eq!(store.account_of("nope"), None);
-        let file = std::fs::read_to_string(&path).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+        let files = || Arc::new(Storage::Files(dir.clone()));
+        let store = SessionStore::open(files(), 3600, 2).await.unwrap();
+        let token = store.create("acc-1").await.unwrap();
+        assert_eq!(store.account_of(&token).await.as_deref(), Some("acc-1"));
+        assert_eq!(store.account_of("nope").await, None);
+        let file = std::fs::read_to_string(dir.join("sessions.json")).unwrap();
         assert!(!file.contains(&token), "only the hash of the token is stored");
         // survives a restart, ends with a logout
-        let reopened = SessionStore::open(path.clone(), 3600, 2).unwrap();
-        assert_eq!(reopened.account_of(&token).as_deref(), Some("acc-1"));
-        reopened.revoke(&token).unwrap();
-        assert_eq!(reopened.account_of(&token), None);
+        let reopened = SessionStore::open(files(), 3600, 2).await.unwrap();
+        assert_eq!(reopened.account_of(&token).await.as_deref(), Some("acc-1"));
+        reopened.revoke(&token).await.unwrap();
+        assert_eq!(reopened.account_of(&token).await, None);
         // a ticket is good once
         let t = store.ticket("acc-1");
         assert_eq!(store.redeem(&t).as_deref(), Some("acc-1"));

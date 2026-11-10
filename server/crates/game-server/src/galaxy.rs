@@ -9,11 +9,10 @@
 //!   world as a `HUB_DELIVERY` system command (the world is woken when asleep). A delivery is
 //!   retried until its world answers; the world takes each shipment once (its log is checked), or
 //!   refuses it, and then the goods go back to the hub.
-//! - The state is written to `DATA_DIR/galaxy.json` (atomically) at most every second when it
-//!   changed, and on shutdown.
+//! - The state is written (`DATA_DIR/galaxy.json` atomically, or the `galaxy_state` row in
+//!   PostgreSQL) at most every second when it changed, at once after a shipment, and on shutdown.
 
 use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 
@@ -25,8 +24,8 @@ use game_core::models::resource::Qty;
 use game_session::exchange::{Exchange, ExchangeState, Role, Side};
 
 use crate::AppState;
-use crate::accounts::write_atomic;
 use crate::config::Config;
+use crate::storage::GalaxySink;
 use crate::world::{ClientId, Wire, WorldMsg, wall_ms};
 
 pub enum GalaxyMsg {
@@ -139,25 +138,19 @@ pub enum GalaxyOp {
     },
 }
 
-pub fn galaxy_path(cfg: &Config) -> PathBuf {
-    cfg.data_dir.join("galaxy.json")
-}
-
-/// The market from `galaxy.json` (a new one when there is none; an unreadable file is kept aside).
-pub fn open_exchange(cfg: &Config, now: f64) -> Exchange {
-    let path = galaxy_path(cfg);
-    let saved = match std::fs::read_to_string(&path) {
-        Ok(text) => match serde_json::from_str::<ExchangeState>(&text) {
-            Ok(s) => Some(s),
-            Err(e) => {
-                let aside = path.with_extension(format!("broken-{}.json", now as u64));
-                eprintln!("galaxy: cannot read {} ({e}); keeping it as {} and starting a new market", path.display(), aside.display());
-                let _ = std::fs::rename(&path, &aside);
-                None
-            }
-        },
-        Err(_) => None,
-    };
+/// The market from its saved JSON (a new one when there is none; an unreadable state is kept aside
+/// as `DATA_DIR/galaxy.broken-<time>.json`).
+pub fn open_exchange(cfg: &Config, saved: Option<&str>, now: f64) -> Exchange {
+    let saved = saved.and_then(|text| match serde_json::from_str::<ExchangeState>(text) {
+        Ok(s) => Some(s),
+        Err(e) => {
+            let aside = cfg.data_dir.join(format!("galaxy.broken-{}.json", now as u64));
+            eprintln!("galaxy: cannot read the saved market ({e}); keeping it as {} and starting a new market", aside.display());
+            let _ = std::fs::create_dir_all(&cfg.data_dir);
+            let _ = std::fs::write(&aside, text);
+            None
+        }
+    });
     Exchange::new(&compute_economy(EconomyParams::default()), cfg.market.clone(), saved, now)
 }
 
@@ -171,12 +164,14 @@ fn reply_err(id: u64, error: &str) -> String {
 
 enum WriterOp {
     Write(Box<ExchangeState>),
-    Flush(std::sync::mpsc::Sender<()>),
+    /// Answered once everything before it is written (awaited, never blocking the runtime: with
+    /// PostgreSQL the writer needs the runtime to talk to the database).
+    Flush(oneshot::Sender<()>),
 }
 
-/// Writes `galaxy.json` off the service's loop, one state after another (never two writers of the
-/// file at once), atomically.
-fn spawn_writer(path: PathBuf) -> std::sync::mpsc::Sender<WriterOp> {
+/// Writes the market off the service's loop (`galaxy.json` atomically, or the `galaxy_state` row),
+/// one state after another: never two writers at once.
+fn spawn_writer(sink: GalaxySink) -> std::sync::mpsc::Sender<WriterOp> {
     let (tx, rx) = std::sync::mpsc::channel::<WriterOp>();
     std::thread::Builder::new()
         .name("galaxy-io".into())
@@ -185,8 +180,8 @@ fn spawn_writer(path: PathBuf) -> std::sync::mpsc::Sender<WriterOp> {
                 match op {
                     WriterOp::Write(state) => match serde_json::to_vec(&state) {
                         Ok(bytes) => {
-                            if let Err(e) = write_atomic(&path, &bytes) {
-                                eprintln!("galaxy: cannot write {}: {e}", path.display());
+                            if let Err(e) = sink.write(&bytes) {
+                                eprintln!("galaxy: cannot write {}: {e}", sink.describe());
                             }
                         }
                         Err(e) => eprintln!("galaxy: cannot serialise: {e}"),
@@ -213,10 +208,11 @@ pub struct GalaxyService {
 }
 
 impl GalaxyService {
-    pub fn new(cfg: &Config) -> GalaxyService {
+    /// The service on the saved market (JSON), writing to `sink`.
+    pub fn new(cfg: &Config, saved: Option<&str>, sink: GalaxySink) -> GalaxyService {
         GalaxyService {
-            exchange: open_exchange(cfg, wall_ms()),
-            writer: spawn_writer(galaxy_path(cfg)),
+            exchange: open_exchange(cfg, saved, wall_ms()),
+            writer: spawn_writer(sink),
             tick_ms: cfg.galaxy_tick_ms(),
             clients: HashMap::new(),
             in_flight: HashSet::new(),
@@ -286,12 +282,12 @@ impl GalaxyService {
         let _ = self.writer.send(WriterOp::Write(Box::new(self.exchange.save())));
     }
 
-    /// Writes and waits for the disk (shutdown).
-    fn write_now(&mut self) {
+    /// Writes and waits for the storage (shutdown).
+    async fn write_now(&mut self) {
         self.write(wall_ms());
-        let (done, wait) = std::sync::mpsc::channel();
+        let (done, wait) = oneshot::channel();
         if self.writer.send(WriterOp::Flush(done)).is_ok() {
-            let _ = wait.recv();
+            let _ = wait.await;
         }
     }
 
@@ -342,7 +338,7 @@ impl GalaxyService {
                     }
                 }
                 msg = rx.recv() => match msg {
-                    None => { self.write_now(); return; }
+                    None => { self.write_now().await; return; }
                     Some(GalaxyMsg::Connect { account, callsign, client, tx }) => {
                         self.exchange.profile(&account, Some(&callsign), None);
                         let view = serde_json::json!({ "type": "galaxy", "view": self.exchange.view(&account) }).to_string();
@@ -395,7 +391,7 @@ impl GalaxyService {
                         }
                     }
                     Some(GalaxyMsg::Stop { done }) => {
-                        self.write_now();
+                        self.write_now().await;
                         let _ = done.send(());
                         return;
                     }
@@ -405,12 +401,13 @@ impl GalaxyService {
     }
 }
 
-/// Starts the service of an app state.
-pub fn spawn(cfg: &Config, state: &Arc<AppState>, rx: mpsc::UnboundedReceiver<GalaxyMsg>) {
-    let service = GalaxyService::new(cfg);
+/// Starts the service of an app state on the saved market.
+pub fn spawn(cfg: &Config, state: &Arc<AppState>, rx: mpsc::UnboundedReceiver<GalaxyMsg>, saved: Option<&str>, sink: GalaxySink) {
+    let place = sink.describe();
+    let service = GalaxyService::new(cfg, saved, sink);
     println!(
         "galaxy: {} · {} accounts · NPC factions {}",
-        galaxy_path(cfg).display(),
+        place,
         service.exchange.save().wallets.len(),
         if service.exchange.has_npc() { "on" } else { "off" }
     );
