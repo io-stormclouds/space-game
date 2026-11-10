@@ -1,0 +1,36 @@
+{
+  "name": "space-interior-poc",
+  "version": "0.0.0",
+  "scripts": {
+    "ng": "ng",
+    "kit": "node tools/build-kit.mjs",
+    "start": "ng serve",
+    "build": "ng build",
+    "test": "ng test",
+    "check": "tsc -p tsconfig.app.json --noEmit && ng test --watch=false && ng build"
+  },
+  "private": true,
+  "packageManager": "npm@10.9.8",
+  "dependencies": {
+    "@angular/common": "^22.0.0",
+    "@angular/compiler": "^22.0.0",
+    "@angular/core": "^22.0.0",
+    "@angular/platform-browser": "^22.0.0",
+    "@fontsource/jetbrains-mono": "^5.2.5",
+    "@space-game/hud-design-system": "file:../../design-system",
+    "rxjs": "~7.8.0",
+    "three": "^0.187.0",
+    "tslib": "^2.3.0"
+  },
+  "devDependencies": {
+    "@angular/build": "^22.0.6",
+    "@angular/cli": "^22.0.6",
+    "@angular/compiler-cli": "^22.0.0",
+    "@types/node": "^26.6.6",
+    "@types/three": "^0.187.0",
+    "jsdom": "^28.0.0",
+    "prettier": "^3.8.1",
+    "typescript": "~6.0.2",
+    "vitest": "^4.0.8"
+  }
+}
