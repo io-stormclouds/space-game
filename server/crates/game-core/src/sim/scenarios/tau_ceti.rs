@@ -14,7 +14,7 @@ use indexmap::IndexMap;
 use crate::math::js;
 use crate::models::body::{Atmosphere, BodyKind, BodyProfile, CelestialBody, SurfaceGrid};
 use crate::models::ship::{Onboard, ShipRole, ShipState, Spacecraft};
-use crate::models::terrain::{TerrainBiome, TerrainConfig};
+use crate::models::terrain::{TerrainBasin, TerrainBiome, TerrainConfig, TerrainGround};
 use crate::sim::constants::GAME_CONSTANTS;
 use crate::sim::rules::LevelOverride;
 use crate::sim::scenario::{Scenario, default_colonization, no_rovers, no_structures};
@@ -72,6 +72,9 @@ fn profile(kind: &str, temperature: &str, water: &str, rating: &str, fuel: f64, 
     }
 }
 
+// Biomes of the bodies (T-25, docs/planet-terrain-poc-wnioski-i-plan.md §11): b hot sand desert, c
+// medieval ruins with dried lakes (T-26: the profile says no water), d regolith, e the start planet
+// (mixed, little water, a dry landing zone), f ice.
 fn planets() -> Vec<PlanetData> {
     vec![
         PlanetData {
@@ -93,7 +96,7 @@ fn planets() -> Vec<PlanetData> {
                 "Bogata w metale, ale bez lodu i węgla: woda i paliwo musiałyby przylatywać z innych ciał.",
                 &[("KUP", 80.0), ("TYT", 55.0), ("URA", 25.0)],
             ),
-            terrain: None,
+            terrain: Some(TerrainConfig::new(TerrainBiome::Dry, 3.0)),
         },
         PlanetData {
             id: TC_C,
@@ -114,8 +117,9 @@ fn planets() -> Vec<PlanetData> {
                 "Dobre metale i słońce, brak lodu. Lepsza jako druga kolonia przemysłowa.",
                 &[("TYT", 70.0), ("FER", 50.0), ("KUP", 35.0)],
             ),
-            // ruined medieval settlement facing the sun (docs/planet-terrain-poc-wnioski-i-plan.md §9.1)
-            terrain: Some(TerrainConfig { biome: TerrainBiome::Medieval, seed: 2.0 }),
+            // ruined medieval settlement facing the sun (docs/planet-terrain-poc-wnioski-i-plan.md §9.1); its
+            // lakes dried out
+            terrain: Some(TerrainConfig { basin: Some(TerrainBasin::Dune), ..TerrainConfig::new(TerrainBiome::Medieval, 2.0) }),
         },
         PlanetData {
             id: TC_D,
@@ -136,7 +140,7 @@ fn planets() -> Vec<PlanetData> {
                 "Ferryt i Silicyt, mało wody. Niska grawitacja nadaje się na wyrzutnię masy.",
                 &[("FER", 65.0), ("SIL", 60.0), ("REG", 90.0)],
             ),
-            terrain: None,
+            terrain: Some(TerrainConfig { ground: Some(TerrainGround::Regolith), ..TerrainConfig::new(TerrainBiome::Dry, 4.0) }),
         },
         PlanetData {
             id: TC_E,
@@ -157,7 +161,15 @@ fn planets() -> Vec<PlanetData> {
                 "Pełny zestaw surowców T0 i atmosfera do turbin wiatrowych. Najprostszy start, ale droższy start promu z powierzchni.",
                 &[("FER", 60.0), ("SIL", 55.0), ("KRI", 75.0), ("KAR", 45.0), ("KUP", 15.0)],
             ),
-            terrain: None,
+            // the start planet (T-25): fewer lakes (water ≤ 20 % of the tiles) and a dry cap n.y > 0.6
+            // around the +Y pole (a fifth of the sphere): the automatic port placement starts at the top
+            // tile and the scripted first sessions land at n.y ≈ 0.85, so either port has at least 2 dry
+            // rings around it
+            terrain: Some(TerrainConfig {
+                basin_level: Some(0.39),
+                landing_cap: Some(0.6),
+                ..TerrainConfig::new(TerrainBiome::Mixed, 5.0)
+            }),
         },
         PlanetData {
             id: TC_F,
@@ -178,7 +190,7 @@ fn planets() -> Vec<PlanetData> {
                 "Źródło wody i paliwa na później. Słabe słońce: energia z reaktorów.",
                 &[("KRI", 95.0), ("KAR", 50.0)],
             ),
-            terrain: None,
+            terrain: Some(TerrainConfig::new(TerrainBiome::Winter, 6.0)),
         },
     ]
 }
@@ -217,7 +229,7 @@ pub fn tau_ceti_bodies() -> Vec<CelestialBody> {
         b.orbit_radius = r;
         b.orbit_speed = two_pi / period_for(r);
         b.initial_angle = p.phase;
-        // only bodies with terrain get the key, so the others keep their world JSON
+        // `surfaceGrid.terrain` only on bodies with terrain (every planet since T5)
         b.surface_grid = Some(SurfaceGrid {
             frequency: p.n,
             deposit_seed: Some(p.seed),

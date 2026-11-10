@@ -12,6 +12,7 @@ use crate::models::resource::{Stockpile, empty_stockpile, qty};
 use crate::models::rover::{Rover, RoverState};
 use crate::models::ship::{ShipRole, ShipState, Spacecraft};
 use crate::models::structure::Structure;
+use crate::models::terrain::{TerrainBiome, TerrainConfig, TerrainGround};
 use crate::sim::constants::GAME_CONSTANTS;
 use crate::sim::rules::Rules;
 use crate::sim::scenario::{Grids, Scenario, default_colonization, find_free_footprint, standing_structure, top_tile};
@@ -37,14 +38,27 @@ pub fn initial_bodies() -> Vec<CelestialBody> {
     planet.orbit_radius = 900.0;
     planet.orbit_speed = two_pi / 240.0;
     planet.is_home_base = true;
-    planet.surface_grid = Some(SurfaceGrid { frequency: 8, deposit_seed: Some(11.0), deposit_weights: None, terrain: None });
+    // hex-kit terrain (T-25): the PoC showcase style; the dry landing cap (n.y > 0.9: the top tile, two
+    // rings and part of the third) keeps the standing pad, panel and port of the preset off a lake, where
+    // they stood before T5 (it dries two lakes of mixed/7 under the port)
+    planet.surface_grid = Some(SurfaceGrid {
+        frequency: 8,
+        deposit_seed: Some(11.0),
+        deposit_weights: None,
+        terrain: Some(TerrainConfig { landing_cap: Some(0.9), ..TerrainConfig::new(TerrainBiome::Mixed, 7.0) }),
+    });
     planet.atmosphere = Some(Atmosphere::Dense);
 
     let mut moon = CelestialBody::base(MOON_ID, "Księżyc", BodyKind::Moon, 15.0, Some(PLANET_ID), 0x9ca3af);
     moon.orbit_radius = 160.0;
     moon.orbit_speed = two_pi / 40.0;
     moon.initial_angle = PI / 2.0;
-    moon.surface_grid = Some(SurfaceGrid { frequency: 3, deposit_seed: Some(23.0), deposit_weights: None, terrain: None });
+    moon.surface_grid = Some(SurfaceGrid {
+        frequency: 3,
+        deposit_seed: Some(23.0),
+        deposit_weights: None,
+        terrain: Some(TerrainConfig { ground: Some(TerrainGround::Regolith), ..TerrainConfig::new(TerrainBiome::Dry, 8.0) }),
+    });
 
     let mut asteroid = CelestialBody::base(ASTEROID_ID, "Asteroida", BodyKind::Asteroid, 12.0, Some(SUN_ID), 0xb45309);
     asteroid.orbit_radius = 1500.0;

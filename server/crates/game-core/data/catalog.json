@@ -2532,6 +2532,30 @@
         "buildable": false,
         "costPct": 100,
         "timePct": 100
+      },
+      "sand": {
+        "name": "piasek",
+        "buildable": true,
+        "costPct": 110,
+        "timePct": 120
+      },
+      "dune": {
+        "name": "wydma",
+        "buildable": false,
+        "costPct": 100,
+        "timePct": 100
+      },
+      "ice": {
+        "name": "lód",
+        "buildable": true,
+        "costPct": 125,
+        "timePct": 150
+      },
+      "regolith": {
+        "name": "regolit",
+        "buildable": true,
+        "costPct": 100,
+        "timePct": 100
       }
     },
     "road": {

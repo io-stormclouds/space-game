@@ -139,6 +139,10 @@ pub struct TerrainKindRules {
     pub rock: TerrainKindRule,
     pub snow: TerrainKindRule,
     pub water: TerrainKindRule,
+    pub sand: TerrainKindRule,
+    pub dune: TerrainKindRule,
+    pub ice: TerrainKindRule,
+    pub regolith: TerrainKindRule,
 }
 
 impl TerrainKindRules {
@@ -149,6 +153,10 @@ impl TerrainKindRules {
             TerrainKind::Rock => &self.rock,
             TerrainKind::Snow => &self.snow,
             TerrainKind::Water => &self.water,
+            TerrainKind::Sand => &self.sand,
+            TerrainKind::Dune => &self.dune,
+            TerrainKind::Ice => &self.ice,
+            TerrainKind::Regolith => &self.regolith,
         }
     }
 }
@@ -212,6 +220,11 @@ mod tests {
         assert_eq!(c.buildings.iter().find(|b| b.id == "HAB").unwrap().extra_at(2).unwrap().get("STA"), Some(&10.0));
         assert!(!c.terrain.kinds.get(TerrainKind::Water).buildable);
         assert_eq!((c.terrain.kinds.forest.cost_pct, c.terrain.kinds.forest.time_pct), (110, 150));
+        // T5: sand, dune (no footing), ice, regolith
+        assert_eq!((c.terrain.kinds.sand.cost_pct, c.terrain.kinds.sand.time_pct), (110, 120));
+        assert!(!c.terrain.kinds.get(TerrainKind::Dune).buildable);
+        assert_eq!((c.terrain.kinds.ice.name.as_str(), c.terrain.kinds.ice.cost_pct, c.terrain.kinds.ice.time_pct), ("lód", 125, 150));
+        assert!(c.terrain.kinds.get(TerrainKind::Regolith).buildable);
         assert_eq!((c.terrain.road.cost_pct, c.terrain.road.time_pct), (85, 75));
     }
 }
