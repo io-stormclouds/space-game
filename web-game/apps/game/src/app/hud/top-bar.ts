@@ -47,6 +47,9 @@ const MAX_STOCKS = 7;
           <button type="button" data-action="corp" [attr.aria-pressed]="ui.corpOpen()" aria-keyshortcuts="F4" [title]="t.corp.toggleHint" (click)="ui.toggleCorp()">
             {{ t.corp.toggle }}
           </button>
+          <button type="button" data-action="rankings" [attr.aria-pressed]="ui.rankingsOpen()" aria-keyshortcuts="F7" [title]="t.rankings.toggleHint" (click)="ui.toggleRankings()">
+            {{ t.rankings.toggle }}
+          </button>
           <button type="button" data-action="designer" [attr.aria-pressed]="designer.open()" aria-keyshortcuts="F2" [title]="t.designer.toggleHint" (click)="designer.toggle()">
             {{ t.designer.toggle }}
           </button>

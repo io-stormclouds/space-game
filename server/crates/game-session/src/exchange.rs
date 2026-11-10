@@ -28,8 +28,14 @@ use game_core::models::resource::{Qty, add_stock, amount_of, can_afford, format_
 use crate::contract::{MarketHub, MarketQuote, SimulatedPlayer};
 use crate::galaxy::{GalaxyOptions, GalaxySim, GalaxySimState, HubDef};
 
+mod alliance;
 mod corporation;
+mod megaproject;
+mod season;
+pub use alliance::*;
 pub use corporation::*;
+pub use megaproject::*;
+pub use season::*;
 
 /// Hubs of the server's galaxy (05-SOCIAL S-9): the canvas two, Procyon and Epsilon Eridani.
 pub const GALAXY_HUBS: [HubDef; 4] = [
@@ -156,8 +162,34 @@ pub struct MarketConfig {
     pub contracts_per_hub: usize,
     /// Corporations (S2): founding cost and sizes.
     pub corp: CorpConfig,
+    /// Alliances and megaprojects (S3).
+    pub social: SocialConfig,
     /// NPC factions (R-7); `None`: a market of players only (no contracts, duties or reputation changes).
     pub npc: Option<NpcConfig>,
+}
+
+/// Alliances and megaprojects (S3, R-27).
+#[derive(Clone, Debug, PartialEq)]
+pub struct SocialConfig {
+    /// Corporations in one alliance (05-SOCIAL §6: 2–5).
+    pub alliance_max_corps: usize,
+    /// Notice period of a corporation leaving its alliance [s] (48 h).
+    pub alliance_leave_seconds: f64,
+    /// Scale of the megaprojects' requirements (1 in production; dev small).
+    pub megaproject_scale: f64,
+    /// Length of a season [s] (90 days); 0: a season ends only when closed by hand.
+    pub season_seconds: f64,
+}
+
+impl Default for SocialConfig {
+    fn default() -> SocialConfig {
+        SocialConfig {
+            alliance_max_corps: 5,
+            alliance_leave_seconds: 48.0 * 3600.0,
+            megaproject_scale: 1.0,
+            season_seconds: 90.0 * 24.0 * 3600.0,
+        }
+    }
 }
 
 impl Default for MarketConfig {
@@ -174,6 +206,7 @@ impl Default for MarketConfig {
             contract_seconds: 48.0 * 3600.0,
             contracts_per_hub: 3,
             corp: CorpConfig::default(),
+            social: SocialConfig::default(),
             npc: Some(NpcConfig { seed: 20_261_107, players: 6, update_seconds: 600.0, depth: 50.0 }),
         }
     }
@@ -203,6 +236,10 @@ pub struct Order {
     /// Unix ms.
     pub placed_at: f64,
     pub expires_at: f64,
+    /// The account's fee in this hub when placed (a terminal lowers it, S3); missing in orders
+    /// placed before: the market's fee.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fee: Option<f64>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -336,6 +373,23 @@ pub struct ExchangeState {
     /// [`DEPARTURES_KEPT_MS`] so a departure reported again is not a second one.
     #[serde(default)]
     pub departures: IndexMap<String, f64>,
+    #[serde(default)]
+    pub alliances: Vec<Alliance>,
+    #[serde(default)]
+    pub alliance_invitations: Vec<AllianceInvitation>,
+    #[serde(default)]
+    pub megaprojects: Vec<Megaproject>,
+    /// The season running (0 in markets saved before seasons: season 1) and its start [Unix ms].
+    #[serde(default)]
+    pub season: u32,
+    #[serde(default)]
+    pub season_started_at: f64,
+    /// Credits each account traded this season.
+    #[serde(default)]
+    pub volume: IndexMap<String, f64>,
+    /// Closed seasons (oldest first).
+    #[serde(default)]
+    pub seasons: Vec<SeasonRecord>,
 }
 
 /// How long the market remembers a departure [ms]: a week, far longer than any log tail a restored
@@ -370,6 +424,8 @@ pub struct HubView {
     /// The viewer's reputation with the host faction and the duty it charges them.
     pub reputation: f64,
     pub tariff: f64,
+    /// The viewer's fee in this hub (the market's, less a terminal's cut).
+    pub fee: f64,
 }
 
 #[derive(Serialize, Clone, Debug, PartialEq)]
@@ -402,6 +458,13 @@ pub struct GalaxyView {
     pub corporation: Option<CorpView>,
     pub invitations: Vec<InvitationView>,
     pub corporations: Vec<CorpSummary>,
+    /// The alliance of the viewer's corporation, its invitations (to its chief), every alliance.
+    pub alliance: Option<AllianceView>,
+    pub alliance_invitations: Vec<AllianceInvitationView>,
+    pub alliances: Vec<AllianceSummary>,
+    /// Megaprojects of the viewer's corporation and alliance.
+    pub megaprojects: Vec<MegaView>,
+    pub season: SeasonView,
     pub time: f64,
 }
 
@@ -423,6 +486,8 @@ pub struct Changes {
     pub deliveries: bool,
     /// Contracts were issued or lapsed (every view changed).
     pub contracts: bool,
+    /// A season ended: the number of the new one (the market is new; worlds start anew).
+    pub season: Option<u32>,
 }
 
 pub type ExResult<T> = Result<T, String>;
@@ -463,6 +528,12 @@ impl Exchange {
         }
         if ex.state.reputation_time == 0.0 {
             ex.state.reputation_time = ex.state.time;
+        }
+        if ex.state.season == 0 {
+            ex.state.season = 1;
+        }
+        if ex.state.season_started_at == 0.0 {
+            ex.state.season_started_at = ex.state.time;
         }
         ex
     }
@@ -745,6 +816,8 @@ impl Exchange {
             seller,
             at: self.state.time,
         };
+        self.count_volume(t.buyer.as_ref(), price * q);
+        self.count_volume(t.seller.as_ref(), price * q);
         self.state.trades.push(t.clone());
         if self.state.trades.len() > TRADES_KEPT {
             let extra = self.state.trades.len() - TRADES_KEPT;
@@ -755,7 +828,9 @@ impl Exchange {
 
     /// The incoming order at `idx` meets the book until its limit, its quantity or the book ends.
     fn match_order(&mut self, idx: usize) -> Vec<Trade> {
-        let fee = self.cfg.fee;
+        let market_fee = self.cfg.fee;
+        // each side pays its own fee (fixed when its order was placed)
+        let fee = self.state.orders[idx].fee.unwrap_or(market_fee);
         // the faction's duty on the taker's trades with it (players trade without it)
         let duty = self.tariff_of(&self.state.orders[idx].account, &self.state.orders[idx].hub_id);
         let mut trades = Vec::new();
@@ -812,8 +887,9 @@ impl Exchange {
                 let j = maker.expect("maker");
                 let m = &mut self.state.orders[j];
                 m.remaining = round3(m.remaining - q);
+                let maker_fee = m.fee.unwrap_or(market_fee);
                 if m.side == Side::Buy {
-                    m.held -= value * (1.0 + fee);
+                    m.held -= value * (1.0 + maker_fee);
                 }
                 let maker_account = m.account.clone();
                 match o.side {
@@ -836,7 +912,8 @@ impl Exchange {
                 s.insert(o.material.clone(), round3(cur + q));
             }
             if let Some(s) = &seller {
-                let rate = if s == &o.account { charge } else { fee };
+                let maker_fee = maker.map(|j| self.state.orders[j].fee.unwrap_or(market_fee)).unwrap_or(market_fee);
+                let rate = if s == &o.account { charge } else { maker_fee };
                 self.wallet_mut(s).credits += value * (1.0 - rate);
             }
             trades.push(self.record_trade(&o.hub_id, &o.material, price, q, buyer, seller));
@@ -923,7 +1000,8 @@ impl Exchange {
         }
         self.state.time = self.state.time.max(now);
         // a buy holds enough for the faction's duty too (it may fill from the faction at once)
-        let charge = self.cfg.fee + self.tariff_of(account, hub_id);
+        let fee = self.fee_for(account, hub_id);
+        let charge = fee + self.tariff_of(account, hub_id);
         let held = match side {
             Side::Buy => {
                 let need = price * quantity * (1.0 + charge);
@@ -957,6 +1035,7 @@ impl Exchange {
             held,
             placed_at: now,
             expires_at: now + self.cfg.order_seconds * 1000.0,
+            fee: Some(fee),
         };
         self.state.orders.push(order);
         let idx = self.state.orders.len() - 1;
@@ -1006,7 +1085,7 @@ impl Exchange {
             body_id: body_id.to_string(),
             cargo: cargo.clone(),
             departs_at: now,
-            arrives_at: now + self.travel_seconds(&self.star_of(account), hub_id) * 1000.0,
+            arrives_at: now + self.travel_for(account, hub_id) * 1000.0,
             arrived: false,
         };
         self.state.shipments.push(s.clone());
@@ -1037,7 +1116,7 @@ impl Exchange {
             direction: Direction::ToColony,
             hub_id: hub_id.to_string(),
             body_id: body_id.to_string(),
-            arrives_at: now + self.travel_seconds(&self.star_of(account), hub_id) * 1000.0,
+            arrives_at: now + self.travel_for(account, hub_id) * 1000.0,
             cargo,
             departs_at: now,
             arrived: false,
@@ -1115,8 +1194,9 @@ impl Exchange {
             ch.accounts.insert(o.account.clone());
             self.release(&o);
         }
-        // contracts and reputation
+        // contracts and reputation; alliances' notice periods
         self.age_contracts(now, &mut ch);
+        self.age_alliances(now, &mut ch);
         // factions: prices and depth; new contracts in place of the lapsed and delivered ones
         if let (Some(sim), Some(n)) = (self.npc.as_mut(), self.state.npc.as_ref()) {
             let minutes = (now - n.epoch) / 60_000.0;
@@ -1130,6 +1210,9 @@ impl Exchange {
             if self.issue_contracts() {
                 ch.contracts = true;
             }
+        }
+        if self.season_due(now) {
+            ch.season = Some(self.close_season(now).number + 1);
         }
         ch
     }
@@ -1236,7 +1319,8 @@ impl Exchange {
                 HubView {
                     faction: if self.npc.is_some() { faction_of(&market.id).map(String::from) } else { None },
                     distance_ly: round2(distance_ly(&star, hub_star)),
-                    travel_seconds: self.travel_seconds(&star, &market.id),
+                    travel_seconds: self.travel_for(account, &market.id),
+                    fee: self.fee_for(account, &market.id),
                     stock: wallet.stock.get(&market.id).cloned().unwrap_or_default().into_iter().filter(|(_, q)| *q > EPS).collect(),
                     book: self.book(&market.id),
                     reputation: faction_of(&market.id).map(|f| round2(self.reputation(account, f))).unwrap_or(0.0),
@@ -1271,6 +1355,11 @@ impl Exchange {
             corporation: self.corp_view(account),
             invitations: self.invitations_of(account),
             corporations: self.corp_summaries(),
+            alliance: self.alliance_view(account),
+            alliance_invitations: self.alliance_invitations_of(account),
+            alliances: self.alliance_summaries(),
+            megaprojects: self.megaprojects_of(account),
+            season: self.season(),
             time: self.state.time,
         }
     }

@@ -252,6 +252,7 @@ describe.skipIf(!existsSync(WASM))('replica of a server world (B4)', () => {
           book: [],
           reputation: 0,
           tariff: 0.05,
+          fee: 0.02,
         },
       ],
       orders: [],
@@ -262,6 +263,11 @@ describe.skipIf(!existsSync(WASM))('replica of a server world (B4)', () => {
       corporation: null,
       invitations: [],
       corporations: [],
+      alliance: null,
+      allianceInvitations: [],
+      alliances: [],
+      megaprojects: [],
+      season: { number: 1, startedAt: 0, endsAt: null },
       time: 0,
     };
     server.emit('message', { type: 'galaxy', view });

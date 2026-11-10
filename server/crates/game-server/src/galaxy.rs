@@ -21,7 +21,7 @@ use tokio::sync::{mpsc, oneshot};
 
 use game_core::economy::{EconomyParams, compute_economy};
 use game_core::models::resource::Qty;
-use game_session::exchange::{Exchange, ExchangeState, Role, Side};
+use game_session::exchange::{Exchange, ExchangeState, MegaKind, Role, Scope, Side};
 
 use crate::AppState;
 use crate::config::Config;
@@ -136,6 +136,33 @@ pub enum GalaxyOp {
     PostNotice {
         text: String,
     },
+    // alliances and megaprojects (S3)
+    FoundAlliance {
+        name: String,
+    },
+    InviteCorporation {
+        tag: String,
+    },
+    AcceptAlliance {
+        alliance_id: String,
+    },
+    DeclineAlliance {
+        alliance_id: String,
+    },
+    LeaveAlliance,
+    StartMegaproject {
+        kind: MegaKind,
+        scope: Scope,
+        hub_id: String,
+    },
+    Contribute {
+        project_id: String,
+        goods: Qty,
+    },
+    // rankings and seasons (S3)
+    Rankings,
+    /// Dev mode only: ends the season now.
+    CloseSeason,
 }
 
 /// The market from its saved JSON (a new one when there is none; an unreadable state is kept aside
@@ -205,6 +232,9 @@ pub struct GalaxyService {
     in_flight: HashSet<String>,
     dirty: bool,
     last_write_ms: f64,
+    dev_mode: bool,
+    /// A season ended during an op: the worlds start anew after it.
+    new_season: Option<u32>,
 }
 
 impl GalaxyService {
@@ -218,6 +248,8 @@ impl GalaxyService {
             in_flight: HashSet::new(),
             dirty: true,
             last_write_ms: 0.0,
+            dev_mode: cfg.dev_mode,
+            new_season: None,
         }
     }
 
@@ -247,12 +279,30 @@ impl GalaxyService {
             GalaxyOp::Invite { callsign } => ex.invite(account, &callsign, now).map(|c| reply_ok(id, c)),
             GalaxyOp::AcceptInvitation { corp_id } => ex.accept_invitation(account, &corp_id, now).map(|c| reply_ok(id, c)),
             GalaxyOp::DeclineInvitation { corp_id } => ex.decline_invitation(account, &corp_id).map(|v| reply_ok(id, v)),
-            GalaxyOp::LeaveCorporation => ex.leave_corporation(account).map(|s| reply_ok(id, s)),
+            GalaxyOp::LeaveCorporation => ex.leave_corporation(account, now).map(|s| reply_ok(id, s)),
             GalaxyOp::SetRole { account: member, role } => ex.set_role(account, &member, role).map(|c| reply_ok(id, c)),
             GalaxyOp::Expel { account: member } => ex.expel(account, &member).map(|c| reply_ok(id, c)),
             GalaxyOp::Deposit { credits, goods, note } => ex.deposit(account, credits, &goods, &note, now).map(|c| reply_ok(id, c)),
             GalaxyOp::Withdraw { credits, goods, note } => ex.withdraw(account, credits, &goods, &note, now).map(|c| reply_ok(id, c)),
             GalaxyOp::PostNotice { text } => ex.post_notice(account, &text, now).map(|c| reply_ok(id, c)),
+            GalaxyOp::FoundAlliance { name } => ex.found_alliance(account, &name, now).map(|a| reply_ok(id, a)),
+            GalaxyOp::InviteCorporation { tag } => ex.invite_corporation(account, &tag, now).map(|a| reply_ok(id, a)),
+            GalaxyOp::AcceptAlliance { alliance_id } => ex.accept_alliance(account, &alliance_id, now).map(|a| reply_ok(id, a)),
+            GalaxyOp::DeclineAlliance { alliance_id } => ex.decline_alliance(account, &alliance_id).map(|v| reply_ok(id, v)),
+            GalaxyOp::LeaveAlliance => ex.leave_alliance(account, now).map(|s| reply_ok(id, s)),
+            GalaxyOp::StartMegaproject { kind, scope, hub_id } => {
+                ex.start_megaproject(account, kind, scope, &hub_id, now).map(|p| reply_ok(id, p))
+            }
+            GalaxyOp::Contribute { project_id, goods } => ex.contribute(account, &project_id, &goods, now).map(|p| reply_ok(id, p)),
+            GalaxyOp::Rankings => return reply_ok(id, ex.rankings(account)),
+            GalaxyOp::CloseSeason => {
+                if !self.dev_mode {
+                    return reply_err(id, "sezon zamyka się sam (tylko tryb deweloperski zamyka go ręcznie)");
+                }
+                let record = ex.close_season(now);
+                self.new_season = Some(record.number + 1);
+                Ok(reply_ok(id, record))
+            }
         };
         match out {
             Ok(r) => {
@@ -289,6 +339,23 @@ impl GalaxyService {
         if self.writer.send(WriterOp::Flush(done)).is_ok() {
             let _ = wait.await;
         }
+    }
+
+    /// A new season: the market is written at once, every view changes, and every world starts
+    /// anew (running worlds now; sleeping ones when they wake, by the season in their snapshot).
+    fn season_changed(&mut self, season: u32, state: &Weak<AppState>) {
+        println!("galaxy: season {} begins; worlds start anew", season);
+        self.in_flight.clear();
+        self.write(wall_ms());
+        self.push_all();
+        let Some(state) = state.upgrade() else { return };
+        state.season.store(season, std::sync::atomic::Ordering::Relaxed);
+        tokio::spawn(async move {
+            let worlds: Vec<_> = state.worlds.lock().await.values().cloned().collect();
+            for tx in worlds {
+                let _ = tx.send(WorldMsg::NewSeason { season }).await;
+            }
+        });
     }
 
     /// Sends arrived shipments to their worlds (each once until answered).
@@ -330,6 +397,9 @@ impl GalaxyService {
                         self.dirty = true;
                         self.push_all();
                     }
+                    if let Some(season) = ch.season {
+                        self.season_changed(season, &state);
+                    }
                     if !self.exchange.deliveries().is_empty() {
                         self.deliver(&state, &me);
                     }
@@ -355,7 +425,9 @@ impl GalaxyService {
                         if let Some((_, tx)) = self.clients.get(&client) {
                             let _ = tx.send(reply.into());
                         }
-                        if self.dirty {
+                        if let Some(season) = self.new_season.take() {
+                            self.season_changed(season, &state);
+                        } else if self.dirty {
                             self.push_all();
                         }
                     }
@@ -405,8 +477,10 @@ impl GalaxyService {
 pub fn spawn(cfg: &Config, state: &Arc<AppState>, rx: mpsc::UnboundedReceiver<GalaxyMsg>, saved: Option<&str>, sink: GalaxySink) {
     let place = sink.describe();
     let service = GalaxyService::new(cfg, saved, sink);
+    let season = service.exchange.season().number;
+    state.season.store(season, std::sync::atomic::Ordering::Relaxed);
     println!(
-        "galaxy: {} · {} accounts · NPC factions {}",
+        "galaxy: {} · {} accounts · NPC factions {} · season {season}",
         place,
         service.exchange.save().wallets.len(),
         if service.exchange.has_npc() { "on" } else { "off" }

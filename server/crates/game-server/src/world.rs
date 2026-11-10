@@ -60,6 +60,10 @@ pub enum WorldMsg {
         cargo: Qty,
         done: oneshot::Sender<bool>,
     },
+    /// The galaxy began a new season: the world starts anew.
+    NewSeason {
+        season: u32,
+    },
     /// Write the world now and stop (shutdown).
     Stop {
         done: oneshot::Sender<()>,
@@ -201,12 +205,14 @@ pub struct World {
     galaxy: Option<mpsc::UnboundedSender<GalaxyMsg>>,
     /// Departures of the restored log tail, reported again when the galaxy is connected.
     unreported: Vec<Departure>,
+    /// The galaxy's season of this world.
+    season: u32,
 }
 
 impl World {
     /// Loads the world from the repository (or starts the default scenario) and catches up.
     pub fn open(id: &str, cfg: &Config, repo: &dyn WorldRepository, persister: Persister) -> World {
-        World::from_loaded(id, cfg, repo.load(id), persister)
+        World::from_loaded(id, cfg, repo.load(id), persister, 1)
     }
 
     /// The world of what its repository holds (or the default scenario), caught up.
@@ -215,9 +221,15 @@ impl World {
         cfg: &Config,
         loaded: std::io::Result<Option<(StoredWorld, Vec<LogEntry>)>>,
         persister: Persister,
+        season: u32,
     ) -> World {
         let mut unreported = Vec::new();
         let (mut host, fresh) = match loaded {
+            // a world of an older season starts anew (S3: worlds and market reset)
+            Ok(Some((stored, _))) if stored.season.is_some_and(|s| s < season) => {
+                println!("world {id}: season {} is over, starting anew in season {season}", stored.season.unwrap_or(0));
+                (new_host(cfg), true)
+            }
             Ok(Some((stored, log))) => {
                 let (mut host, tail_departures) = restore(cfg, &stored, &log);
                 unreported = tail_departures;
@@ -256,6 +268,7 @@ impl World {
             idle_since_ms: Some(mono_ms()),
             galaxy: None,
             unreported,
+            season,
         };
         if fresh || resized || !cfg.dev_mode {
             w.snapshot();
@@ -321,7 +334,7 @@ impl World {
 
     fn snapshot(&mut self) {
         let cp = self.host.session.checkpoint();
-        let stored = StoredWorld { saved_at_ms: wall_ms(), save: cp.save, sim: Some(cp.sim) };
+        let stored = StoredWorld { saved_at_ms: wall_ms(), save: cp.save, sim: Some(cp.sim), season: Some(self.season) };
         self.persister.send(RepoOp::Snapshot { world: self.id.clone(), stored: Box::new(stored) });
         self.logged_generation = self.host.session.generation();
         self.logged_commands = self.host.session.commands().len();
@@ -351,6 +364,24 @@ impl World {
             self.persister.send(RepoOp::Append { world: self.id.clone(), entry: LogEntry::Tempo { step: t.step, tempo: t.tempo } });
         }
         self.logged_tempos = tempos.to_vec();
+    }
+
+    /// A new season: the world starts anew from the default scenario; every client gets the new
+    /// checkpoint, the galaxy the colony's star.
+    pub fn new_season(&mut self, season: u32) {
+        if season <= self.season {
+            return;
+        }
+        println!("world {}: season {season}, starting anew", self.id);
+        self.season = season;
+        self.host = new_host(&self.cfg);
+        self.cursor = SyncCursor::new(&self.host.session);
+        self.unreported.clear();
+        self.snapshot();
+        self.send_all(&SyncMessage::reset(&self.host.session));
+        if let Some(g) = &self.galaxy {
+            let _ = g.send(GalaxyMsg::Home { account: self.id.clone(), star: self.home_star() });
+        }
     }
 
     /// What changed since the last call, for every replica (also with no client, to keep the cursor current).
@@ -492,6 +523,7 @@ impl World {
                             let _ = done.send(taken);
                         })));
                     }
+                    Some(WorldMsg::NewSeason { season }) => self.new_season(season),
                     Some(WorldMsg::Stop { done }) => {
                         self.snapshot();
                         let _ = done.send(());

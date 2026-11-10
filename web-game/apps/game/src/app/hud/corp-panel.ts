@@ -3,6 +3,7 @@ import type { CorpLedgerEntry, CorpRole, GalaxyOp, GalaxyReply } from '@space-ga
 import { HudFrame } from '@space-game/ui';
 import { GameService } from '../game/game.service';
 import { TEXT } from '../i18n/pl';
+import { CorpProjects } from './corp-projects';
 
 const money = (n: number) => n.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const qty = (n: number) => n.toLocaleString('pl-PL', { maximumFractionDigits: 1 });
@@ -15,7 +16,7 @@ const qty = (n: number) => n.toLocaleString('pl-PL', { maximumFractionDigits: 1 
  */
 @Component({
   selector: 'wg-corp-panel',
-  imports: [HudFrame],
+  imports: [HudFrame, CorpProjects],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <section hudFrame class="panel corp" data-corp [label]="t.tab" [serial]="t.serial">
@@ -110,6 +111,8 @@ const qty = (n: number) => n.toLocaleString('pl-PL', { maximumFractionDigits: 1 
                 <li class="dim">{{ t.noBoard }}</li>
               }
             </ul>
+
+            <wg-corp-projects [view]="v" />
 
             <div class="actions">
               <button type="button" class="btn" data-action="leave" [disabled]="busy()" (click)="leave()">

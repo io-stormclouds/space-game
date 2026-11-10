@@ -32,6 +32,10 @@ pub struct StoredWorld {
     /// the log tail is replayed. Missing in snapshots written before it existed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sim: Option<SimState>,
+    /// The galaxy's season the world belongs to (S3); a world of an older season starts anew.
+    /// Missing in snapshots written before seasons: the season running.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub season: Option<u32>,
 }
 
 /// One line of `log.jsonl`: what changed after the snapshot.

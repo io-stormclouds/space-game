@@ -49,6 +49,8 @@ pub struct AppState {
     pub galaxy: mpsc::UnboundedSender<galaxy::GalaxyMsg>,
     pub next_client: AtomicU64,
     pub started: std::time::Instant,
+    /// The galaxy's season (S3): a world saved in an older one starts anew.
+    pub season: std::sync::atomic::AtomicU32,
 }
 
 impl AppState {
@@ -73,6 +75,7 @@ impl AppState {
             galaxy,
             next_client: AtomicU64::new(1),
             started: std::time::Instant::now(),
+            season: std::sync::atomic::AtomicU32::new(1),
         });
         galaxy::spawn(&state.cfg, &state, galaxy_rx, saved_galaxy.as_deref(), galaxy_sink);
         Ok(state)
@@ -88,7 +91,8 @@ impl AppState {
         }
         let (tx, rx) = tokio::sync::mpsc::channel(256);
         let loaded = self.storage.load_world(id).await;
-        let mut w = world::World::from_loaded(id, &self.cfg, loaded, self.persister.clone());
+        let season = self.season.load(std::sync::atomic::Ordering::Relaxed);
+        let mut w = world::World::from_loaded(id, &self.cfg, loaded, self.persister.clone(), season);
         w.set_galaxy(self.galaxy.clone());
         println!("world {id}: running at step {}", w.host().session.step_index());
         tokio::spawn(w.run(rx, self.worlds.clone()));

@@ -27,6 +27,8 @@ export interface MarketOrder {
   /** Unix ms. */
   placedAt: number;
   expiresAt: number;
+  /** The account's fee in the hub when placed (a terminal lowers it). */
+  fee?: number;
 }
 
 export interface Trade {
@@ -73,6 +75,8 @@ export interface HubView extends MarketHub {
   /** The player's reputation with the host faction (−100…100) and the duty it charges them. */
   reputation: number;
   tariff: number;
+  /** The player's hub fee here (the market's, less a corporate terminal's cut). */
+  fee: number;
 }
 
 export type ContractState = 'open' | 'taken' | 'delivered' | 'failed';
@@ -162,6 +166,115 @@ export interface CorpInvitation {
   at: number;
 }
 
+// ---- alliances and megaprojects (05-SOCIAL §5–6, S3) ----
+
+export interface AllianceMember {
+  corpId: string;
+  name: string;
+  tag: string;
+  joinedAt: number;
+  /** Out at this time (notice given). */
+  leavingAt: number | null;
+  leader: boolean;
+}
+
+/** The alliance of the player's corporation. */
+export interface AllianceView {
+  id: string;
+  name: string;
+  foundedAt: number;
+  members: AllianceMember[];
+  /** Tags of the corporations invited and not answered yet. */
+  invited: string[];
+  /** The player is the chief of the leading corporation (invites, starts projects). */
+  leads: boolean;
+  /** The player is the chief of their corporation (accepts, leaves). */
+  chief: boolean;
+}
+
+export interface AllianceSummary {
+  id: string;
+  name: string;
+  corporations: number;
+}
+
+/** An invitation of the player's corporation (shown to its chief). */
+export interface AllianceInvitation {
+  allianceId: string;
+  name: string;
+  by: string;
+  at: number;
+}
+
+/** Terminal: −1 pp of the members' fee in the seat hub; gate: −30% shipping time to and from its hub. */
+export type MegaKind = 'terminal' | 'gate';
+export type MegaScope = 'corporation' | 'alliance';
+
+export interface MegaShare {
+  corpId: string;
+  name: string;
+  tag: string;
+  /** Value of the goods given [kr]. */
+  value: number;
+}
+
+export interface MegaView {
+  id: string;
+  kind: MegaKind;
+  scope: MegaScope;
+  ownerName: string;
+  hubId: string;
+  startedAt: number;
+  required: Record<string, number>;
+  progress: Record<string, number>;
+  /** 0–1. */
+  done: number;
+  completedAt: number | null;
+  /** By corporation, largest first. */
+  shares: MegaShare[];
+  /** What the player gave [kr]. */
+  mine: number;
+}
+
+// ---- rankings and seasons (05-SOCIAL §7, S3) ----
+
+export interface SeasonView {
+  number: number;
+  startedAt: number;
+  /** null: the season ends only when closed. */
+  endsAt: number | null;
+}
+
+export interface RankEntry {
+  id: string;
+  name: string;
+  /** The player's corporation tag, or the corporation's. */
+  tag: string;
+  value: number;
+}
+
+export interface SeasonRecord {
+  number: number;
+  startedAt: number;
+  endedAt: number;
+  netWorth: RankEntry[];
+  volume: RankEntry[];
+  corporations: RankEntry[];
+  megaprojectsCompleted: number;
+}
+
+export interface Rankings {
+  season: SeasonView;
+  /** Credits, held credits and goods in the galaxy at the economy's values. */
+  netWorth: RankEntry[];
+  volume: RankEntry[];
+  reputation: RankEntry[];
+  corporations: RankEntry[];
+  mine: { netWorth: number; netWorthPlace: number; volume: number; reputation: number };
+  /** Closed seasons, newest first. */
+  history: SeasonRecord[];
+}
+
 /** What the player sees of the galaxy; pushed after every change of the market. */
 export interface GalaxyView {
   account: string;
@@ -182,6 +295,13 @@ export interface GalaxyView {
   corporation: CorpView | null;
   invitations: CorpInvitation[];
   corporations: CorpSummary[];
+  /** The alliance of the player's corporation, its invitations (to its chief), every alliance. */
+  alliance: AllianceView | null;
+  allianceInvitations: AllianceInvitation[];
+  alliances: AllianceSummary[];
+  /** Megaprojects of the player's corporation and alliance. */
+  megaprojects: MegaView[];
+  season: SeasonView;
   time: number;
 }
 
@@ -201,7 +321,16 @@ export type GalaxyOp =
   | { op: 'expel'; account: string }
   | { op: 'deposit'; credits?: number; goods?: Record<string, number>; note?: string }
   | { op: 'withdraw'; credits?: number; goods?: Record<string, number>; note?: string }
-  | { op: 'postNotice'; text: string };
+  | { op: 'postNotice'; text: string }
+  | { op: 'foundAlliance'; name: string }
+  | { op: 'inviteCorporation'; tag: string }
+  | { op: 'acceptAlliance'; allianceId: string }
+  | { op: 'declineAlliance'; allianceId: string }
+  | { op: 'leaveAlliance' }
+  | { op: 'startMegaproject'; kind: MegaKind; scope: MegaScope; hubId: string }
+  | { op: 'contribute'; projectId: string; goods: Record<string, number> }
+  | { op: 'rankings' }
+  | { op: 'closeSeason' };
 
 /** An order after it met the book: what is left of it (remaining 0: filled) and its trades. */
 export interface Placed {
@@ -209,7 +338,21 @@ export interface Placed {
   trades: Trade[];
 }
 
-export type GalaxyReply = GalaxyView | Placed | MarketOrder | Shipment | Contract | CorpView | CorpSummary | CorpInvitation[];
+export type GalaxyReply =
+  | GalaxyView
+  | Placed
+  | MarketOrder
+  | Shipment
+  | Contract
+  | CorpView
+  | CorpSummary
+  | CorpInvitation[]
+  | AllianceView
+  | AllianceSummary
+  | AllianceInvitation[]
+  | MegaView
+  | Rankings
+  | SeasonRecord;
 
 /**
  * The world's command that sends cargo from the colony's storage to a hub (R-21). Only the Rust world

@@ -313,6 +313,8 @@ async fn production_needs_an_account_keeps_time_and_limits_requests() {
     let mut c = Client { ws, replica: Host::new(HostOptions::default()), hashes: 0, galaxy: None };
     let tempo = c.ask(1, json!({ "kind": "setTempo", "tempo": 600 })).await;
     assert_eq!(tempo["ok"], false, "no test tempos in production");
+    let season = c.galaxy_op(2, json!({ "op": "closeSeason" })).await;
+    assert!(season["error"].as_str().unwrap().contains("tryb deweloperski"), "seasons end by themselves: {season}");
 
     // a burst far above 20/s: the excess is refused, the connection stays
     for id in 100..200u64 {
@@ -751,5 +753,112 @@ async fn the_server_on_postgres_survives_a_restart() {
     assert_eq!(at_hub(&view), 10.0, "the market came back with the cargo in the hub");
     // a second migration run changes nothing; the schema goes away
     admin.batch_execute(&format!("DROP SCHEMA {schema} CASCADE")).await.unwrap();
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Buys `quantity` of a material from the faction in a hub at its ask.
+async fn buy_from_faction(c: &mut Client, id: u64, hub_id: &str, material: &str, quantity: f64) {
+    let view = c.wait(|x| x.galaxy.is_some(), "a view").await.galaxy.clone().unwrap();
+    let quote = hub(&view, hub_id)["quotes"].as_array().unwrap().iter().find(|q| q["material"] == material).unwrap().clone();
+    let r = c
+        .galaxy_op(id, json!({ "op": "placeOrder", "hubId": hub_id, "material": material, "side": "buy", "quantity": quantity, "price": quote["ask"] }))
+        .await;
+    assert_eq!(r["value"]["order"]["remaining"].as_f64(), Some(0.0), "bought at once: {r}");
+}
+
+/// 05-SOCIAL S3 gate: a megaproject completed by the contributions of two corporations (an
+/// alliance's gate), and a season closed and opened: the closed season's rankings stay in the
+/// history, the market and the worlds start anew, and it all survives a restart.
+#[tokio::test]
+async fn two_corporations_complete_an_alliance_gate_and_a_season_turns() {
+    let dir = tmp("season");
+    let mut cfg = config(&dir, true);
+    cfg.market.start_credits = 20_000.0;
+    cfg.market.corp.founding_credits = 500.0;
+    cfg.market.corp.founding_goods = Default::default();
+    cfg.market.social.megaproject_scale = 0.02;
+    cfg.market.social.season_seconds = 0.0;
+    let (url, state) = start(cfg.clone()).await;
+    let mut a = Client::login(&url, "Kestrel", "tajne-haslo").await;
+    let mut b = Client::login(&url, "Wega", "inne-haslo").await;
+    a.ask(1, json!({ "kind": "start", "scenarioId": "planeta-matka" })).await;
+    let commands_before = a.replica.session.commands().len();
+    a.ask(2, json!({ "kind": "command", "command": { "type": "SCAN_SYSTEM", "shipId": "arka-1" } })).await;
+    assert!(a.replica.session.commands().len() > commands_before);
+    let hub_id = "hub-sol";
+
+    // two corporations and their alliance
+    for (c, name, tag) in [(&mut a, "Konsorcjum Kestrel", "KST"), (&mut b, "Gildia Wega", "WGA")] {
+        let r = c.galaxy_op(10, json!({ "op": "foundCorporation", "name": name, "tag": tag, "hubId": hub_id })).await;
+        assert_eq!(r["ok"], true, "{r}");
+    }
+    let pact = a.galaxy_op(11, json!({ "op": "foundAlliance", "name": "Pakt Orionu" })).await;
+    assert_eq!(pact["value"]["leads"], true, "{pact}");
+    let invited = a.galaxy_op(12, json!({ "op": "inviteCorporation", "tag": "wga" })).await;
+    assert_eq!(invited["value"]["invited"], json!(["WGA"]), "{invited}");
+    let has_invitation = |x: &Client| x.galaxy.as_ref().is_some_and(|v| !v["allianceInvitations"].as_array().unwrap().is_empty());
+    b.wait(has_invitation, "Wega's alliance invitation").await;
+    let joined = b.galaxy_op(13, json!({ "op": "acceptAlliance", "allianceId": pact["value"]["id"] })).await;
+    assert_eq!(joined["value"]["members"].as_array().unwrap().len(), 2, "{joined}");
+
+    // the alliance's gate: Kestrel's corporation gives steel and beams, Wega's the engines and the superconductor
+    let gate = a.galaxy_op(14, json!({ "op": "startMegaproject", "kind": "gate", "scope": "alliance", "hubId": hub_id })).await;
+    assert_eq!(gate["ok"], true, "{gate}");
+    let required = gate["value"]["required"].clone();
+    assert_eq!(required, json!({ "STA": 32.0, "BEL": 8.0, "SLN": 3.0, "NAD": 1.0 }));
+    let project = gate["value"]["id"].clone();
+    buy_from_faction(&mut a, 20, hub_id, "STA", 32.0).await;
+    buy_from_faction(&mut a, 21, hub_id, "BEL", 8.0).await;
+    buy_from_faction(&mut b, 20, hub_id, "SLN", 3.0).await;
+    buy_from_faction(&mut b, 21, hub_id, "NAD", 1.0).await;
+    let half = a.galaxy_op(22, json!({ "op": "contribute", "projectId": project, "goods": { "STA": 32, "BEL": 8 } })).await;
+    assert!(half["value"]["completedAt"].is_null(), "{half}");
+    let done = b.galaxy_op(22, json!({ "op": "contribute", "projectId": project, "goods": { "SLN": 3, "NAD": 1 } })).await;
+    assert!(done["value"]["completedAt"].as_f64().is_some(), "{done}");
+    let shares: Vec<&str> = done["value"]["shares"].as_array().unwrap().iter().map(|s| s["tag"].as_str().unwrap()).collect();
+    assert_eq!(shares.len(), 2, "two corporations gave: {shares:?}");
+    // both see the completed gate, and its shorter travel to the hub
+    let completed = |x: &Client| x.galaxy.as_ref().is_some_and(|v| v["megaprojects"][0]["completedAt"].as_f64().is_some());
+    for x in [&mut a, &mut b] {
+        let v = x.wait(completed, "the completed gate").await.galaxy.clone().unwrap();
+        let travel = hub(&v, hub_id)["travelSeconds"].as_f64().unwrap();
+        let elsewhere = hub(&v, "hub-sirius")["travelSeconds"].as_f64().unwrap();
+        assert!(travel > 0.0 && elsewhere > 0.0);
+    }
+
+    // rankings of the season
+    let r = a.galaxy_op(30, json!({ "op": "rankings" })).await;
+    assert_eq!(r["value"]["season"]["number"], 1, "{r}");
+    assert_eq!(r["value"]["netWorth"].as_array().unwrap().len(), 2);
+    assert!(r["value"]["volume"].as_array().unwrap().iter().any(|e| e["name"] == "Wega" && e["tag"] == "WGA"));
+    assert_eq!(r["value"]["corporations"].as_array().unwrap().len(), 2);
+
+    // the season turns (dev mode by hand): the history keeps it, the market and Kestrel's world start anew
+    let closed = a.galaxy_op(31, json!({ "op": "closeSeason" })).await;
+    assert_eq!(closed["value"]["number"], 1, "{closed}");
+    assert_eq!(closed["value"]["megaprojectsCompleted"], 1);
+    let season2 = |x: &Client| x.galaxy.as_ref().is_some_and(|v| v["season"]["number"] == 2);
+    let v = a.wait(season2, "season 2").await.galaxy.clone().unwrap();
+    assert_eq!(v["credits"].as_f64(), Some(20_000.0), "start credits again");
+    assert!(v["megaprojects"].as_array().unwrap().is_empty());
+    assert_eq!(v["corporation"]["tag"], "KST", "corporations stay");
+    assert_eq!(v["alliance"]["name"], "Pakt Orionu", "alliances stay");
+    let fresh = a.wait(|x| x.replica.session.commands().is_empty(), "Kestrel's world anew").await;
+    assert_eq!(fresh.replica.session.scenario_id(), "tau-ceti");
+    let r = a.galaxy_op(32, json!({ "op": "rankings" })).await;
+    assert_eq!(r["value"]["history"][0]["number"], 1);
+    assert_eq!(r["value"]["history"][0]["netWorth"].as_array().unwrap().len(), 2);
+    a.ws.close(None).await.unwrap();
+    b.ws.close(None).await.unwrap();
+
+    // a restart keeps season 2 and the history; the world stays in the new season
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    state.shutdown().await;
+    let (url, _state) = start(cfg).await;
+    let mut a = Client::login(&url, "Kestrel", "tajne-haslo").await;
+    assert!(a.replica.session.commands().is_empty(), "not reset twice, not the old world");
+    let r = a.galaxy_op(1, json!({ "op": "rankings" })).await;
+    assert_eq!((r["value"]["season"]["number"].as_u64(), r["value"]["history"].as_array().unwrap().len()), (Some(2), 1));
+    // closing a season is for dev mode only (checked by the service)
     let _ = std::fs::remove_dir_all(dir);
 }

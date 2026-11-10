@@ -45,18 +45,27 @@ export class UiState {
   readonly driveRover = signal<string | null>(null);
   readonly buildMenu = signal<boolean>(false);
   readonly perfVisible = signal<boolean>(true);
-  /** The hub panel (B6 market, F3) and the corporation panel (S2, F4): one drawer at a time. */
+  /** The hub panel (B6 market, F3), the corporation panel (S2, F4) and the rankings (S3, F7): one drawer at a time. */
   readonly hubOpen = signal<boolean>(false);
   readonly corpOpen = signal<boolean>(false);
+  readonly rankingsOpen = signal<boolean>(false);
 
   toggleHub(): void {
     this.hubOpen.update((v) => !v);
     this.corpOpen.set(false);
+    this.rankingsOpen.set(false);
   }
 
   toggleCorp(): void {
     this.corpOpen.update((v) => !v);
     this.hubOpen.set(false);
+    this.rankingsOpen.set(false);
+  }
+
+  toggleRankings(): void {
+    this.rankingsOpen.update((v) => !v);
+    this.hubOpen.set(false);
+    this.corpOpen.set(false);
   }
   /** Level of the sandbox (designer F2); a building's machine follows the building's recipe. */
   readonly atanorLevel = signal<string>('A_NAD');

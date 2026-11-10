@@ -207,21 +207,21 @@ fn positive_goods(goods: &Qty) -> bool {
 }
 
 impl Exchange {
-    fn callsign_of(&self, account: &str) -> String {
+    pub(super) fn callsign_of(&self, account: &str) -> String {
         self.state.profiles.get(account).map(|p| p.callsign.clone()).unwrap_or_else(|| account.to_string())
     }
 
-    fn account_by_callsign(&self, callsign: &str) -> Option<String> {
+    pub(super) fn account_by_callsign(&self, callsign: &str) -> Option<String> {
         let want = callsign.trim().to_lowercase();
         self.state.profiles.iter().find(|(_, p)| p.callsign.to_lowercase() == want).map(|(id, _)| id.clone())
     }
 
-    fn corp_index(&self, account: &str) -> Option<usize> {
+    pub(super) fn corp_index(&self, account: &str) -> Option<usize> {
         self.state.corporations.iter().position(|c| c.members.iter().any(|m| m.account == account))
     }
 
     /// The account's corporation and role, or an error.
-    fn membership(&self, account: &str) -> ExResult<(usize, Role)> {
+    pub(super) fn membership(&self, account: &str) -> ExResult<(usize, Role)> {
         let i = self.corp_index(account).ok_or_else(|| "nie należysz do korporacji".to_string())?;
         let role = self.state.corporations[i].members.iter().find(|m| m.account == account).map(|m| m.role).expect("a member");
         Ok((i, role))
@@ -332,8 +332,9 @@ impl Exchange {
         Ok(self.invitations_of(account))
     }
 
-    /// Leaves the corporation; a chief alone dissolves it and takes its treasury.
-    pub fn leave_corporation(&mut self, account: &str) -> ExResult<CorpSummary> {
+    /// Leaves the corporation; a chief alone dissolves it and takes its treasury (it leaves its
+    /// alliance at once, its megaprojects go).
+    pub fn leave_corporation(&mut self, account: &str, now: f64) -> ExResult<CorpSummary> {
         let (i, role) = self.membership(account)?;
         let summary = self.summary(i);
         if role == Role::Chief {
@@ -345,6 +346,7 @@ impl Exchange {
             self.wallet_mut(account).credits += c.credits;
             let s = self.stock_mut(account, &c.hub_id);
             *s = add_stock(s, &c.stock, 1.0);
+            self.corporation_dissolved(&c.id, now);
             return Ok(CorpSummary { members: 0, ..summary });
         }
         self.state.corporations[i].members.retain(|m| m.account != account);
@@ -645,16 +647,16 @@ mod tests {
         assert_eq!(m.corp_view("acc-1").unwrap().board[0].text, "zbiórka w hubie");
         assert!(m.post_notice("acc-2", "   ", T0).is_err());
         assert!(m.expel("acc-3", "acc-1").is_err(), "an officer does not expel the chief");
-        assert!(m.leave_corporation("acc-1").unwrap_err().contains("przekaż"));
+        assert!(m.leave_corporation("acc-1", T0).unwrap_err().contains("przekaż"));
         m.set_role("acc-1", "acc-2", Role::Chief).unwrap();
         let v = m.corp_view("acc-2").unwrap();
         assert_eq!(v.role, Role::Chief);
         assert_eq!(v.members.iter().find(|x| x.account == "acc-1").unwrap().role, Role::Officer);
-        m.leave_corporation("acc-1").unwrap();
+        m.leave_corporation("acc-1", T0).unwrap();
         m.expel("acc-2", "acc-3").unwrap();
         // alone, the chief dissolves it and takes the treasury
         let before = m.wallet("acc-2").credits;
-        let gone = m.leave_corporation("acc-2").unwrap();
+        let gone = m.leave_corporation("acc-2", T0).unwrap();
         assert_eq!(gone.members, 0);
         assert!(m.corp_summaries().is_empty());
         assert_eq!(m.wallet("acc-2").credits, before + 250.0);

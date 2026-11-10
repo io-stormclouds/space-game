@@ -1,6 +1,6 @@
 # server — backend gry w Rust
 
-Workspace Cargo z portem domeny gry i narzędziami zgodności (plan `docs/plan/02-BACKEND-RUST.md`). Stan: **B0, B1 i B2 wykonane 2026-11-08** (port całej domeny z silnikiem Atanora i rejestrem gwiazd, złote powtórki, scenariusze `fabryka` i obciążenia S/M/L, pomiar kroku i WASM). **B3 wykonane 2026-11-09**: `GameApi` na WebAssembly w workerze klienta, przełącznik `mock-ts` / `wasm`, zgodność z mockiem. **B4 w toku**: `game-server` (konta, świat na gracza, WebSocket, harmonogram światów, zapis i odtworzenie z punktu kontrolnego i końcówki dziennika, limity) oraz tryb `remote`, w którym klient trzyma kopię świata w WASM i dostaje od serwera tylko rozkazy, kroki i skrót stanu (R-18). **T8 (teren) 2026-11-09**: klasy pól i drogi osady (`math/terrain.rs`, bit w bit z `classifyTerrain`), reguły budowy na terenie (`sim/terrain_rules.rs`: `BAD_TERRAIN`, koszt `ceil(q·%/100)`, czas pierwszej budowy × %, port i `load-m` omijają wodę), pola terenu w karcie pola, duchu i katalogu `game-session`. **T5 etap 2 (biomy) 2026-11-10**: tabela biomów `mixed`, `medieval`, `winter`, `dry` i nadpisania z `TerrainConfig` (`ground`, `basin`, `basinLevel`, `landingCap`: strefa lądowania jest zwykłym gruntem) w `math/terrain.rs`, rodzaje `sand`, `dune` (niebudowalna), `ice`, `regolith` w katalogu, teren na wszystkich planetach Tau Ceti i na planecie oraz Księżycu PoC, `load-l` 1400 budowli; preset `load-m-teren` zostaje tylko w mocku TS. **B6 w toku**: usługa galaktyki (huby z księgą zleceń, kredyty, przesyłki między kolonią a hubem, frakcje NPC z wyłącznikiem, R-7); brama „dwóch graczy handluje przez hub” przechodzi w teście WebSocket; w kliencie ekran hubu (F3), kontrakty frakcji i reputacja (S1), korporacje (S2, F4). Szczegóły i braki: sekcje B3, B4 i B6 niżej.
+Workspace Cargo z portem domeny gry i narzędziami zgodności (plan `docs/plan/02-BACKEND-RUST.md`). Stan: **B0, B1 i B2 wykonane 2026-11-08** (port całej domeny z silnikiem Atanora i rejestrem gwiazd, złote powtórki, scenariusze `fabryka` i obciążenia S/M/L, pomiar kroku i WASM). **B3 wykonane 2026-11-09**: `GameApi` na WebAssembly w workerze klienta, przełącznik `mock-ts` / `wasm`, zgodność z mockiem. **B4 w toku**: `game-server` (konta, świat na gracza, WebSocket, harmonogram światów, zapis i odtworzenie z punktu kontrolnego i końcówki dziennika, limity) oraz tryb `remote`, w którym klient trzyma kopię świata w WASM i dostaje od serwera tylko rozkazy, kroki i skrót stanu (R-18). **T8 (teren) 2026-11-09**: klasy pól i drogi osady (`math/terrain.rs`, bit w bit z `classifyTerrain`), reguły budowy na terenie (`sim/terrain_rules.rs`: `BAD_TERRAIN`, koszt `ceil(q·%/100)`, czas pierwszej budowy × %, port i `load-m` omijają wodę), pola terenu w karcie pola, duchu i katalogu `game-session`. **T5 etap 2 (biomy) 2026-11-10**: tabela biomów `mixed`, `medieval`, `winter`, `dry` i nadpisania z `TerrainConfig` (`ground`, `basin`, `basinLevel`, `landingCap`: strefa lądowania jest zwykłym gruntem) w `math/terrain.rs`, rodzaje `sand`, `dune` (niebudowalna), `ice`, `regolith` w katalogu, teren na wszystkich planetach Tau Ceti i na planecie oraz Księżycu PoC, `load-l` 1400 budowli; preset `load-m-teren` zostaje tylko w mocku TS. **B6 w toku**: usługa galaktyki (huby z księgą zleceń, kredyty, przesyłki między kolonią a hubem, frakcje NPC z wyłącznikiem, R-7); brama „dwóch graczy handluje przez hub” przechodzi w teście WebSocket; w kliencie ekran hubu (F3), kontrakty frakcji i reputacja (S1), korporacje (S2, F4), sojusze, megaprojekty, rankingi (F7) i sezony (S3). **B4 2026-11-10:** konta i sesje w cookie z biletem WS, strona logowania, metryki Prometheus, PostgreSQL (`DATABASE_URL`) i uruchomiony `deploy/`. Szczegóły i braki: sekcje B3, B4 i B6 niżej.
 
 ```bash
 cargo test --workspace                 # testy jednostkowe + zgodność z TS (wektory, powtórki)
@@ -269,14 +269,45 @@ Zrobione:
     - e2e `corp.spec.ts` na `remote`: założenie, wpłata, wypłata, dziennik, tablica, rozwiązanie.
   - Po S2: `cargo test --workspace`, clippy (0), fmt; vitest 463/463; e2e `mock-ts` 19 + 1 pominięty, e2e `remote` **20 z 20** (2,4 min), oba przy 2 workerach.
 
-Zmienne: `NPC_FACTIONS` (on), `NPC_SEED`, `NPC_PLAYERS` (6), `NPC_UPDATE_SECONDS` (600; dev 10), `NPC_DEPTH` (50), `HUB_FEE` (0,02), `START_CREDITS` (1000), `ORDER_HOURS` (168), `SHIPPING_SECONDS_PER_LY` (7200; dev 2), `SHIPPING_HANDLING_SECONDS` (1800; dev 2), `CONTRACT_HOURS` (48; dev 1), `CONTRACTS_PER_HUB` (3), `CORP_FOUNDING_CREDITS` (5000; dev 500), `CORP_FOUNDING_STA` (100; dev 0), `CORP_MAX_MEMBERS` (20).
+Zmienne: `NPC_FACTIONS` (on), `NPC_SEED`, `NPC_PLAYERS` (6), `NPC_UPDATE_SECONDS` (600; dev 10), `NPC_DEPTH` (50), `HUB_FEE` (0,02), `START_CREDITS` (1000), `ORDER_HOURS` (168), `SHIPPING_SECONDS_PER_LY` (7200; dev 2), `SHIPPING_HANDLING_SECONDS` (1800; dev 2), `CONTRACT_HOURS` (48; dev 1), `CONTRACTS_PER_HUB` (3), `CORP_FOUNDING_CREDITS` (5000; dev 500), `CORP_FOUNDING_STA` (100; dev 0), `CORP_MAX_MEMBERS` (20), `ALLIANCE_MAX_CORPS` (5), `ALLIANCE_LEAVE_HOURS` (48; dev 0,01), `MEGAPROJECT_SCALE` (1; dev 0,02), `SEASON_DAYS` (90; dev 0 = ręcznie).
+
+**S3 (2026-11-10, R-27): sojusze, megaprojekty, rankingi, sezony.** Brama 05-SOCIAL S3 („megaprojekt ukończony wkładami 2 korporacji; sezon zamknięty i otwarty”) przechodzi w teście WebSocket `two_corporations_complete_an_alliance_gate_and_a_season_turns`:
+- dwie korporacje zakładają sojusz (zaproszenie po znaczniku, przyjęcie przez szefa);
+- prowadząca zaczyna bramę sojuszu w hubie Słońce;
+- obie kupują brakujące towary od frakcji i je oddają, a brama jest ukończona z udziałami obu;
+- ranking sezonu pokazuje oba konta i obie korporacje;
+- `closeSeason` (tryb dev) zapisuje sezon 1 w historii, zeruje rynek (kredyty startowe, bez megaprojektów) i uruchamia od nowa świat gracza; korporacje i sojusz zostają;
+- po restarcie serwera trwa sezon 2 z historią, a świat nie resetuje się drugi raz;
+- w produkcji `closeSeason` jest odrzucany, bo sezon kończy się sam po `SEASON_DAYS`.
+
+Moduły:
+- `exchange/alliance.rs`: sojusz 2–5 korporacji, zaproszenia, wypowiedzenie z okresem, rozwiązanie;
+- `exchange/megaproject.rs`: terminal i brama, wkłady z zapasu w hubie, efekty `fee_for` (prowizja zapisana w zleceniu) i `travel_for`;
+- `exchange/season.rs`: rankingi, zamknięcie sezonu.
+
+Testy modułów: `an_alliance_of_two_corporations_builds_a_gate`, `a_terminal_cuts_the_fee_in_its_hub`, `rankings_and_a_season_closed_and_opened`.
+
+Serwer:
+- 9 nowych operacji galaktyki;
+- sezon w `AppState` i w migawce świata (`StoredWorld.season`);
+- `WorldMsg::NewSeason` restartuje działające światy, a uśpione startują od nowa przy wybudzeniu.
+
+Klient:
+- w panelu korporacji (F4) sekcje „Sojusz” i „Megaprojekty” (`hud/corp-projects.ts`: pasek postępu, braki, udziały korporacji, „Daj z hubu” z własnego zapasu);
+- panel „Rankingi” (F7, `hud/rankings-panel.ts`: sezon, moje miejsce, cztery listy, poprzednie sezony);
+- e2e `e2e/social.spec.ts` na remote: terminal zbudowany z towarów kupionych w hubie, sojusz, rankingi.
 
 Brakuje względem B6 i 05-SOCIAL (następne kroki):
 - Ekran hubu: księga zleceń poziomami (dane już są w widoku), handel dwóch graczy w e2e (jest w teście WebSocket).
 - Specjalizacje frakcji (które materiały skupują chętniej, jakie kontrakty wystawiają) i receptury za reputację 50.
-- Korporacje: wymóg portu L2 przy założeniu (świat musi zgłaszać poziom portu), kontrakty wewnętrzne bez prowizji, czat, flaga i kolor (06), biblioteka projektów Atanora (AT6), megaprojekty i sojusze (S3).
-- Rankingi.
-- PostgreSQL dla rynku (transakcje SQL jak w planie §8) razem z adapterem światów.
+- Korporacje: wymóg portu L2 przy założeniu (świat musi zgłaszać poziom portu), kontrakty wewnętrzne bez prowizji, czat (korporacji, sojuszu, hubu), flaga i kolor (06), biblioteka projektów Atanora (AT6).
+- S3 dalej:
+  - Stacja badawcza (premia w świecie);
+  - wspólna tablica kontraktów sojuszu;
+  - wartość netto z budynkami i magazynami światów;
+  - rankingi projektów Atanora (SOC-4 B);
+  - kosmetyka i osiągnięcia przenoszone między sezonami (06).
+- Osobne tabele PostgreSQL dla zleceń, przesyłek i korporacji z transakcjami SQL (plan §8), gdy rynek wyjdzie poza jeden węzeł.
 
 Przesyłki a awaria serwera (2026-11-10): przedtem wysyłka mogła przepaść, jeśli serwer padł między rozkazem `SHIP_TO_HUB` a zapisem `galaxy.json`. Teraz obie połowy przesyłki są zapisane w kolejności.
 - Świat zgłasza wysyłkę do galaktyki i potwierdza przyjęcie dostawy dopiero wtedy, gdy rozkaz jest w jego dzienniku na dysku (`RepoOp::Then` w kolejce wątku I/O).

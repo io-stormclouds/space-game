@@ -3,7 +3,7 @@
 use std::net::SocketAddr;
 use std::path::PathBuf;
 
-use game_session::exchange::{CorpConfig, MarketConfig, NpcConfig};
+use game_session::exchange::{CorpConfig, MarketConfig, NpcConfig, SocialConfig};
 
 #[derive(Clone, Debug)]
 pub struct Config {
@@ -41,7 +41,10 @@ pub struct Config {
     /// - `CONTRACT_HOURS` (factions' contracts: open and to deliver once taken; production 48, dev 1)
     ///   and `CONTRACTS_PER_HUB` (default 3, one of them premium);
     /// - corporations: `CORP_FOUNDING_CREDITS` and `CORP_FOUNDING_STA` (founding cost, the steel in
-    ///   the seat hub; production 5000 and 100, dev 500 and 0), `CORP_MAX_MEMBERS` (20).
+    ///   the seat hub; production 5000 and 100, dev 500 and 0), `CORP_MAX_MEMBERS` (20);
+    /// - S3: `ALLIANCE_MAX_CORPS` (5), `ALLIANCE_LEAVE_HOURS` (notice period; 48, dev 0.01),
+    ///   `MEGAPROJECT_SCALE` (requirements; 1, dev 0.02), `SEASON_DAYS` (90; dev 0 = closed only by
+    ///   hand, the dev-mode op `closeSeason`).
     pub market: MarketConfig,
     /// Accounts and sessions (R-25):
     /// - `REGISTRATION` (default on): `POST /api/register` makes accounts;
@@ -118,6 +121,18 @@ impl Config {
                     max_members: var("CORP_MAX_MEMBERS").and_then(|v| v.parse().ok()).filter(|n| *n >= 2).unwrap_or(prod.corp.max_members),
                     max_officers: prod.corp.max_officers,
                 }
+            },
+            social: SocialConfig {
+                alliance_max_corps: var("ALLIANCE_MAX_CORPS")
+                    .and_then(|v| v.parse().ok())
+                    .filter(|n| *n >= 2)
+                    .unwrap_or(prod.social.alliance_max_corps),
+                alliance_leave_seconds: non_negative(
+                    "ALLIANCE_LEAVE_HOURS",
+                    if dev_mode { 0.01 } else { prod.social.alliance_leave_seconds / 3600.0 },
+                ) * 3600.0,
+                megaproject_scale: num("MEGAPROJECT_SCALE", if dev_mode { 0.02 } else { prod.social.megaproject_scale }),
+                season_seconds: non_negative("SEASON_DAYS", if dev_mode { 0.0 } else { prod.social.season_seconds / 86_400.0 }) * 86_400.0,
             },
             npc: if flag("NPC_FACTIONS").unwrap_or(true) { Some(npc) } else { None },
         };
