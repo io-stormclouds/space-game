@@ -14,6 +14,11 @@ services:
       DATA_DIR: /data
       DEV_MODE: ${DEV_MODE:-false}
       WORLD_STEP_SECONDS: ${WORLD_STEP_SECONDS:-1}
+      # accounts and sessions (R-25): the cookie wants HTTPS (a real SITE_ADDRESS); plain http on
+      # localhost works in Chrome, elsewhere set COOKIE_SECURE=false for a test without TLS
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}
+      GUEST_ACCOUNTS: ${GUEST_ACCOUNTS:-false}
+      METRICS_TOKEN: ${METRICS_TOKEN:-}
     volumes:
       - data:/data
     restart: unless-stopped

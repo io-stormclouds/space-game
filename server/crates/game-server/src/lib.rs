@@ -18,7 +18,10 @@
 pub mod accounts;
 pub mod config;
 pub mod galaxy;
+pub mod http;
+pub mod metrics;
 pub mod repo;
+pub mod sessions;
 pub mod world;
 pub mod ws;
 
@@ -37,11 +40,13 @@ pub const PROTOCOL_VERSION: u32 = 3;
 pub struct AppState {
     pub cfg: Config,
     pub accounts: accounts::AccountStore,
+    pub sessions: sessions::SessionStore,
     pub repo: Arc<repo::FileRepository>,
     pub persister: repo::Persister,
     pub worlds: Arc<Mutex<HashMap<String, mpsc::Sender<world::WorldMsg>>>>,
     pub galaxy: mpsc::UnboundedSender<galaxy::GalaxyMsg>,
     pub next_client: AtomicU64,
+    pub started: std::time::Instant,
 }
 
 impl AppState {
@@ -49,17 +54,21 @@ impl AppState {
     pub fn open(cfg: Config) -> std::io::Result<Arc<AppState>> {
         std::fs::create_dir_all(&cfg.data_dir)?;
         let accounts = accounts::AccountStore::open(cfg.data_dir.join("accounts.json"))?;
+        let sessions =
+            sessions::SessionStore::open(cfg.data_dir.join("sessions.json"), cfg.auth.session_seconds, cfg.auth.signups_per_minute)?;
         let worlds_dir = repo::data_worlds_dir(&cfg.data_dir);
         let persister = repo::Persister::spawn(repo::FileRepository::new(&worlds_dir));
         let (galaxy, galaxy_rx) = mpsc::unbounded_channel();
         let state = Arc::new(AppState {
             cfg,
             accounts,
+            sessions,
             repo: Arc::new(repo::FileRepository::new(&worlds_dir)),
             persister,
             worlds: Arc::new(Mutex::new(HashMap::new())),
             galaxy,
             next_client: AtomicU64::new(1),
+            started: std::time::Instant::now(),
         });
         galaxy::spawn(&state.cfg, &state, galaxy_rx);
         Ok(state)
@@ -101,8 +110,18 @@ impl AppState {
 }
 
 pub fn router(state: Arc<AppState>) -> axum::Router {
-    use axum::routing::get;
-    axum::Router::new().route("/health", get(|| async { "ok" })).route("/ws", get(ws::upgrade)).with_state(state)
+    use axum::routing::{get, post};
+    axum::Router::new()
+        .route("/health", get(|| async { "ok" }))
+        .route("/ws", get(ws::upgrade))
+        .route("/api/register", post(http::register))
+        .route("/api/login", post(http::login))
+        .route("/api/guest", post(http::guest))
+        .route("/api/logout", post(http::logout))
+        .route("/api/session", get(http::session))
+        .route("/api/ticket", post(http::ticket))
+        .route("/metrics", get(http::metrics))
+        .with_state(state)
 }
 
 /// Serves until Ctrl-C, then writes the worlds.

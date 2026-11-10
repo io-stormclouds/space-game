@@ -56,7 +56,8 @@
         "serve": {
           "builder": "@angular/build:dev-server",
           "options": {
-            "port": 4420
+            "port": 4420,
+            "proxyConfig": "proxy.conf.mjs"
           },
           "configurations": {
             "production": {

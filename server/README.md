@@ -80,7 +80,7 @@ Bezpośredni port liczył krok L w 2,7 ms; tabela specyfikacji budynków w `Rule
 ## B4: serwer sieciowy (MVP 2026-11-09, protokół kopii tego samego dnia)
 
 Zrobione:
-- **Połączenie:** WebSocket `/ws`, ramki tekstowe JSON (R-3). Pierwsza ramka to `{"type":"hello","protocolVersion":3,"callsign","password","register"?}` (wersja 3 od B6; klient wersji 2 dostaje `error`), a odpowiedź to `welcome` (konto, świat, `devMode`, `stepSeconds`, czas serwera) albo `error` i zamknięcie.
+- **Połączenie:** WebSocket `/ws`, ramki tekstowe JSON (R-3). Pierwsza ramka to `{"type":"hello","protocolVersion":3,"ticket"}`: jednorazowy bilet sesji z `POST /api/ticket`, R-25. W `DEV_MODE` (i przy `PASSWORD_HELLO`) może to być też `"callsign","password","register"?`, dla narzędzi i testów. Wersja 3 obowiązuje od B6; klient wersji 2 dostaje `error`. Odpowiedź to `welcome` (konto, świat, `devMode`, `stepSeconds`, czas serwera) albo `error` i zamknięcie.
 - **Kopia świata u klienta (R-18):**
   - Zaraz po `welcome` serwer wysyła `reset`: punkt kontrolny świata, czyli zapis plus stan kroków spoza świata.
   - Potem wysyła tylko zmiany. `sync` zawiera rozkazy i zmiany tempa przypięte do kroków oraz krok, do którego doszedł świat; w `DEV_MODE` przychodzi co tick (16 ms), w produkcji co krok (1 s). Co 5 s przychodzi `hash`, czyli FNV-1a stanu.
@@ -93,7 +93,39 @@ Zrobione:
   - `world::tests::replica_follows_the_world`;
   - `tests/ws.rs` przez prawdziwy WebSocket: skrót się zgadza, a zapis z kopii jest identyczny z zapisem serwera;
   - `replica.spec.ts` w TS.
-- **Konta:** znak wywoławczy + hasło (argon2id) w `DATA_DIR/accounts.json`. W `DEV_MODE` pierwsze logowanie zakłada konto; w produkcji konto powstaje tylko z `register: true`.
+- **Konta i sesje (R-25, 2026-11-10):**
+  - Konto to znak wywoławczy i hasło (argon2id) w `DATA_DIR/accounts.json`. Znak jest bez rozróżniania wielkości liter.
+  - HTTP JSON pod `/api` (`src/http.rs`):
+    - `POST /register` i `POST /login` przyjmują `{callsign, password}`;
+    - `POST /guest` zakłada konto gościa `gosc-xxxxxx` z losowym hasłem, którego nikt nie zna;
+    - `POST /logout`;
+    - `GET /session` zwraca `{accountId, callsign, guest}` albo 401;
+    - `POST /ticket` zwraca `{ticket}`.
+  - Udane logowanie, rejestracja lub gość ustawia ciasteczko `sg_session`: losowy token 32 B, `HttpOnly; SameSite=Strict; Path=/`, w produkcji `Secure`, ważne `SESSION_DAYS` (30).
+  - Serwer trzyma tylko skrót BLAKE2s tokenu, razem z kontem i datą ważności, w `DATA_DIR/sessions.json` (`src/sessions.rs`). Kopia pliku nikogo więc nie loguje. Wylogowanie kończy tylko swoją sesję.
+  - WebSocket loguje się biletem: jednorazowym, ważnym 30 s, wydanym za ciasteczko. Hasło nie płynie przez gniazdo, a strona innej witryny nie otworzy gry w imieniu gracza, bo nie odczyta biletu.
+  - Żądanie z nagłówkiem `Origin` innego hosta dostaje 403.
+  - Limity:
+    - 5 nieudanych logowań jednego znaku w 15 min blokuje go do końca okna (429, także dla poprawnego hasła);
+    - nowe konta na cały serwer: `SIGNUPS_PER_MINUTE` (produkcja 30, dev bez limitu).
+  - Produkcja: rejestracja włączona (`REGISTRATION`), goście wyłączeni (`GUEST_ACCOUNTS`), hasło w hello wyłączone (`PASSWORD_HELLO`). W `DEV_MODE` wszystko włączone, a pierwsze logowanie hasłem w hello zakłada konto, jak dotąd.
+  - Testy: `sessions::tests`, `accounts::tests` i `tests/ws.rs::sessions_tickets_logout_and_failed_logins`, który sprawdza:
+    - rejestrację i zajęty znak;
+    - że bilet działa raz;
+    - drugą sesję i jej wylogowanie;
+    - blokadę po 5 próbach;
+    - konto gościa;
+    - odmowę dla obcego `Origin`.
+  - Test produkcji rejestruje konto przez HTTP i łączy WebSocket biletem.
+- **Metryki:** `GET /metrics` w formacie Prometheus (`src/metrics.rs`, liczniki atomowe, bez nowych zależności):
+  - światy działające, konta, sesje, połączenia;
+  - logowania udane i odrzucone;
+  - żądania, w tym odcięte limitem;
+  - rozkazy przyjęte i odrzucone, `resync`;
+  - operacje galaktyki, przesyłki, zlecenia i korporacje;
+  - histogram czasu ticku świata.
+
+  Z `METRICS_TOKEN` endpoint wymaga `Authorization: Bearer …`. Bez tokenu jest otwarty w `DEV_MODE` i wyłączony (404) w produkcji. Caddy nie wystawia go na zewnątrz.
 - **Świat na gracza** (Model C): zadanie Tokio z `Host`. W produkcji krok trwa 1 s w tempie ×1 (R-4); w `DEV_MODE` 1/60 s i dostępne są wszystkie tempa jak w mocku. W produkcji klient nie zmienia tempa, nie pauzuje, nie wczytuje i nie restartuje świata (`start` zwraca bieżącą migawkę).
 - **Harmonogram:** świat bez połączenia zapisuje się i usypia po `IDLE_SECONDS`. Przy wybudzeniu nadrabia przespany czas krokami po 1 min modelu, z limitem `OFFLINE_LIMIT_HOURS` (R-5: 12 h). Zmiana tempa trafia do harmonogramu, więc powtórka zostaje dokładna.
 - **Zapis:**
@@ -109,15 +141,20 @@ Zrobione:
   - Każde połączenie ma wiadro żetonów: `MAX_REQUESTS_PER_SECOND` (20/s, chwilowo do 40). Nadmiar dostaje odpowiedź z błędem „za dużo żądań”, a połączenie zostaje; `resync` kosztuje 10 żetonów.
   - Profil `release` ma `panic = unwind` (R-19). Panika kończy tylko zadanie świata; jego klienci są rozłączani, a następne połączenie odtwarza świat z dysku.
 - **Klient:**
-  - Tryb `?api=remote` uruchamia worker kopii (`game-replica.worker.ts`). Potrzebuje modułu WASM (`npm run wasm:build`). Adres serwera: `?server=ws://…/ws`, domyślnie port 8080 tego hosta.
-  - Dane logowania idą do workera przy pierwszym żądaniu (`connectOnFirstRequest` w `packages/api`).
+  - Tryb `?api=remote` uruchamia worker kopii (`game-replica.worker.ts`). Potrzebuje modułu WASM (`npm run wasm:build`).
+  - Serwer działa pod adresem strony: `/ws` i `/api` wystawia Caddy w `deploy/`, a w rozwoju proxy `ng serve` (`web-game/proxy.conf.mjs`, adres serwera w `GAME_SERVER`, domyślnie `http://127.0.0.1:8080`). Dzięki temu ciasteczko sesji jest własne strony. Przełącznik `?server=` zniknął.
+  - Worker dostaje przy pierwszym żądaniu (`connectOnFirstRequest`) adres API sesji. Przy każdym połączeniu pobiera nowy bilet (`wsTicket` w `packages/api/src/account.ts`). Gdy nikt nie jest zalogowany, najpierw zakłada konto gościa, o ile serwer na to pozwala.
   - Zerwane połączenie kopia ponawia z rosnącym odstępem: 1, 2, 4 s i dalej, najwyżej 10 s, maksymalnie 8 prób bez nowego punktu kontrolnego.
     - Żądania w drodze dostają błąd, bo nie wiadomo, czy dotarły do świata.
     - Zapytania UI kopia dalej odpowiada z ostatniego stanu.
     - Nowe rozkazy czekają na następny `reset`.
-    - Odmowa logowania kończy połączenie bez ponawiania.
-  - Strona logowania zapisuje znak wywoławczy; bez logowania gracz dostaje konto gościa.
-  - Kod dostępu to sekret przechowywany w przeglądarce, bo pole hasła w formularzu jest jeszcze makietą.
+    - Odmowa logowania kończy połączenie bez ponawiania: zły bilet, brak sesji przy wyłączonych gościach (401 i 403). Brak serwera za proxy (5xx, błąd sieci) i limity są ponawiane.
+  - Strona logowania (`#/logowanie`) w trybie `remote`:
+    - ma znak wywoławczy i kod dostępu, przyciski „Zaloguj”, „Załóż konto” i „Graj jako gość”;
+    - pokazuje błąd serwera;
+    - zalogowanemu pokazuje „Zalogowano: …” z „Przejmij statek” i „Wyloguj”.
+
+    Po zmianie sesji strona ładuje się od nowa, żeby połączenie gry zalogowało się nową sesją. W trybach `mock-ts` i `wasm` przyjmuje cokolwiek, jak dotąd. e2e: `e2e/login.spec.ts`.
 - **e2e:** `npm run e2e:remote` buduje serwer i moduł WASM, startuje serwer w `DEV_MODE` na porcie 8090 (dane w `target/e2e-data`) i uruchamia projekt `chromium-remote`. Każdy test to nowe konto gościa. Wyniki pełnego zestawu (17 testów, Chrome, 2026-11-09 wieczorem):
   - `mock-ts`, 4 workery: 17 z 17 (2,4 min).
   - `remote`, 4 workery: 16 z 17 i 15 z 17. Za każdym razem padał inny test zależny od czasu: liczniki GPU po 20 przełączeniach, karta Arki zaraz po wejściu, opis „w locie” w trakcie krótkiego lotu. Każdy z nich przechodzi powtarzany przy 2 workerach (3 z 3 na `mock-ts` i na `remote`). Tryb `remote` jest bardziej wrażliwy na obciążenie: w każdym teście dochodzi logowanie, kompilacja modułu i punkt kontrolny.
@@ -126,11 +163,11 @@ Zrobione:
 - **Logowanie:** argon2 liczy się w puli `spawn_blocking`, poza blokadą kont, więc logowanie nie wstrzymuje ticków światów ani innych logowań.
 - **`deploy/`:** `Dockerfile` serwera i `docker-compose.yml` (serwer + Caddy ze statycznym klientem). **Nie uruchamiane na tym komputerze**, bo Docker Desktop jest wyłączony. Obraz klienta musi teraz zawierać moduł WASM.
 
-Zmienne: `ADDR` (127.0.0.1:8080), `DATA_DIR` (./data), `DEV_MODE`, `WORLD_STEP_SECONDS` (1; dev 1/60), `SNAPSHOT_SECONDS` (60), `IDLE_SECONDS` (300), `OFFLINE_LIMIT_HOURS` (12), `MAX_REQUESTS_PER_SECOND` (20).
+Zmienne: `ADDR` (127.0.0.1:8080), `DATA_DIR` (./data), `DEV_MODE`, `WORLD_STEP_SECONDS` (1; dev 1/60), `SNAPSHOT_SECONDS` (60), `IDLE_SECONDS` (300), `OFFLINE_LIMIT_HOURS` (12), `MAX_REQUESTS_PER_SECOND` (20). Konta i sesje: `REGISTRATION`, `GUEST_ACCOUNTS`, `PASSWORD_HELLO`, `COOKIE_SECURE`, `SESSION_DAYS`, `SIGNUPS_PER_MINUTE`, `METRICS_TOKEN`.
 
 Brakuje względem planu 02 §11 B4 (następne kroki):
-- PostgreSQL (`sqlx`, migracje, tabele z §7) zamiast plików. Interfejs `WorldRepository` jest gotowy, adapter plikowy działa. Na tym komputerze nie ma PostgreSQL ani działającego Dockera.
-- Metryki Prometheus, sesje w cookie i jednorazowy token WS, prawdziwe pole hasła i rejestracja w kliencie.
+- PostgreSQL (`sqlx`, migracje, tabele z §7) zamiast plików. Interfejs `WorldRepository` jest gotowy, adapter plikowy działa.
+- Zmiana hasła, e-mail i reset kodu (06-PANEL); limit logowań po adresie IP (za Caddy potrzebny zaufany `X-Forwarded-For`).
 - MessagePack (R-3, odłożony) i kompresja `reset` dla dużych światów, po pomiarze.
 
 ### Toolchain na tym komputerze
@@ -219,7 +256,16 @@ Brakuje względem B6 i 05-SOCIAL (następne kroki):
 - Korporacje: wymóg portu L2 przy założeniu (świat musi zgłaszać poziom portu), kontrakty wewnętrzne bez prowizji, czat, flaga i kolor (06), biblioteka projektów Atanora (AT6), megaprojekty i sojusze (S3).
 - Rankingi.
 - PostgreSQL dla rynku (transakcje SQL jak w planie §8) razem z adapterem światów.
-- Zgłoszenie wysyłki po awarii: jeśli serwer padnie między rozkazem `SHIP_TO_HUB` a zapisem `galaxy.json` (≤ 1 s), przesyłka przepada. Do usunięcia przez dziennik wysyłek albo przez transakcję w PostgreSQL.
+
+Przesyłki a awaria serwera (2026-11-10): przedtem wysyłka mogła przepaść, jeśli serwer padł między rozkazem `SHIP_TO_HUB` a zapisem `galaxy.json`. Teraz obie połowy przesyłki są zapisane w kolejności.
+- Świat zgłasza wysyłkę do galaktyki i potwierdza przyjęcie dostawy dopiero wtedy, gdy rozkaz jest w jego dzienniku na dysku (`RepoOp::Then` w kolejce wątku I/O).
+- Galaktyka zapisuje stan zaraz po wysyłce i po dostawie, przez swój wątek zapisu: po kolei, bez dwóch zapisów naraz.
+- Świat odtworzony z dysku zgłasza jeszcze raz wysyłki z końcówki dziennika, czyli zdarzenia `follow`.
+- Rynek pamięta przyjęte wysyłki przez 7 dni (`departures`), więc ponowne zgłoszenie, także po dotarciu, nie liczy się drugi raz.
+- Sprawdzają to:
+  - `exchange::tests` (ponowne zgłoszenie po dotarciu);
+  - `world::tests::trade_crosses_into_the_galaxy_and_back_once`: zgłoszenie po zapisie dziennika i świat odtworzony „po awarii” zgłasza wysyłkę ponownie.
+- Zostaje okno między zapisem pliku a `fsync`: utrata zasilania, nie awaria procesu.
 
 ## Czego port nie zawiera
 

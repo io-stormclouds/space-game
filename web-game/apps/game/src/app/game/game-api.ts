@@ -1,13 +1,14 @@
 import { InjectionToken } from '@angular/core';
-import { connectOnFirstRequest, createWorkerGameApi, type GameApi, type RemoteCredentials, type WorkerLike } from '@space-game/api';
+import { connectOnFirstRequest, createWorkerGameApi, SESSION_API, type GameApi, type RemoteCredentials, type WorkerLike } from '@space-game/api';
 
 /**
  * Which implementation of GameApi the app runs (plan 02 B3/B4):
  * - `mock-ts`: the TypeScript mock server in a worker (default),
  * - `wasm`: the Rust game session compiled to WebAssembly in a worker (`npm run wasm:build`),
  * - `remote`: the game server (`server/crates/game-server`); a worker keeps a replica of the world in
- *   WebAssembly (needs `npm run wasm:build` too) and follows the server over a WebSocket; address
- *   from `?server=ws://…/ws` or localStorage `sg.server` (default: port 8080 of this host).
+ *   WebAssembly (needs `npm run wasm:build` too) and follows the server over a WebSocket. The server
+ *   shares the page's origin (`/ws`, `/api`): Caddy in deploy/, the dev server's proxy in development
+ *   (`proxy.conf.mjs`, `GAME_SERVER`), so the session cookie is first-party (R-25).
  * Chosen with `?api=…` in the address (remembered) or localStorage `sg.api`.
  */
 export type ApiMode = 'mock-ts' | 'wasm' | 'remote';
@@ -18,8 +19,6 @@ export const API_STORAGE_KEY = 'sg.api';
 export function apiMode(): ApiMode {
   try {
     const params = new URLSearchParams(globalThis.location?.search ?? '');
-    const server = params.get('server');
-    if (server) globalThis.localStorage?.setItem('sg.server', server);
     const fromUrl = params.get('api') as ApiMode | null;
     if (fromUrl && MODES.includes(fromUrl)) {
       globalThis.localStorage?.setItem(API_STORAGE_KEY, fromUrl);
@@ -32,37 +31,17 @@ export function apiMode(): ApiMode {
   }
 }
 
-function stored(key: string, make: () => string): string {
-  try {
-    const v = localStorage.getItem(key);
-    if (v) return v;
-    const fresh = make();
-    localStorage.setItem(key, fresh);
-    return fresh;
-  } catch {
-    return make();
-  }
-}
-
-const randomId = (n: number) => Array.from(crypto.getRandomValues(new Uint8Array(n)), (b) => 'abcdefghijkmnpqrstuvwxyz23456789'[b % 32]).join('');
-
 /**
- * Login of the remote mode: the callsign the login page stored (`sg.callsign`), else a guest one;
- * the access code is a secret kept in this browser (the login form's code field is still a mock-up).
+ * Login of the remote mode: a ticket of the session cookie (the login page logs in); nobody logged
+ * in, a guest account where the server allows them.
  */
 export function remoteCredentials(): RemoteCredentials {
-  return { callsign: stored(CALLSIGN_KEY, () => `gosc-${randomId(6)}`), password: stored('sg.secret', () => randomId(20)) };
+  return { session: SESSION_API, guest: true };
 }
 
-export const CALLSIGN_KEY = 'sg.callsign';
-
 function serverUrl(): string {
-  const set = globalThis.localStorage?.getItem('sg.server');
-  if (set) return set;
   const loc = globalThis.location;
-  const scheme = loc.protocol === 'https:' ? 'wss' : 'ws';
-  // behind Caddy (deploy/, standard port) the server shares the origin; the dev server talks to :8080
-  return loc.port === '' ? `${scheme}://${loc.host}/ws` : `${scheme}://${loc.hostname}:8080/ws`;
+  return `${loc.protocol === 'https:' ? 'wss' : 'ws'}://${loc.host}/ws`;
 }
 
 /** Factory of the GameApi the app talks to. Tests provide an in-thread one. */

@@ -142,6 +142,10 @@ pub enum RepoOp {
     },
     /// Answers when every operation sent before it is done (shutdown, tests).
     Flush(std::sync::mpsc::Sender<()>),
+    /// Runs once every operation sent before it is written: what other services hear of a command
+    /// (a shipment to a hub, a delivery taken) follows the command in the log, so a crash between
+    /// the two never leaves the galaxy ahead of the world.
+    Then(Box<dyn FnOnce() + Send>),
 }
 
 /// Sender side of the I/O thread. Cloned into every world.
@@ -157,11 +161,15 @@ impl Persister {
             .name("world-io".into())
             .spawn(move || {
                 for op in rx {
-                    let result = match &op {
-                        RepoOp::Snapshot { world, stored } => repo.write_snapshot(world, stored),
-                        RepoOp::Append { world, entry } => repo.append(world, entry),
+                    let result = match op {
+                        RepoOp::Snapshot { world, stored } => repo.write_snapshot(&world, &stored),
+                        RepoOp::Append { world, entry } => repo.append(&world, &entry),
                         RepoOp::Flush(done) => {
                             let _ = done.send(());
+                            Ok(())
+                        }
+                        RepoOp::Then(f) => {
+                            f();
                             Ok(())
                         }
                     };

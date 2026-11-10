@@ -1,5 +1,6 @@
 // GameApi: contract between the UI and the game, and its Web Worker client.
 // The UI imports game types from here (types only), never the domain's logic (F2 rule).
+export * from './account';
 export * from './contract';
 export * from './galaxy';
 export * from './protocol';

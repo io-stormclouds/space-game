@@ -14,10 +14,14 @@ import type { RequestMessage, WorkerLike, WorkerMessage } from './protocol';
  */
 export const REMOTE_PROTOCOL_VERSION = 3;
 
-export interface RemoteCredentials {
-  callsign: string;
-  password: string;
-}
+/**
+ * How the replica logs in (R-25):
+ * - `{ session, guest }`: a one-time ticket of the session cookie (HTTP API at `session`, see
+ *   `account.ts`) for every connection; with `guest`, a guest account when nobody is logged in;
+ * - `{ callsign, password }`: in the hello itself, on servers that allow it (`PASSWORD_HELLO`: dev
+ *   mode, tools, tests).
+ */
+export type RemoteCredentials = { session: string; guest?: boolean } | { callsign: string; password: string };
 
 /** The server's answer to the login (hello). */
 export interface Welcome {

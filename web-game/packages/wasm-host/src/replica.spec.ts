@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+  AccountError,
   connectOnFirstRequest,
   createWorkerGameApi,
   NO_TRADE,
@@ -11,7 +12,7 @@ import {
   type SaveFile,
   type WorkerMessage,
 } from '@space-game/api';
-import { createReplica, type SocketLike } from './replica';
+import { createReplica, type ReplicaOptions, type SocketLike } from './replica';
 import { createWasmHost } from './wasm-host';
 
 // Plan 02 B4: the replica of a server world. A fake socket plays the server: welcome, the checkpoint,
@@ -55,7 +56,7 @@ describe.skipIf(!existsSync(WASM))('replica of a server world (B4)', () => {
     start = (saved as { value: SaveFile }).value;
   });
 
-  async function setup() {
+  async function setup(over: Partial<ReplicaOptions> = {}) {
     const servers: FakeServer[] = [];
     const server = new FakeServer();
     const listeners = new Set<(e: MessageEvent<WorkerMessage>) => void>();
@@ -74,6 +75,7 @@ describe.skipIf(!existsSync(WASM))('replica of a server world (B4)', () => {
         listeners.forEach((l) => l({ data: m } as MessageEvent<WorkerMessage>));
       },
       now: () => 0,
+      ...over,
     });
     const connects: ConnectMessage[] = [];
     const worker = connectOnFirstRequest(
@@ -90,6 +92,42 @@ describe.skipIf(!existsSync(WASM))('replica of a server world (B4)', () => {
   }
 
   const checkpoint = (save: SaveFile) => ({ save, sim: { drives: [], mining: [], extraction: 0 } });
+
+  it('logs in with a new ticket of the session on every connection; a refused session ends it (R-25)', async () => {
+    const tickets: Array<[string, boolean]> = [];
+    let refuse: AccountError | null = new AccountError('serwer gry niedostępny', 0);
+    const { servers, api } = await setup({
+      credentials: { session: '/api', guest: true },
+      ticket: async (session, guest) => {
+        tickets.push([session, guest]);
+        if (refuse) throw refuse;
+        return `t-${tickets.length}`;
+      },
+    });
+    const snapshot = api.snapshot();
+    // no server behind the proxy: the connection is tried again
+    servers[0]!.emit('open');
+    await flush();
+    expect(servers[0]!.sent).toEqual([]);
+    await new Promise((r) => setTimeout(r, 10));
+    expect(servers.length).toBe(2);
+    refuse = null;
+    servers[1]!.emit('open');
+    await flush();
+    expect(servers[1]!.sent[0]).toEqual({ type: 'hello', protocolVersion: 3, ticket: 't-2' });
+    expect(tickets).toEqual([
+      ['/api', true],
+      ['/api', true],
+    ]);
+    // the next connection gets its own ticket; a refusal (no guests, nobody logged in) is the end
+    refuse = new AccountError('gra bez konta jest wyłączona: załóż konto', 403);
+    servers[1]!.emit('close');
+    await new Promise((r) => setTimeout(r, 10));
+    servers[2]!.emit('open');
+    await expect(snapshot).rejects.toThrow('gra bez konta jest wyłączona');
+    await new Promise((r) => setTimeout(r, 10));
+    expect(servers.length).toBe(3);
+  });
 
   it('logs in, waits for the checkpoint, answers queries itself and forwards commands', async () => {
     const { server, replica, api, pushed, connects } = await setup();

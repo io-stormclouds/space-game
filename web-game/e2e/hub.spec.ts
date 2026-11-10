@@ -4,6 +4,9 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
 // the nearest hub, are sold to its faction, bought back, and come home into the colony's storage.
 // Without the server (mock, WASM offline) the panel says that trade needs it.
 
+// a cold game (up to 90 s to load) and shipments that travel: more than the default 30 s per test
+test.describe.configure({ timeout: 120_000 });
+
 const hubPanel = (page: Page) => page.locator('[data-hub]');
 
 async function openHub(page: Page): Promise<Locator> {

@@ -112,16 +112,39 @@ fn tail(stored: &StoredWorld, log: &[LogEntry]) -> (Vec<TempoChange>, Vec<Record
     (tempos, commands, step)
 }
 
+/// A shipment to a hub the world made (its `SHIPMENT_DEPARTED`), for the galaxy service.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Departure {
+    pub shipment_id: String,
+    pub body_id: String,
+    pub hub_id: String,
+    pub cargo: Qty,
+}
+
+fn departures(events: &[DomainEvent]) -> Vec<Departure> {
+    events
+        .iter()
+        .filter_map(|e| match e {
+            DomainEvent::ShipmentDeparted { shipment_id, body_id, hub_id, cargo } => {
+                Some(Departure { shipment_id: shipment_id.clone(), body_id: body_id.clone(), hub_id: hub_id.clone(), cargo: cargo.clone() })
+            }
+            _ => None,
+        })
+        .collect()
+}
+
 /// Restores a world: the snapshot's checkpoint followed by the log tail (the cost does not grow with
 /// the world's age). Snapshots without the step state (older files) and failures fall back to the
 /// replay of the whole log from the scenario's start, then to the snapshot's world alone.
-pub fn restore(cfg: &Config, stored: &StoredWorld, log: &[LogEntry]) -> Host {
+/// Also returns the departures of the log tail: the galaxy may not have written them before a crash,
+/// so the world reports them again (the galaxy takes each shipment once).
+pub fn restore(cfg: &Config, stored: &StoredWorld, log: &[LogEntry]) -> (Host, Vec<Departure>) {
     if let Some(sim) = &stored.sim {
         let mut host = new_host(cfg);
         let (tempos, commands, step) = tail(stored, log);
         let cp = Checkpoint { save: stored.save.clone(), sim: sim.clone() };
         match host.session.restore(cp).and_then(|_| host.session.follow(step, &tempos, &commands)) {
-            Ok(_) => return host,
+            Ok(events) => return (host, departures(&events)),
             Err(e) => eprintln!("restore from the snapshot failed ({e}); replaying from the start"),
         }
     }
@@ -130,7 +153,7 @@ pub fn restore(cfg: &Config, stored: &StoredWorld, log: &[LogEntry]) -> Host {
         eprintln!("restore by replay failed ({e}); continuing from the snapshot's world");
         let _ = host.session.load(stored.save.clone());
     }
-    host
+    (host, Vec::new())
 }
 
 /// Steps a sleeping world through `real_seconds` (production): whole model minutes at tempo 60, the
@@ -176,14 +199,18 @@ pub struct World {
     last_hash_ms: f64,
     idle_since_ms: Option<f64>,
     galaxy: Option<mpsc::UnboundedSender<GalaxyMsg>>,
+    /// Departures of the restored log tail, reported again when the galaxy is connected.
+    unreported: Vec<Departure>,
 }
 
 impl World {
     /// Loads the world from the repository (or starts the default scenario) and catches up.
     pub fn open(id: &str, cfg: &Config, repo: &dyn WorldRepository, persister: Persister) -> World {
+        let mut unreported = Vec::new();
         let (mut host, fresh) = match repo.load(id) {
             Ok(Some((stored, log))) => {
-                let mut host = restore(cfg, &stored, &log);
+                let (mut host, tail_departures) = restore(cfg, &stored, &log);
+                unreported = tail_departures;
                 if !cfg.dev_mode {
                     let slept = (wall_ms() - stored.saved_at_ms) / 1000.0
                         - (host.session.step_index().saturating_sub(stored.save.step)) as f64 * cfg.step_seconds;
@@ -218,6 +245,7 @@ impl World {
             // no client yet (a world woken for a delivery goes back to sleep on its own)
             idle_since_ms: Some(mono_ms()),
             galaxy: None,
+            unreported,
         };
         if fresh || resized || !cfg.dev_mode {
             w.snapshot();
@@ -233,10 +261,18 @@ impl World {
         hub::home_star(self.host.session.world()).unwrap_or(DEFAULT_HOME_STAR).to_string()
     }
 
-    /// Connects the world to the galaxy service, telling it where the colony is.
+    /// Connects the world to the galaxy service, telling it where the colony is and the departures
+    /// of the restored log tail (again: the galaxy may have missed them in a crash).
     pub fn set_galaxy(&mut self, galaxy: mpsc::UnboundedSender<GalaxyMsg>) {
         let _ = galaxy.send(GalaxyMsg::Home { account: self.id.clone(), star: self.home_star() });
+        for d in std::mem::take(&mut self.unreported) {
+            let _ = galaxy.send(self.departed_msg(d));
+        }
         self.galaxy = Some(galaxy);
+    }
+
+    fn departed_msg(&self, d: Departure) -> GalaxyMsg {
+        GalaxyMsg::Departed { account: self.id.clone(), shipment_id: d.shipment_id, body_id: d.body_id, hub_id: d.hub_id, cargo: d.cargo }
     }
 
     /// A shipment from a hub: the `HUB_DELIVERY` command goes into the log once per shipment (a
@@ -257,20 +293,20 @@ impl World {
         ok
     }
 
-    /// Cargo sent to hubs by a command's events goes to the galaxy service.
+    /// Cargo sent to hubs by a command's events goes to the galaxy service once the command is
+    /// written to the log (after it in the I/O queue).
     fn report_departures(&self, reply: &Outgoing) {
         let (Some(galaxy), Outgoing::Reply(Reply::Ok { value: ReplyValue::Command(result), .. })) = (&self.galaxy, reply) else { return };
-        for e in &result.events {
-            if let DomainEvent::ShipmentDeparted { shipment_id, body_id, hub_id, cargo } = e {
-                let _ = galaxy.send(GalaxyMsg::Departed {
-                    account: self.id.clone(),
-                    shipment_id: shipment_id.clone(),
-                    body_id: body_id.clone(),
-                    hub_id: hub_id.clone(),
-                    cargo: cargo.clone(),
-                });
-            }
+        let msgs: Vec<GalaxyMsg> = departures(&result.events).into_iter().map(|d| self.departed_msg(d)).collect();
+        if msgs.is_empty() {
+            return;
         }
+        let galaxy = galaxy.clone();
+        self.persister.send(RepoOp::Then(Box::new(move || {
+            for m in msgs {
+                let _ = galaxy.send(m);
+            }
+        })));
     }
 
     fn snapshot(&mut self) {
@@ -362,7 +398,13 @@ impl World {
                 return Outgoing::err(msg.id, format!("nieznany hub {hub_id}"));
             }
         }
+        let is_command = matches!(msg.request, Request::Command { .. });
         let reply = self.host.answer(msg);
+        if is_command {
+            let ok = matches!(&reply, Outgoing::Reply(Reply::Ok { value: ReplyValue::Command(r), .. }) if r.ok);
+            let m = &crate::metrics::METRICS;
+            crate::metrics::inc(if ok { &m.commands_accepted } else { &m.commands_rejected });
+        }
         self.log_changes();
         self.report_departures(&reply);
         reply
@@ -375,7 +417,9 @@ impl World {
             tokio::select! {
                 _ = tick.tick() => {
                     let now = mono_ms();
+                    let started = std::time::Instant::now();
                     self.host.advance(now);
+                    crate::metrics::METRICS.world_tick.observe(started.elapsed());
                     if let Some(m) = self.sync() {
                         self.send_all(&m);
                     }
@@ -424,6 +468,7 @@ impl World {
                         self.send_to(client, &reply);
                     }
                     Some(WorldMsg::Resync { client }) => {
+                        crate::metrics::inc(&crate::metrics::METRICS.resyncs);
                         println!("world {}: client {client} resyncs at step {}", self.id, self.host.session.step_index());
                         self.send_to(client, &SyncMessage::reset(&self.host.session));
                     }
@@ -432,7 +477,10 @@ impl World {
                         if let Some(m) = self.sync() {
                             self.send_all(&m);
                         }
-                        let _ = done.send(taken);
+                        // the galaxy forgets the shipment only when its command is on disk
+                        self.persister.send(RepoOp::Then(Box::new(move || {
+                            let _ = done.send(taken);
+                        })));
                     }
                     Some(WorldMsg::Stop { done }) => {
                         self.snapshot();
@@ -461,6 +509,7 @@ mod tests {
             offline_limit_hours: 12.0,
             max_requests_per_second: 20.0,
             market: game_session::exchange::MarketConfig::default(),
+            auth: crate::config::AuthConfig::for_mode(dev),
         }
     }
 
@@ -501,14 +550,15 @@ mod tests {
         let (stored, log) = repo.load("acc-1").unwrap().unwrap();
         assert!(stored.sim.is_some());
         assert_eq!(log.len(), 3, "two commands and a tempo change after the snapshot: {log:?}");
-        let restored = restore(&c, &stored, &log);
+        let (restored, departed) = restore(&c, &stored, &log);
+        assert!(departed.is_empty());
         assert_eq!(restored.session.step_index(), w.host().session.step_index());
         assert_eq!(world_of(&restored), world_of(w.host()));
         assert_eq!(restored.session.commands().len(), 3);
         assert_eq!(restored.session.state_hash(), w.host().session.state_hash());
 
         let old = StoredWorld { sim: None, ..stored };
-        let replayed = restore(&c, &old, &log);
+        let (replayed, _) = restore(&c, &old, &log);
         assert_eq!(world_of(&replayed), world_of(w.host()));
         let _ = std::fs::remove_dir_all(dir);
     }
@@ -582,9 +632,9 @@ mod tests {
         let dir = tmp("trade");
         let c = cfg(&dir, true);
         let persister = Persister::spawn(FileRepository::new(&dir));
-        let mut w = World::open("acc-5", &c, &FileRepository::new(&dir), persister);
+        let mut w = World::open("acc-5", &c, &FileRepository::new(&dir), persister.clone());
         let (tx, mut rx) = mpsc::unbounded_channel();
-        w.set_galaxy(tx);
+        w.set_galaxy(tx.clone());
         assert!(matches!(rx.try_recv(), Ok(GalaxyMsg::Home { star, .. }) if star == "Tau Ceti"));
         let mut replica = Host::new(HostOptions::default());
         let feed =
@@ -599,7 +649,18 @@ mod tests {
         let ship =
             format!(r#"{{"kind":"command","command":{{"type":"SHIP_TO_HUB","bodyId":"{body}","hubId":"hub-sol","cargo":{{"{mat}":5}}}}}}"#);
         w.request(&req(2, &ship));
-        assert!(matches!(rx.try_recv(), Ok(GalaxyMsg::Departed { hub_id, cargo, .. }) if hub_id == "hub-sol" && cargo[&mat] == 5.0));
+        assert!(rx.try_recv().is_err(), "the galaxy hears of it after the log is written");
+        persister.flush();
+        let departed = rx.try_recv();
+        assert!(matches!(&departed, Ok(GalaxyMsg::Departed { hub_id, cargo, .. }) if hub_id == "hub-sol" && cargo[&mat] == 5.0));
+        let Ok(GalaxyMsg::Departed { shipment_id, .. }) = departed else { unreachable!() };
+
+        // a crash before the next snapshot: the world restored from its log reports it again
+        let mut again = World::open("acc-5", &c, &FileRepository::new(&dir), persister.clone());
+        again.set_galaxy(tx.clone());
+        assert!(matches!(rx.try_recv(), Ok(GalaxyMsg::Home { .. })));
+        assert!(matches!(rx.try_recv(), Ok(GalaxyMsg::Departed { shipment_id: id, .. }) if id == shipment_id));
+        assert!(rx.try_recv().is_err());
 
         let cargo: Qty = [("FER".to_string(), 7.0)].into_iter().collect();
         assert!(w.deliver("acc-5:freight-1", &body, &cargo));

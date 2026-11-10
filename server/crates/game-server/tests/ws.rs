@@ -9,6 +9,7 @@ use futures_util::{SinkExt, StreamExt};
 use serde_json::{Value, json};
 use tokio_tungstenite::tungstenite::Message;
 
+use game_server::config::AuthConfig;
 use game_server::{AppState, Config, PROTOCOL_VERSION, router};
 use game_session::exchange::{MarketConfig, NpcConfig};
 use game_session::{Host, HostOptions, SyncMessage};
@@ -30,7 +31,52 @@ fn config(dir: &std::path::Path, dev: bool) -> Config {
             npc: Some(NpcConfig { seed: 7, players: 6, update_seconds: 10.0, depth: 50.0 }),
             ..MarketConfig::default()
         },
+        auth: AuthConfig::for_mode(dev),
     }
+}
+
+/// One HTTP/1.1 request over a fresh TCP connection: status, the session cookie it set, JSON body.
+async fn http(url: &str, method: &str, path: &str, cookie: Option<&str>, body: Option<Value>) -> (u16, Option<String>, Value) {
+    let (status, set, text) = http_text(url, method, path, cookie, body).await;
+    (status, set, serde_json::from_str(&text).unwrap_or(Value::Null))
+}
+
+async fn http_text(url: &str, method: &str, path: &str, cookie: Option<&str>, body: Option<Value>) -> (u16, Option<String>, String) {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let addr = url.trim_start_matches("ws://").trim_end_matches("/ws");
+    let mut s = tokio::net::TcpStream::connect(addr).await.unwrap();
+    let body = body.map(|b| b.to_string()).unwrap_or_default();
+    let mut req = format!(
+        "{method} {path} HTTP/1.1\r\nHost: {addr}\r\nConnection: close\r\nContent-Type: application/json\r\nContent-Length: {}\r\n",
+        body.len()
+    );
+    if let Some(c) = cookie {
+        req += &format!("Cookie: sg_session={c}\r\n");
+    }
+    req += "\r\n";
+    req += &body;
+    s.write_all(req.as_bytes()).await.unwrap();
+    let mut out = Vec::new();
+    s.read_to_end(&mut out).await.unwrap();
+    let text = String::from_utf8(out).unwrap();
+    let (head, body) = text.split_once("\r\n\r\n").unwrap();
+    let status = head.split(' ').nth(1).unwrap().parse().unwrap();
+    let set = head
+        .lines()
+        .filter_map(|l| l.strip_prefix("set-cookie: ").or_else(|| l.strip_prefix("Set-Cookie: ")))
+        .find_map(|c| c.strip_prefix("sg_session=")?.split(';').next().map(str::to_string));
+    (status, set, body.to_string())
+}
+
+/// A WebSocket that logs in with a ticket of the session's cookie.
+async fn connect_with_ticket(url: &str, cookie: &str) -> (Ws, Value) {
+    let (status, _, t) = http(url, "POST", "/api/ticket", Some(cookie), None).await;
+    assert_eq!(status, 200, "{t}");
+    let (mut ws, _) = tokio_tungstenite::connect_async(url).await.unwrap();
+    let hello = json!({ "type": "hello", "protocolVersion": PROTOCOL_VERSION, "ticket": t["ticket"] });
+    ws.send(Message::Text(hello.to_string().into())).await.unwrap();
+    let first = next(&mut ws).await;
+    (ws, first)
 }
 
 async fn start(cfg: Config) -> (String, std::sync::Arc<AppState>) {
@@ -234,15 +280,22 @@ async fn login_play_reconnect_and_restart() {
 async fn production_needs_an_account_keeps_time_and_limits_requests() {
     let dir = tmp("prod");
     let (url, _state) = start(config(&dir, false)).await;
+    // production: no password over the socket, no account made on login, no guests
     let (_, refused) = connect(&url, "Nowy", "haslo-123").await;
-    assert_eq!(refused["type"], "error", "no account is made on login in production");
-    assert!(refused["error"].as_str().unwrap().contains("nieznany"));
-    // registration is explicit in production
-    let (mut ws, _) = tokio_tungstenite::connect_async(&url).await.unwrap();
-    let hello =
-        json!({ "type": "hello", "protocolVersion": PROTOCOL_VERSION, "callsign": "Nowy", "password": "haslo-123", "register": true });
-    ws.send(Message::Text(hello.to_string().into())).await.unwrap();
-    assert_eq!(next(&mut ws).await["type"], "welcome");
+    assert_eq!(refused["type"], "error");
+    assert!(refused["error"].as_str().unwrap().contains("wyłączone"), "{refused}");
+    let (status, _, e) = http(&url, "POST", "/api/login", None, Some(json!({ "callsign": "Nowy", "password": "haslo-123" }))).await;
+    assert_eq!((status, e["error"].as_str().unwrap()), (401, "nieznany dowódca"));
+    let (status, _, _) = http(&url, "POST", "/api/guest", None, None).await;
+    assert_eq!(status, 403, "no guests in production");
+    assert_eq!(http(&url, "GET", "/metrics", None, None).await.0, 404, "no metrics without METRICS_TOKEN");
+    // registration is explicit; the ticket of its session logs the socket in
+    let (status, cookie, me) =
+        http(&url, "POST", "/api/register", None, Some(json!({ "callsign": "Nowy", "password": "haslo-123" }))).await;
+    assert_eq!(status, 200, "{me}");
+    let (ws, welcome) = connect_with_ticket(&url, &cookie.unwrap()).await;
+    assert_eq!(welcome["type"], "welcome", "{welcome}");
+    assert_eq!(welcome["accountId"], me["accountId"]);
     let mut c = Client { ws, replica: Host::new(HostOptions::default()), hashes: 0, galaxy: None };
     let tempo = c.ask(1, json!({ "kind": "setTempo", "tempo": 600 })).await;
     assert_eq!(tempo["ok"], false, "no test tempos in production");
@@ -275,6 +328,87 @@ async fn production_needs_an_account_keeps_time_and_limits_requests() {
     let old = next(&mut ws).await;
     assert_eq!(old["type"], "error");
     assert!(old["error"].as_str().unwrap().contains("protocol 3"), "{old}");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// R-25: a session in a cookie, a one-time ticket for the socket, a logout, the lock after failed
+/// logins, a guest account (dev mode), and a page of another site that the cookie does not serve.
+#[tokio::test]
+async fn sessions_tickets_logout_and_failed_logins() {
+    let dir = tmp("sessions");
+    let (url, _state) = start(config(&dir, true)).await;
+    let creds = json!({ "callsign": "Orzel", "password": "haslo-123" });
+    let (status, cookie, me) = http(&url, "POST", "/api/register", None, Some(creds.clone())).await;
+    assert_eq!(status, 200, "{me}");
+    assert_eq!((me["callsign"].as_str(), me["guest"].as_bool()), (Some("Orzel"), Some(false)));
+    let cookie = cookie.expect("the session cookie");
+    let (status, _, e) = http(&url, "POST", "/api/register", None, Some(creds.clone())).await;
+    assert_eq!((status, e["error"].as_str().unwrap()), (409, "ten znak wywoławczy jest już zajęty"));
+    let (status, _, again) = http(&url, "GET", "/api/session", Some(&cookie), None).await;
+    assert_eq!((status, &again), (200, &me));
+
+    // a ticket opens one socket, once
+    let (status, _, t) = http(&url, "POST", "/api/ticket", Some(&cookie), None).await;
+    assert_eq!(status, 200);
+    let hello = json!({ "type": "hello", "protocolVersion": PROTOCOL_VERSION, "ticket": t["ticket"] });
+    let (mut ws, _) = tokio_tungstenite::connect_async(&url).await.unwrap();
+    ws.send(Message::Text(hello.to_string().into())).await.unwrap();
+    let welcome = next(&mut ws).await;
+    assert_eq!((welcome["type"].as_str(), &welcome["accountId"]), (Some("welcome"), &me["accountId"]));
+    let (mut ws2, _) = tokio_tungstenite::connect_async(&url).await.unwrap();
+    ws2.send(Message::Text(hello.to_string().into())).await.unwrap();
+    let reused = next(&mut ws2).await;
+    assert!(reused["error"].as_str().unwrap().contains("zużyty"), "{reused}");
+
+    // the password login gives another session; the logout ends only its own
+    let (status, second, _) = http(&url, "POST", "/api/login", None, Some(json!({ "callsign": "orzel", "password": "haslo-123" }))).await;
+    assert_eq!(status, 200);
+    let second = second.unwrap();
+    assert_ne!(second, cookie);
+    let (status, cleared, _) = http(&url, "POST", "/api/logout", Some(&second), None).await;
+    assert_eq!((status, cleared.as_deref()), (204, Some("")));
+    assert_eq!(http(&url, "GET", "/api/session", Some(&second), None).await.0, 401);
+    assert_eq!(http(&url, "POST", "/api/ticket", Some(&second), None).await.0, 401);
+    assert_eq!(http(&url, "GET", "/api/session", Some(&cookie), None).await.0, 200);
+
+    // five wrong passwords lock the callsign, even for the right one
+    for _ in 0..5 {
+        let (status, _, _) = http(&url, "POST", "/api/login", None, Some(json!({ "callsign": "Orzel", "password": "zle-haslo" }))).await;
+        assert_eq!(status, 401);
+    }
+    let (status, _, e) = http(&url, "POST", "/api/login", None, Some(creds.clone())).await;
+    assert_eq!(status, 429, "{e}");
+    assert!(e["error"].as_str().unwrap().contains("za dużo nieudanych"));
+
+    // a guest (dev mode): a session without a password
+    let (status, guest, g) = http(&url, "POST", "/api/guest", None, None).await;
+    assert_eq!(status, 200, "{g}");
+    assert!(g["callsign"].as_str().unwrap().starts_with("gosc-") && g["guest"] == true);
+    let (_guest_ws, welcome) = connect_with_ticket(&url, &guest.unwrap()).await;
+    assert_eq!(welcome["accountId"], g["accountId"]);
+
+    // the metrics (open in dev mode): this server's accounts and sessions, the open sockets
+    let (status, _, text) = http_text(&url, "GET", "/metrics", None, None).await;
+    assert_eq!(status, 200);
+    assert!(text.contains("\ngame_accounts 2\n"), "{text}");
+    assert!(text.contains("\ngame_sessions 2\n"), "{text}");
+    assert!(text.contains("game_logins_total{result=\"refused\"}"));
+    assert!(text.contains("# TYPE game_world_tick_seconds histogram"));
+
+    // a page of another site: the cookie does not act for it
+    let addr = url.trim_start_matches("ws://").trim_end_matches("/ws").to_string();
+    let (status, _, _) = {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let mut s = tokio::net::TcpStream::connect(&addr).await.unwrap();
+        let req = format!(
+            "POST /api/ticket HTTP/1.1\r\nHost: {addr}\r\nOrigin: https://evil.example\r\nCookie: sg_session={cookie}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"
+        );
+        s.write_all(req.as_bytes()).await.unwrap();
+        let mut out = String::new();
+        s.read_to_string(&mut out).await.unwrap();
+        (out.split(' ').nth(1).unwrap().parse::<u16>().unwrap(), (), ())
+    };
+    assert_eq!(status, 403);
     let _ = std::fs::remove_dir_all(dir);
 }
 

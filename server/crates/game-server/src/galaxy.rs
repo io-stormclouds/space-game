@@ -169,9 +169,41 @@ fn reply_err(id: u64, error: &str) -> String {
     serde_json::json!({ "type": "reply", "id": id, "ok": false, "error": error }).to_string()
 }
 
+enum WriterOp {
+    Write(Box<ExchangeState>),
+    Flush(std::sync::mpsc::Sender<()>),
+}
+
+/// Writes `galaxy.json` off the service's loop, one state after another (never two writers of the
+/// file at once), atomically.
+fn spawn_writer(path: PathBuf) -> std::sync::mpsc::Sender<WriterOp> {
+    let (tx, rx) = std::sync::mpsc::channel::<WriterOp>();
+    std::thread::Builder::new()
+        .name("galaxy-io".into())
+        .spawn(move || {
+            for op in rx {
+                match op {
+                    WriterOp::Write(state) => match serde_json::to_vec(&state) {
+                        Ok(bytes) => {
+                            if let Err(e) = write_atomic(&path, &bytes) {
+                                eprintln!("galaxy: cannot write {}: {e}", path.display());
+                            }
+                        }
+                        Err(e) => eprintln!("galaxy: cannot serialise: {e}"),
+                    },
+                    WriterOp::Flush(done) => {
+                        let _ = done.send(());
+                    }
+                }
+            }
+        })
+        .expect("spawn galaxy-io thread");
+    tx
+}
+
 pub struct GalaxyService {
     exchange: Exchange,
-    path: PathBuf,
+    writer: std::sync::mpsc::Sender<WriterOp>,
     tick_ms: u64,
     clients: HashMap<ClientId, (String, mpsc::UnboundedSender<Wire>)>,
     /// Deliveries sent to worlds and not answered yet.
@@ -184,7 +216,7 @@ impl GalaxyService {
     pub fn new(cfg: &Config) -> GalaxyService {
         GalaxyService {
             exchange: open_exchange(cfg, wall_ms()),
-            path: galaxy_path(cfg),
+            writer: spawn_writer(galaxy_path(cfg)),
             tick_ms: cfg.galaxy_tick_ms(),
             clients: HashMap::new(),
             in_flight: HashSet::new(),
@@ -246,31 +278,20 @@ impl GalaxyService {
         }
     }
 
+    /// The state to the writer thread (at most once a second for ordinary changes; at once for the
+    /// shipments, whose other half is in a world's log).
     fn write(&mut self, now: f64) {
         self.dirty = false;
         self.last_write_ms = now;
-        let state = self.exchange.save();
-        let path = self.path.clone();
-        // small (credits, orders, shipments): written off the loop, atomically
-        tokio::task::spawn_blocking(move || match serde_json::to_vec(&state) {
-            Ok(bytes) => {
-                if let Err(e) = write_atomic(&path, &bytes) {
-                    eprintln!("galaxy: cannot write {}: {e}", path.display());
-                }
-            }
-            Err(e) => eprintln!("galaxy: cannot serialise: {e}"),
-        });
+        let _ = self.writer.send(WriterOp::Write(Box::new(self.exchange.save())));
     }
 
+    /// Writes and waits for the disk (shutdown).
     fn write_now(&mut self) {
-        self.dirty = false;
-        match serde_json::to_vec(&self.exchange.save()) {
-            Ok(bytes) => {
-                if let Err(e) = write_atomic(&self.path, &bytes) {
-                    eprintln!("galaxy: cannot write {}: {e}", self.path.display());
-                }
-            }
-            Err(e) => eprintln!("galaxy: cannot serialise: {e}"),
+        self.write(wall_ms());
+        let (done, wait) = std::sync::mpsc::channel();
+        if self.writer.send(WriterOp::Flush(done)).is_ok() {
+            let _ = wait.recv();
         }
     }
 
@@ -304,6 +325,11 @@ impl GalaxyService {
                 _ = tick.tick() => {
                     let now = wall_ms();
                     let ch = self.exchange.advance(now);
+                    let (shipments, orders, corporations) = self.exchange.counts();
+                    let m = &crate::metrics::METRICS;
+                    m.galaxy_shipments.store(shipments as u64, std::sync::atomic::Ordering::Relaxed);
+                    m.galaxy_orders.store(orders as u64, std::sync::atomic::Ordering::Relaxed);
+                    m.galaxy_corporations.store(corporations as u64, std::sync::atomic::Ordering::Relaxed);
                     if !ch.accounts.is_empty() || ch.quotes || ch.deliveries || ch.contracts {
                         self.dirty = true;
                         self.push_all();
@@ -328,6 +354,7 @@ impl GalaxyService {
                         self.clients.remove(&client);
                     }
                     Some(GalaxyMsg::Op { account, client, id, op }) => {
+                        crate::metrics::inc(&crate::metrics::METRICS.galaxy_ops);
                         let reply = self.op(&account, id, op, wall_ms());
                         if let Some((_, tx)) = self.clients.get(&client) {
                             let _ = tx.send(reply.into());
@@ -342,10 +369,12 @@ impl GalaxyService {
                     }
                     Some(GalaxyMsg::Departed { account, shipment_id, body_id, hub_id, cargo }) => {
                         match self.exchange.departed(&account, &shipment_id, &body_id, &hub_id, &cargo, wall_ms()) {
-                            Ok(_) => {
-                                self.dirty = true;
+                            Ok(Some(_)) => {
+                                self.write(wall_ms());
                                 self.push_all();
                             }
+                            // reported again by a restored world: already taken
+                            Ok(None) => {}
                             // the world checks the hub before it lets the cargo go; this is a bug
                             Err(e) => eprintln!("galaxy: shipment {shipment_id} of {account} lost: {e}"),
                         }
@@ -361,7 +390,7 @@ impl GalaxyService {
                             None => None, // retried on the next tick
                         };
                         if done.is_some() {
-                            self.dirty = true;
+                            self.write(wall_ms());
                             self.push_all();
                         }
                     }

@@ -332,7 +332,15 @@ pub struct ExchangeState {
     pub corporations: Vec<Corporation>,
     #[serde(default)]
     pub invitations: Vec<Invitation>,
+    /// Shipments to hubs already taken (`account:shipment` → Unix ms), kept for
+    /// [`DEPARTURES_KEPT_MS`] so a departure reported again is not a second one.
+    #[serde(default)]
+    pub departures: IndexMap<String, f64>,
 }
+
+/// How long the market remembers a departure [ms]: a week, far longer than any log tail a restored
+/// world reports again.
+pub const DEPARTURES_KEPT_MS: f64 = 7.0 * 24.0 * 3600.0 * 1000.0;
 
 /// One price level of a hub's book.
 #[derive(Serialize, Clone, Debug, PartialEq)]
@@ -639,6 +647,11 @@ impl Exchange {
     }
 
     /// The state to keep.
+    /// Shipments (travelling or waiting at colonies), open orders and corporations: the service's gauges.
+    pub fn counts(&self) -> (usize, usize, usize) {
+        (self.state.shipments.len(), self.state.orders.len(), self.state.corporations.len())
+    }
+
     pub fn save(&self) -> ExchangeState {
         let mut s = self.state.clone();
         if let (Some(sim), Some(n)) = (&self.npc, s.npc.as_mut()) {
@@ -964,15 +977,26 @@ impl Exchange {
 
     // ---- shipments ----
 
-    /// A world sent cargo to a hub (`SHIPMENT_DEPARTED`); the same shipment twice is one.
-    pub fn departed(&mut self, account: &str, shipment_id: &str, body_id: &str, hub_id: &str, cargo: &Qty, now: f64) -> ExResult<Shipment> {
+    /// A world sent cargo to a hub (`SHIPMENT_DEPARTED`). The same shipment again (a world restored
+    /// from its log reports the departures of its log tail once more) is `None`, also after it
+    /// arrived: departures are remembered for [`DEPARTURES_KEPT_MS`].
+    pub fn departed(
+        &mut self,
+        account: &str,
+        shipment_id: &str,
+        body_id: &str,
+        hub_id: &str,
+        cargo: &Qty,
+        now: f64,
+    ) -> ExResult<Option<Shipment>> {
         if !is_hub(hub_id) {
             return Err(format!("nieznany hub {hub_id}"));
         }
         let id = format!("{account}:{shipment_id}");
-        if let Some(s) = self.state.shipments.iter().find(|s| s.id == id) {
-            return Ok(s.clone());
+        if self.state.departures.contains_key(&id) || self.state.shipments.iter().any(|s| s.id == id) {
+            return Ok(None);
         }
+        self.state.departures.insert(id.clone(), now);
         self.profile(account, None, None);
         let s = Shipment {
             id,
@@ -986,7 +1010,7 @@ impl Exchange {
             arrived: false,
         };
         self.state.shipments.push(s.clone());
-        Ok(s)
+        Ok(Some(s))
     }
 
     /// Sends goods from a hub to the account's colony body.
@@ -1060,6 +1084,7 @@ impl Exchange {
         let mut ch = Changes::default();
         self.state.time = self.state.time.max(now);
         let now = self.state.time;
+        self.state.departures.retain(|_, t| *t + DEPARTURES_KEPT_MS > now);
         // shipments
         let mut i = 0;
         while i < self.state.shipments.len() {
@@ -1429,12 +1454,17 @@ mod tests {
         assert!((distance_ly("Tau Ceti", "Sol (Sun)") - 11.9).abs() < 0.2, "{}", distance_ly("Tau Ceti", "Sol (Sun)"));
         assert!((travel - (10.0 + d)).abs() < 1e-9);
 
-        let s = m.departed("acc-1", "cargo-7", "tc-e", hub, &qty([("FER", 12.0)]), T0).unwrap();
-        assert_eq!(m.departed("acc-1", "cargo-7", "tc-e", hub, &qty([("FER", 12.0)]), T0).unwrap().id, s.id, "idempotent");
+        let s = m.departed("acc-1", "cargo-7", "tc-e", hub, &qty([("FER", 12.0)]), T0).unwrap().expect("a new shipment");
+        assert_eq!(s.id, "acc-1:cargo-7");
+        assert!(m.departed("acc-1", "cargo-7", "tc-e", hub, &qty([("FER", 12.0)]), T0).unwrap().is_none(), "idempotent");
         m.advance(T0 + travel * 1000.0 - 1.0);
         assert_eq!(stock(&m, "acc-1", hub, "FER"), 0.0, "still on the way");
         let ch = m.advance(T0 + travel * 1000.0);
         assert!(ch.accounts.contains("acc-1"));
+        assert_eq!(stock(&m, "acc-1", hub, "FER"), 12.0);
+        // reported again after it arrived (a world restored from its log): nothing twice
+        assert!(m.departed("acc-1", "cargo-7", "tc-e", hub, &qty([("FER", 12.0)]), T0).unwrap().is_none());
+        m.advance(T0 + 2.0 * travel * 1000.0);
         assert_eq!(stock(&m, "acc-1", hub, "FER"), 12.0);
 
         let now = m.state.time;

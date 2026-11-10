@@ -274,6 +274,7 @@ version = "0.1.0"
 dependencies = [
  "argon2",
  "axum",
+ "blake2",
  "futures-util",
  "game-core",
  "game-session",

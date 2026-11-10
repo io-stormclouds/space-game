@@ -1,5 +1,7 @@
 import {
+  AccountError,
   REMOTE_PROTOCOL_VERSION,
+  wsTicket,
   type GalaxyView,
   type GameSnapshot,
   type RemoteCredentials,
@@ -23,6 +25,8 @@ import type { WasmHost } from './wasm-host';
 // checkpoint, queries keep being answered from the last state. A refused login ends it.
 // The galaxy (protocol 3): `galaxy` requests go to the server's galaxy service; its pushed view goes
 // to the UI and fills the snapshots' hubs and players (server worlds have none of their own).
+// Login (R-25): a one-time ticket of the session cookie in every hello (the HTTP API of account.ts),
+// or a callsign and a password where the server allows it (tools, tests).
 // Platform-free: the worker entry (replica-worker.ts) passes the WebSocket, the module, `postMessage`.
 
 /** Requests answered by the replica (they do not change the game). */
@@ -42,6 +46,8 @@ export interface ReplicaOptions {
   /** Opens a new connection (called again to reconnect). */
   connect: () => SocketLike;
   credentials: RemoteCredentials;
+  /** A one-time ticket of the session (`{ session }` credentials). Default: `wsTicket` of the api package. */
+  ticket?: (session: string, guest: boolean) => Promise<string>;
   /** To the UI thread. */
   post: (m: WorkerMessage) => void;
   now?: () => number;
@@ -120,9 +126,23 @@ export function createReplica(opts: ReplicaOptions): Replica {
     const s = opts.connect();
     socket = s;
     let alive = true;
+    const hello = (login: { ticket: string } | { callsign: string; password: string }) =>
+      s.send(JSON.stringify({ type: 'hello', protocolVersion: REMOTE_PROTOCOL_VERSION, ...login }));
     s.addEventListener('open', () => {
       const c = opts.credentials;
-      s.send(JSON.stringify({ type: 'hello', protocolVersion: REMOTE_PROTOCOL_VERSION, callsign: c.callsign, password: c.password }));
+      if (!('session' in c)) return hello({ callsign: c.callsign, password: c.password });
+      // a new ticket for every connection (each is good once)
+      (opts.ticket ?? wsTicket)(c.session, c.guest ?? false).then(
+        (ticket) => alive && hello({ ticket }),
+        (e: unknown) => {
+          if (!alive) return;
+          const why = e instanceof Error ? e.message : String(e);
+          // refused (nobody logged in, no guests): the end; no server behind the proxy, limits: try again
+          if (e instanceof AccountError && (e.status === 401 || e.status === 403)) failAll(why);
+          else lost(why);
+          s.close();
+        },
+      );
     });
     s.addEventListener('message', (e) => {
       if (!alive) return;

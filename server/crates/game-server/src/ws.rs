@@ -1,4 +1,5 @@
-//! WebSocket gateway: hello (login) → welcome → the world's checkpoint and the galaxy's view, then
+//! WebSocket gateway: hello (a ticket of `POST /api/ticket`, or a callsign and a password where
+//! `PASSWORD_HELLO` allows it) → welcome → the world's checkpoint and the galaxy's view, then
 //! requests in, replies and sync messages out; `{"type":"resync"}` asks for a new checkpoint;
 //! `{"id","galaxy":{…}}` goes to the galaxy service. Requests are rate-limited.
 
@@ -51,11 +52,46 @@ struct Hello {
     #[serde(rename = "type")]
     kind: String,
     protocol_version: u32,
-    callsign: String,
-    password: String,
+    /// One-time ticket of `POST /api/ticket` (the browser's way in, R-25).
+    #[serde(default)]
+    ticket: Option<String>,
+    /// Callsign and password (`PASSWORD_HELLO`: dev mode, tools and tests).
+    #[serde(default)]
+    callsign: Option<String>,
+    #[serde(default)]
+    password: Option<String>,
     /// Create the account (always allowed in dev mode, where the first login creates it).
     #[serde(default)]
     register: bool,
+}
+
+/// The account of a hello, or the reason it is refused.
+async fn hello_account(state: &AppState, hello: &Hello) -> Result<crate::accounts::Account, String> {
+    if let Some(ticket) = &hello.ticket {
+        let id = state.sessions.redeem(ticket).ok_or("bilet logowania nieważny lub zużyty: zaloguj się ponownie")?;
+        return state.accounts.by_id(&id).await.ok_or_else(|| "konto biletu nie istnieje".to_string());
+    }
+    let (Some(callsign), Some(password)) = (&hello.callsign, &hello.password) else {
+        return Err("hello bez biletu logowania".into());
+    };
+    if !state.cfg.auth.password_hello {
+        return Err("logowanie hasłem przez WebSocket jest wyłączone: zaloguj się (POST /api/login) i podaj bilet".into());
+    }
+    let k = crate::accounts::key(callsign);
+    state.sessions.check_failures(&k).map_err(crate::http::locked_message)?;
+    let create = state.cfg.dev_mode || (hello.register && state.cfg.auth.registration);
+    match state.accounts.authenticate(callsign, password, create).await {
+        Ok(a) => {
+            state.sessions.succeeded(&k);
+            Ok(a)
+        }
+        Err(e) => {
+            if matches!(e, crate::accounts::AuthError::WrongPassword | crate::accounts::AuthError::UnknownAccount) {
+                state.sessions.failed(&k);
+            }
+            Err(e.to_string())
+        }
+    }
 }
 
 #[derive(Serialize)]
@@ -96,9 +132,16 @@ async fn session(mut socket: WebSocket, state: Arc<AppState>) {
     if hello.kind != "hello" || hello.protocol_version != PROTOCOL_VERSION {
         return refuse(socket, format!("protocol {} expected, got {}", PROTOCOL_VERSION, hello.protocol_version)).await;
     }
-    let account = match state.accounts.authenticate(&hello.callsign, &hello.password, state.cfg.dev_mode || hello.register).await {
-        Ok(a) => a,
-        Err(e) => return refuse(socket, e.to_string()).await,
+    let m = &crate::metrics::METRICS;
+    let account = match hello_account(&state, &hello).await {
+        Ok(a) => {
+            crate::metrics::inc(&m.logins_ok);
+            a
+        }
+        Err(e) => {
+            crate::metrics::inc(&m.logins_refused);
+            return refuse(socket, e).await;
+        }
     };
 
     // 2. the player's world (one per account, Model C)
@@ -138,6 +181,7 @@ async fn session(mut socket: WebSocket, state: Arc<AppState>) {
         tx: own_tx.clone(),
     });
     println!("{} connected (client {client})", account.callsign);
+    crate::metrics::inc(&m.connections);
 
     // 3. requests in, messages out
     let (mut sink, mut stream) = socket.split();
@@ -164,10 +208,12 @@ async fn session(mut socket: WebSocket, state: Arc<AppState>) {
         };
         match msg {
             Message::Text(t) => {
+                crate::metrics::inc(&m.requests);
                 let parsed: Option<serde_json::Value> = serde_json::from_str(t.as_str()).ok();
                 let resync = parsed.as_ref().is_some_and(|v| v.get("type").and_then(|k| k.as_str()) == Some("resync"));
                 // a resync costs a whole checkpoint: it counts as ten requests
                 if !bucket.take(if resync { 10.0 } else { 1.0 }) {
+                    crate::metrics::inc(&m.requests_limited);
                     if let Some(id) = parsed.as_ref().and_then(|v| v.get("id")?.as_u64()) {
                         let reply = game_session::Outgoing::err(id, "za dużo żądań na sekundę: zwolnij");
                         let _ = own_tx.send(serde_json::to_string(&reply).expect("reply serialises").into());
@@ -190,6 +236,7 @@ async fn session(mut socket: WebSocket, state: Arc<AppState>) {
     }
     let _ = world.send(WorldMsg::Detach { client }).await;
     let _ = state.galaxy.send(GalaxyMsg::Disconnect { client });
+    crate::metrics::dec(&m.connections);
     writer.abort();
     println!("{} disconnected (client {client})", account.callsign);
 }

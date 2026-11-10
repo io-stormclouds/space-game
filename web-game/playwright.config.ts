@@ -48,21 +48,14 @@ export default defineConfig({
     ...(REMOTE
       ? [
           {
-            // Plan 02 B4: the same tests through the network server (WebSocket); each test is a new guest account.
+            // Plan 02 B4: the same tests through the network server (WebSocket, through the dev
+            // server's proxy as behind Caddy); each test is a new guest account (a cookie session, R-25).
             name: 'chromium-remote',
             use: {
               ...browser,
               storageState: {
                 cookies: [],
-                origins: [
-                  {
-                    origin: `http://localhost:${PORT}`,
-                    localStorage: [
-                      { name: 'sg.api', value: 'remote' },
-                      { name: 'sg.server', value: `ws://127.0.0.1:${SERVER_PORT}/ws` },
-                    ],
-                  },
-                ],
+                origins: [{ origin: `http://localhost:${PORT}`, localStorage: [{ name: 'sg.api', value: 'remote' }] }],
               },
             },
           },
@@ -75,6 +68,8 @@ export default defineConfig({
       url: `http://localhost:${PORT}`,
       reuseExistingServer: !CI,
       timeout: 120_000,
+      // its proxy (proxy.conf.mjs) passes /api and /ws to the game server of the remote project
+      env: { GAME_SERVER: `http://127.0.0.1:${SERVER_PORT}` },
     },
     ...(REMOTE
       ? [

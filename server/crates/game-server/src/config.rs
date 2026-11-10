@@ -39,6 +39,44 @@ pub struct Config {
     /// - corporations: `CORP_FOUNDING_CREDITS` and `CORP_FOUNDING_STA` (founding cost, the steel in
     ///   the seat hub; production 5000 and 100, dev 500 and 0), `CORP_MAX_MEMBERS` (20).
     pub market: MarketConfig,
+    /// Accounts and sessions (R-25):
+    /// - `REGISTRATION` (default on): `POST /api/register` makes accounts;
+    /// - `GUEST_ACCOUNTS` (default: dev on, production off): `POST /api/guest` makes an account with a
+    ///   random callsign, reached only through its session cookie;
+    /// - `PASSWORD_HELLO` (default: dev on, production off): the WebSocket hello may carry a callsign
+    ///   and a password (tools and tests); otherwise only a ticket of `POST /api/ticket`;
+    /// - `COOKIE_SECURE` (default: production on, dev off): the session cookie only over HTTPS;
+    /// - `SESSION_DAYS` (default 30) and `SIGNUPS_PER_MINUTE` (new accounts on the whole server;
+    ///   production 30, dev 0 = no limit);
+    /// - `METRICS_TOKEN`: `GET /metrics` (Prometheus) wants `Authorization: Bearer <token>`; without
+    ///   it the endpoint is open in dev mode and off in production.
+    pub auth: AuthConfig,
+}
+
+#[derive(Clone, Debug)]
+pub struct AuthConfig {
+    pub registration: bool,
+    pub guest_accounts: bool,
+    pub password_hello: bool,
+    pub cookie_secure: bool,
+    pub session_seconds: u64,
+    pub signups_per_minute: u32,
+    pub metrics_token: Option<String>,
+}
+
+impl AuthConfig {
+    /// The defaults of a mode.
+    pub fn for_mode(dev_mode: bool) -> AuthConfig {
+        AuthConfig {
+            registration: true,
+            guest_accounts: dev_mode,
+            password_hello: dev_mode,
+            cookie_secure: !dev_mode,
+            session_seconds: 30 * 24 * 3600,
+            signups_per_minute: if dev_mode { 0 } else { 30 },
+            metrics_token: None,
+        }
+    }
 }
 
 impl Config {
@@ -79,6 +117,16 @@ impl Config {
             },
             npc: if flag("NPC_FACTIONS").unwrap_or(true) { Some(npc) } else { None },
         };
+        let auth_default = AuthConfig::for_mode(dev_mode);
+        let auth = AuthConfig {
+            registration: flag("REGISTRATION").unwrap_or(auth_default.registration),
+            guest_accounts: flag("GUEST_ACCOUNTS").unwrap_or(auth_default.guest_accounts),
+            password_hello: flag("PASSWORD_HELLO").unwrap_or(auth_default.password_hello),
+            cookie_secure: flag("COOKIE_SECURE").unwrap_or(auth_default.cookie_secure),
+            session_seconds: (num("SESSION_DAYS", 30.0) * 24.0 * 3600.0) as u64,
+            signups_per_minute: var("SIGNUPS_PER_MINUTE").and_then(|v| v.parse().ok()).unwrap_or(auth_default.signups_per_minute),
+            metrics_token: var("METRICS_TOKEN"),
+        };
         Config {
             addr: var("ADDR").and_then(|a| a.parse().ok()).unwrap_or_else(|| SocketAddr::from(([127, 0, 0, 1], 8080))),
             data_dir: var("DATA_DIR").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("data")),
@@ -89,6 +137,7 @@ impl Config {
             offline_limit_hours: num("OFFLINE_LIMIT_HOURS", 12.0),
             max_requests_per_second: num("MAX_REQUESTS_PER_SECOND", 20.0),
             market,
+            auth,
         }
     }
 
