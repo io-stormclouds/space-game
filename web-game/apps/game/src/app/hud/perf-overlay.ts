@@ -7,7 +7,10 @@ import { TEXT } from '../i18n/pl';
 const f1 = (n: number) => (Math.round(n * 10) / 10).toLocaleString('pl-PL');
 const int = (n: number) => Math.round(n).toLocaleString('pl-PL');
 
-/** Performance overlay (F2: simulation step time; F3/F4: frame time, draw calls, triangles, GPU). Toggle: `. */
+/**
+ * Performance overlay (F2: simulation step time; F3/F4: frame time, draw calls, triangles, GPU; T4: triangles of
+ * terrain, decor and structures, instances drawn — planet/system view only). Toggle: `.
+ */
 @Component({
   selector: 'wg-perf-overlay',
   imports: [HudFrame],
@@ -26,6 +29,13 @@ const int = (n: number) => Math.round(n).toLocaleString('pl-PL');
           <div><dt>{{ t.perf.triangles }}</dt><dd data-perf="triangles">{{ int(r.triangles) }}</dd></div>
           <div><dt>{{ t.perf.gpu }}</dt><dd data-perf="gpu">{{ r.geometries }} / {{ r.textures }}</dd></div>
           <div><dt>{{ t.perf.contexts }}</dt><dd data-perf="contexts">{{ r.contexts }}</dd></div>
+          @if (r.detail; as d) {
+            <div><dt>{{ t.perf.terrain }}</dt><dd data-perf="terrain">{{ int(d.terrainTriangles) }}</dd></div>
+            <div><dt>{{ t.perf.decor }}</dt><dd data-perf="decor">{{ int(d.decorTriangles) }}</dd></div>
+            <div><dt>{{ t.perf.structures }}</dt><dd data-perf="structures">{{ int(d.structureTriangles) }}</dd></div>
+            <div><dt>{{ t.perf.units }}</dt><dd data-perf="units">{{ int(d.unitTriangles) }}</dd></div>
+            <div><dt>{{ t.perf.instances }}</dt><dd data-perf="instances">{{ int(d.instances) }}</dd></div>
+          }
         }
       </dl>
     </section>

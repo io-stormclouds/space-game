@@ -27,7 +27,7 @@ npm run build          # tokens:check + tsc + vite build
 
 ```
 src/
-├─ tokens/design-tokens.ts        źródło prawdy (kolory, krój, skala, odstępy, kształt, ruch)
+├─ tokens/design-tokens.ts        źródło prawdy (kolory, teren, krój, skala, odstępy, kształt, ruch)
 ├─ tokens/tokens.generated.css    zmienne --hud-* (generowane — nie edytować)
 ├─ styles/base.css                .hud-root, .hud-gridfield, .hud-dots, .hud-label/.hud-micro/.hud-title, .hud-blink
 ├─ components/HudFrame/           kontener z narożnikami, zakładką [ ETYKIETA ] i metką seryjną
@@ -55,6 +55,9 @@ Kolejność stylów u konsumenta: `tokens.generated.css`, potem `styles/base.css
 - **Kolory:** `void`, `hull`, `graphite`, `graphiteHi`, `metal`, `line`, `lineFaint`, `text`, `textDim`, `textFaint`, `signal`, `signalDim`, `signalTint`, `signalInk`, `alert`, `alertDim`.
   - `textFaint` służy tylko do dekoracji (metki, linijki): celowo nie spełnia kontrastu tekstu, więc takie elementy mają `aria-hidden`.
   - `signalTint` to kryjąca wersja `signalDim` dla wypełnień zaznaczonych przycisków. Półprzezroczyste wypełnienie przepuszczałoby kolor krawędzi z warstwy pod spodem.
+- **Teren (`terrain`, propozycja T-7, czeka na akceptację zrzutów biomów):** `grass`, `forest`, `sand`, `dune`, `rock`, `soil`, `snow`, `ice`, `water`, `stone`, `stoneDark`, `thatch`, `metal`, `dark`, `regolith`, `olive`.
+  - Stonowane barwy powierzchni planet: kolor KayKit przeciągnięty 40 % do szarości o tej samej luminancji i 20 % do `metal` (`docs/planet-terrain-design.md` §4.7). Żadna nie zbliża się do `signal` ani `alert`.
+  - Zmienne CSS `--hud-terrain-*`. Renderer 3D trzyma liczbową kopię w `web-game/packages/render/src/system/terrain-tones.ts`, a `terrain-tones.spec.ts` pilnuje, żeby obie tabele były identyczne.
 - **Skala mikro-typografii:** `micro 10` · `label 11` · `body 12` · `value 14` · `title 16` · `display 22` px. Nic poniżej 10 px.
 - **Odstępy:** 2 · 4 · 6 · 8 · 12 · 16 · 24 px.
 - **Kształt i rozmiary:**

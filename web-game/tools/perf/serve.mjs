@@ -12,6 +12,7 @@ const TYPES = {
   '.woff2': 'font/woff2',
   '.woff': 'font/woff',
   '.gltf': 'model/gltf+json',
+  '.glb': 'model/gltf-binary',
   '.bin': 'application/octet-stream',
   '.json': 'application/json',
   '.txt': 'text/plain; charset=utf-8',
@@ -33,5 +34,9 @@ export function serve(root, port) {
       res.writeHead(404).end();
     }
   });
-  return new Promise((resolve) => server.listen(port, () => resolve(server)));
+  // a busy port (EADDRINUSE) fails the run instead of measuring someone else's server
+  return new Promise((resolve, reject) => {
+    server.once('error', (e) => reject(new Error(`perf server on port ${port}: ${e.message} (set PERF_PORT)`)));
+    server.listen(port, () => resolve(server));
+  });
 }

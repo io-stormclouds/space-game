@@ -1,5 +1,6 @@
 import type { BodyId, GameSnapshot, ScenarioId } from '@space-game/api';
 import type { CommandsService } from './commands';
+import { apiMode } from './game-api';
 import type { GameService } from './game.service';
 
 /**
@@ -7,13 +8,14 @@ import type { GameService } from './game.service';
  * GameApi with the same commands a player would give, fast-forwarded while paused, so the game
  * state is genuine.
  */
-export const PRESETS = ['przybycie', 'skan', 'port', 'kolonia', 'planeta-matka', 'fabryka', 'obciazenie-s', 'obciazenie-m', 'obciazenie-l'] as const;
+export const PRESETS = ['przybycie', 'skan', 'port', 'kolonia', 'planeta-matka', 'fabryka', 'obciazenie-s', 'obciazenie-m', 'obciazenie-l', 'teren-m'] as const;
 
 /**
  * Worlds the mock builds directly: F5 load levels (#/scenariusz-obciazenie-m) and the colony with
- * a Fabryka atanorowa (#/scenariusz-fabryka, AT1), an era the playable catalogue does not reach.
+ * a Fabryka atanorowa (#/scenariusz-fabryka, AT1), an era the playable catalogue does not reach;
+ * `teren-m` is load M with the colony beside the ruins of Tau Ceti c (T4 performance preset, mock only).
  */
-const DIRECT: Partial<Record<string, ScenarioId>> = { 'obciazenie-s': 'load-s', 'obciazenie-m': 'load-m', 'obciazenie-l': 'load-l', fabryka: 'fabryka' };
+const DIRECT: Partial<Record<string, ScenarioId>> = { 'obciazenie-s': 'load-s', 'obciazenie-m': 'load-m', 'obciazenie-l': 'load-l', 'teren-m': 'load-m-teren', fabryka: 'fabryka' };
 export type PresetId = (typeof PRESETS)[number];
 
 export function isPreset(id: string): id is PresetId {
@@ -25,6 +27,12 @@ const MAX_ROUNDS = 400;
 
 export async function runPreset(game: GameService, commands: CommandsService, id: PresetId): Promise<GameSnapshot> {
   const direct = DIRECT[id];
+  // `load-m-teren` exists only in the TS mock (its colony is placed beside the ruins, which only the
+  // render-side terrain plan knows): with the WASM or remote API it falls back to the plain M load
+  if (direct === 'load-m-teren' && apiMode() !== 'mock-ts') {
+    console.warn('teren-m: preset of the TS mock only, starting load-m instead');
+    return game.start('load-m');
+  }
   if (direct) return game.start(direct);
   const scenario: ScenarioId = id === 'planeta-matka' ? 'planeta-matka' : 'tau-ceti';
   let snap = await game.start(scenario);

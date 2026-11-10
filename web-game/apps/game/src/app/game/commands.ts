@@ -509,18 +509,26 @@ export class CommandsService {
         const a = avail[b.id];
         const l1 = b.levels[0]!;
         const here = tileBuildCost(b, terrain);
+        // a 1-tile kind on a terrain tile: the tile's own check (terrain price) decides terrain and
+        // materials, so the row is enabled and marked exactly like BUILD on that tile would answer
+        let fail = a && !a.ok ? { reason: a.reason, detail: a.detail } : null;
+        const opt = terrain && b.footprint === 1 ? this.buildTile()!.options.find((o) => o.kind === b.id) : undefined;
+        if (opt) {
+          if (opt.reason === 'BAD_TERRAIN' || opt.reason === 'NO_RESOURCES') fail = { reason: opt.reason, detail: opt.detail };
+          else if (fail?.reason === 'NO_RESOURCES') fail = null; // affordable at this tile's (lower) price
+        }
         return {
           id: b.id,
           name: b.name,
           era: b.era,
           footprint: b.footprint,
           hotkey: BUILD_KEYS[i] ?? '',
-          cost: Object.entries(here.cost).map(([code, amount]) => ({ code, amount, missing: a?.reason === 'NO_RESOURCES' })),
+          cost: Object.entries(here.cost).map(([code, amount]) => ({ code, amount, missing: fail?.reason === 'NO_RESOURCES' })),
           perTiles: here.perTiles,
           power: l1.power,
           crew: l1.crew,
           minutes: here.minutes,
-          reason: a && !a.ok ? reasonText(this.t, a.reason, a.detail) : '',
+          reason: fail ? reasonText(this.t, fail.reason, fail.detail) : '',
         };
       });
   });

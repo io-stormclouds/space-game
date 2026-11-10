@@ -84,7 +84,7 @@ describe('warpPoint', () => {
 
 describe('terrain plan of the medieval planet', () => {
   it('is deterministic', () => {
-    const again = generateTerrain(buildGoldbergGrid(MEDIEVAL_ID, body.radius, body.surfaceGrid!.frequency, body.surfaceGrid!.depositSeed, body.surfaceGrid!.depositWeights), { biome: 'medieval', seed: 2, aim: vec3(-Math.cos(body.initialAngle), 0.9, -Math.sin(body.initialAngle)) });
+    const again = generateTerrain(buildGoldbergGrid(MEDIEVAL_ID, body.radius, body.surfaceGrid!.frequency, body.surfaceGrid!.depositSeed, body.surfaceGrid!.depositWeights), { ...body.surfaceGrid!.terrain!, aim: vec3(-Math.cos(body.initialAngle), 0.9, -Math.sin(body.initialAngle)) });
     expect(again.kinds).toEqual(plan.kinds);
     expect(again.variants).toEqual(plan.variants);
     expect(again.decor).toEqual(plan.decor);
@@ -113,14 +113,16 @@ describe('terrain plan of the medieval planet', () => {
     }
   });
 
-  it('keeps water, roads, buildings and raised transitions off deposits; water and roads off pentagons', () => {
+  it('keeps basins, roads, buildings and raised transitions off deposits; basins and roads off pentagons', () => {
+    // the lakes of Tau Ceti c are dried lake beds (T-26)
+    expect(plan.basin).toBe('dune');
     grid.tiles.forEach((t, i) => {
       if (t.kind === 'PENT') {
-        expect(plan.kinds[i]).not.toBe('water');
+        expect(plan.kinds[i]).not.toBe('dune');
         expect(plan.road.has(i)).toBe(false);
       }
       if (t.deposit) {
-        expect(plan.kinds[i]).not.toBe('water');
+        expect(plan.kinds[i]).not.toBe('dune');
         expect(plan.road.has(i)).toBe(false);
         expect(plan.variants[i]?.id.startsWith('hex_forest_transition')).toBeFalsy();
         expect(plan.decor.filter((d) => d.tile === i)).toEqual([]);
@@ -147,8 +149,9 @@ describe('terrain plan of the medieval planet', () => {
   it('mixes the classes and respects the decor budget', () => {
     const share = (k: string): number => plan.kinds.filter((x) => x === k).length / plan.kinds.length;
     expect(share('grass')).toBeGreaterThan(0.2);
-    expect(share('water')).toBeGreaterThan(0.05);
-    expect(share('water')).toBeLessThan(0.4);
+    expect(share('water')).toBe(0);
+    expect(share('dune')).toBeGreaterThan(0.05);
+    expect(share('dune')).toBeLessThan(0.4);
     expect(share('forest')).toBeGreaterThan(0.05);
     const trees = plan.decor.filter((d) => d.model.startsWith('detail_tree')).length;
     const rocks = plan.decor.filter((d) => ['detail_rocks', 'detail_rocks_small', 'mountain'].includes(d.model)).length;

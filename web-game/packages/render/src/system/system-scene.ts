@@ -22,6 +22,7 @@ import { AsteroidView } from './asteroid-view';
 import { BeltView, mulberry32 } from './belt-view';
 import { LineBuffer } from './buffers';
 import { CameraRig, type CameraGoal, type CameraMode } from './camera-rig';
+import { HemisphereCuller } from './hemisphere-culler';
 import { HexKit, type KitModel } from './hex-kit';
 import { LabelLayer } from './labels';
 import { ModelKit } from './model-kit';
@@ -46,6 +47,12 @@ export interface SystemSceneOptions {
   fetchBytes?: FetchBytes;
   /** false = placeholders only (no network). */
   loadModels?: boolean;
+  /**
+   * Hemisphere culling of structures and terrain decor and the decor LOD band (T4), proxies for the structures of
+   * small bodies and for far units (T4b); default true. false draws every instance as its full model (the "before"
+   * of `npm run perf` with PERF_DETAIL=full, `?detail=full`).
+   */
+  cullDetail?: boolean;
 }
 
 interface BodyView {
@@ -66,6 +73,15 @@ interface BodyView {
   asteroid: AsteroidView | null;
   belt: BeltView | null;
   structures: StructureLayer | null;
+  /** Visible cap of a gridded body for its structures and decor (T4); null without culling. */
+  culler: HemisphereCuller | null;
+  /** Decor in the LOD band (with hysteresis: `DECOR_LOD_PX` in, `DECOR_FULL_PX` out). */
+  decorLod: boolean;
+  /**
+   * Small on screen (T4b, with hysteresis: `STRUCTURE_LOD_PX` in, `STRUCTURE_FULL_PX` out): its structures and
+   * the units docked at it or driving on it are drawn as proxies. Always false without `cullDetail`.
+   */
+  far: boolean;
   /** Tile outlines (selection, hover, placement) with vertex colours. */
   outline: LineBuffer | null;
   orbit: THREE.LineLoop | null;
@@ -88,6 +104,20 @@ export const TILE_PICK_MIN_PX = 40;
 /** Tile edges show from this apparent radius on, buildings from the next one [px]. */
 const EDGES_MIN_PX = 80;
 const STRUCTURES_MIN_PX = 24;
+/**
+ * Decor LOD band (T4): hex terrain and decor show from EDGES_MIN_PX; below this apparent radius the trees are
+ * drawn as one cheap model, about half of them, and above DECOR_FULL_PX at full detail again (the gap is the
+ * hysteresis, so a zoom across the line does not flicker) [px].
+ */
+export const DECOR_LOD_PX = 200;
+export const DECOR_FULL_PX = 220;
+/**
+ * Structure LOD (T4b): below this apparent radius a body's structures and deposit rocks are drawn as proxy boxes
+ * (one draw call for the body; where the hex terrain gives way to the fan grid), above STRUCTURE_FULL_PX as full
+ * models again (hysteresis) [px].
+ */
+export const STRUCTURE_LOD_PX = 80;
+export const STRUCTURE_FULL_PX = 88;
 /** Ships drawn smaller than this get a vector diamond marker [px]. */
 const MARKER_BELOW_PX = 6;
 const FOV = 50;
@@ -106,8 +136,13 @@ export class SystemScene {
   readonly labels: LabelLayer;
   readonly overlay = new ScreenOverlay();
   readonly units: UnitsLayer;
-  /** Draw calls and triangles of the last frame (both passes). */
-  readonly frameStats = { drawCalls: 0, triangles: 0 };
+  /**
+   * Draw calls and triangles of the last frame (both passes), and what the planet detail put into it:
+   * hex terrain, decor, structures (with deposit rocks and proxies), ships and rovers, and the instances of decor
+   * and structures drawn (T4/T4b budgets).
+   */
+  readonly frameStats = { drawCalls: 0, triangles: 0, terrainTriangles: 0, decorTriangles: 0, structureTriangles: 0, unitTriangles: 0, instances: 0 };
+  private readonly drawnTmp = { triangles: 0, instances: 0 };
 
   private readonly renderer: THREE.WebGLRenderer;
   private width: number;
@@ -121,6 +156,7 @@ export class SystemScene {
   private hexKit: HexKit;
   private hexModels: Promise<ReadonlyMap<string, KitModel>> | null = null;
   private readonly loadModels: boolean;
+  private readonly cullDetail: boolean;
   /** Space Base Bits models (loaded at mount) and the extra models of each skin a body uses. */
   private readonly baseLoad: Promise<void>;
   private readonly skinLoads = new Map<Skin, Promise<void>>();
@@ -169,6 +205,10 @@ export class SystemScene {
   private readonly raycaster = new THREE.Raycaster();
   private readonly hits: THREE.Intersection[] = [];
   private readonly inv = new THREE.Matrix4();
+  /** View frustum of this frame (units outside it are not drawn, T4b). */
+  private readonly frustum = new THREE.Frustum();
+  private readonly projView = new THREE.Matrix4();
+  private readonly unitSphere = new THREE.Sphere();
   private readonly localRay = new THREE.Ray();
   private readonly tmpRay = new THREE.Ray();
   private readonly frame = createFrame();
@@ -190,6 +230,7 @@ export class SystemScene {
     this.kit = new ModelKit(opts.assetsBase, opts.fetchBytes);
     this.hexKit = new HexKit(opts.assetsBase, opts.fetchBytes);
     this.loadModels = opts.loadModels !== false;
+    this.cullDetail = opts.cullDetail !== false;
     this.units = new UnitsLayer(this.kit);
     this.scene.add(this.units.group);
     for (let i = 0; i < 2; i++) this.ghost(i);
@@ -214,6 +255,15 @@ export class SystemScene {
         return this.orbitTmp;
       },
       selectedShip: null,
+      // T4b unit LOD and rover culling; off with cullDetail = false (the "before" draws every unit as its model)
+      detail: this.cullDetail
+        ? {
+            camera: this.rig.camera.position,
+            apparentPx: (pos, size) => pixelRadius(size, this.rig.camera.position.distanceTo(pos), this.rig.camera, this.height),
+            far: (id) => this.bodies.get(id)?.far === true,
+            inView: (pos, radius) => this.frustum.intersectsSphere(this.unitSphere.set(pos, radius)),
+          }
+        : null,
     };
 
     this.unloadModels = this.kit.onLoaded((id) => this.onModel(id));
@@ -273,13 +323,16 @@ export class SystemScene {
     ctx.time = t;
     ctx.grids = this.grids;
     ctx.selectedShip = input.selection.kind === 'SHIP' ? input.selection.shipId : null;
-    this.units.update(ctx);
 
     this.updateSelection(input);
 
     this.updateCamera(dt, focus);
     this.rig.camera.updateMatrixWorld();
     this.updateDetail();
+    const cam = this.rig.camera;
+    this.frustum.setFromProjectionMatrix(this.projView.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse));
+    this.units.update(ctx); // after the camera and the bodies' LOD: the unit LOD follows this frame's view
+    this.countDetail();
     this.drawScreenOverlay();
     this.placeLabels();
     this.render(true);
@@ -435,7 +488,10 @@ export class SystemScene {
     this.snapshot = snapshot;
     const world = snapshot.world;
     this.world = world;
-    const sig = world.bodies.map((b) => `${b.id}<${b.parentId ?? ''}:${b.kind}`).join('|');
+    // the terrain style is part of the identity: a save from before T8 (no terrain) must rebuild the grids,
+    // so the scene draws the same surface the simulation builds on
+    const terrainOf = (b: CelestialBody): string => (b.surfaceGrid?.terrain ? `~${b.surfaceGrid.terrain.biome}/${b.surfaceGrid.terrain.seed}` : '');
+    const sig = world.bodies.map((b) => `${b.id}<${b.parentId ?? ''}:${b.kind}${terrainOf(b)}`).join('|');
     if (sig !== this.bodySig) this.buildWorld(world.bodies, sig);
 
     this.structureById.clear();
@@ -523,6 +579,9 @@ export class SystemScene {
       asteroid: null,
       belt: null,
       structures: null,
+      culler: null,
+      decorLod: false,
+      far: false,
       outline: null,
       orbit: null,
       terrain: null,
@@ -566,7 +625,9 @@ export class SystemScene {
       bv.group.add(bv.grid.edges);
       const skin = skinFor(body);
       this.loadSkin(skin);
-      bv.structures = new StructureLayer(grid, this.kit, this.siteMat, true, skin);
+      bv.culler = this.cullDetail ? new HemisphereCuller(grid.radius) : null;
+      bv.decorLod = false;
+      bv.structures = new StructureLayer(grid, this.kit, this.siteMat, true, skin, bv.culler);
       bv.group.add(bv.structures.group);
       this.attachTerrain(bv);
     } else if (body.shape) {
@@ -604,7 +665,7 @@ export class SystemScene {
       (models) => {
         if (this.disposed || bv.terrain !== terrain) return;
         terrain.applyKit(models);
-        const decor = new TerrainDecor(grid, plan, terrain.frames, models);
+        const decor = new TerrainDecor(grid, plan, terrain.frames, models, bv.culler);
         bv.terrainDecor = decor;
         bv.group.add(decor.group);
         decor.group.visible = false;
@@ -645,6 +706,7 @@ export class SystemScene {
     bv.belt = null;
     bv.structures?.dispose();
     bv.structures = null;
+    bv.culler = null;
     bv.outline?.dispose();
     bv.outline = null;
     for (const g of this.ghosts) if (g.parent === bv.group) g.removeFromParent();
@@ -850,11 +912,18 @@ export class SystemScene {
     return pixelRadius(bv.body.radius, this.rig.camera.position.distanceTo(bv.world), this.rig.camera, this.height);
   }
 
-  /** Tile edges and buildings only where they can be seen: saves draw calls and noise in the overview. */
+  /**
+   * Tile edges and buildings only where they can be seen: saves draw calls and noise in the overview. With
+   * culling (T4) structures and decor draw only their instances in the camera's visible cap, decor in the
+   * LOD band draws the trees cheaper, and a far body (below STRUCTURE_LOD_PX) draws its structures as proxy boxes,
+   * and the units docked at it or driving on it as proxies (T4b).
+   */
   private updateDetail(): void {
+    const cam = this.rig.camera.position;
     for (const bv of this.order) {
-      if (!bv.grid) continue;
       const pr = this.apparentRadius(bv);
+      if (this.cullDetail) bv.far = bv.far ? pr < STRUCTURE_FULL_PX : pr < STRUCTURE_LOD_PX;
+      if (!bv.grid) continue;
       // near: hex-kit terrain (when built) instead of the fan grid, whose mesh stays the raycast proxy
       const terrain = bv.terrain?.ready === true && pr >= EDGES_MIN_PX;
       bv.grid.mesh.visible = !terrain;
@@ -863,7 +932,40 @@ export class SystemScene {
       if (bv.terrainDecor) bv.terrainDecor.group.visible = terrain;
       if (bv.structures) bv.structures.group.visible = pr >= STRUCTURES_MIN_PX;
       if (bv.outline) bv.outline.lines.visible = pr >= STRUCTURES_MIN_PX && bv.outline.lines.geometry.drawRange.count > 0;
+      if (!bv.culler) continue;
+      bv.decorLod = bv.decorLod ? pr < DECOR_FULL_PX : pr < DECOR_LOD_PX;
+      bv.structures?.setProxy(bv.far);
+      const decor = terrain ? bv.terrainDecor : null;
+      if (!bv.structures?.group.visible && !decor) continue; // re-culled once they show (the version moved on)
+      bv.culler.update(bv.group.worldToLocal(this.tmp.copy(cam)));
+      if (bv.structures?.group.visible) bv.structures.recull();
+      if (decor) {
+        decor.setLod(bv.decorLod);
+        decor.recull();
+      }
     }
+  }
+
+  /** Planet detail submitted this frame, by category (perf overlay, `npm run perf`). */
+  private countDetail(): void {
+    const f = this.frameStats;
+    const d = this.drawnTmp;
+    f.terrainTriangles = 0;
+    d.triangles = 0;
+    d.instances = 0;
+    for (const bv of this.order) {
+      if (bv.terrain?.visual.visible) f.terrainTriangles += bv.terrain.terrainTriangles;
+      bv.terrainDecor?.drawn(d);
+    }
+    f.decorTriangles = d.triangles;
+    d.triangles = 0; // instances keep adding up: decor + structures
+    for (const bv of this.order) if (bv.structures?.group.visible) bv.structures.drawn(d);
+    f.structureTriangles = d.triangles;
+    f.instances = d.instances;
+    d.triangles = 0;
+    d.instances = 0;
+    this.units.drawn(d);
+    f.unitTriangles = d.triangles;
   }
 
   private placeLabels(): void {

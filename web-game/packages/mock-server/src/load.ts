@@ -2,12 +2,16 @@ import {
   POC_SCENARIO,
   Simulation,
   TAU_CETI_SCENARIO,
+  TC_C,
   TC_E,
+  dressTerrain,
   footprintTiles,
+  isNatureDecor,
   shipId as toShipId,
   roverId as toRoverId,
   standingStructure,
   tileBuildable,
+  tileIndexOf,
   type BodyId,
   type Economy,
   type Rover,
@@ -22,23 +26,35 @@ import { Rng } from './rng';
 // S — like the PoC: the home planet with moon and asteroid, about 20 buildings, 1 ship, 1 rover;
 // M — a late colony: 7 bodies, a few hundred buildings, a few dozen ships and vehicles, 41 stars, market;
 // L — overload: 2000 buildings, 200 ships.
+// MT — M with the colony moved to the medieval Tau Ceti c (T4: terrain, ruins and the player's
+//      medieval buildings in one view): the M world unchanged plus a colony beside the ruins.
 // Generated deterministically from a seed, so every run measures the same world.
 
-export type LoadLevel = 'S' | 'M' | 'L';
+export type LoadLevel = 'S' | 'M' | 'L' | 'MT';
 
 export interface LoadSpec {
   base: Scenario;
+  /** Buildings spread over the bodies (the terrain colony comes on top). */
   structures: number;
   ships: number;
   rovers: number;
+  /** A colony beside the settlement ruins of this body; the colony site moves there (camera focus). */
+  terrainColony?: { body: BodyId; buildings: number };
 }
 
 export const LOAD_SPECS: Readonly<Record<LoadLevel, LoadSpec>> = {
   S: { base: POC_SCENARIO, structures: 20, ships: 1, rovers: 1 },
   M: { base: TAU_CETI_SCENARIO, structures: 300, ships: 40, rovers: 20 },
-  // "np. 2000 budowli": all grid bodies of Tau Ceti have 1870 tiles; 1500 (80%) leaves rovers a way through.
-  L: { base: TAU_CETI_SCENARIO, structures: 1500, ships: 200, rovers: 100 },
+  // "np. 2000 budowli": all grid bodies of Tau Ceti have 1870 tiles, about 1690 buildable since every body
+  // has terrain (T5); 1400 (83 % of those) leaves rovers a way through (1500 filled Tau Ceti e to 60 %,
+  // past the point where its free tiles still connect, and only a quarter of the rovers could drive).
+  L: { base: TAU_CETI_SCENARIO, structures: 1400, ships: 200, rovers: 100 },
+  MT: { base: TAU_CETI_SCENARIO, structures: 300, ships: 40, rovers: 20, terrainColony: { body: TC_C, buildings: 24 } },
 };
+
+/** Kinds of the terrain colony after its port, in turn; levels go round L1 / L3 / L5 (every look tier). */
+const COLONY_KINDS = ['HAB', 'FARM', 'WND', 'DEP', 'SKL', 'TNK', 'GAR', 'HAB', 'SOL', 'FARM', 'LAND', 'HAB'];
+const COLONY_LEVELS = [1, 3, 5];
 
 /** One-tile kinds spread over the bodies; extractors go on deposits they can work. */
 const FILLERS = ['SOL', 'HAB', 'DEP', 'SKL', 'WND', 'LAND'];
@@ -90,6 +106,12 @@ export function buildLoad(level: LoadLevel, economy: Economy, seed = 5150): Simu
     structures.push(s);
     i++;
   }
+  // MT: the colony beside the ruins (no random draws: the rest of the world stays the M world)
+  if (spec.terrainColony) {
+    const { body, buildings } = spec.terrainColony;
+    structures.push(...terrainColony(sim, body, buildings, structures));
+    w = { ...w, colony: { ...w.colony, siteBodyId: body } };
+  }
 
   // ships: copies of a transport, fuel for any hop; ordered to fly after the world is set
   const bodyIds = w.bodies.filter((b) => b.kind !== 'STAR').map((b) => b.id);
@@ -132,6 +154,54 @@ export function buildLoad(level: LoadLevel, economy: Economy, seed = 5150): Simu
     sim.dispatch({ type: 'MOVE_ROVER', roverId: r.id, tileIndex: pickFree() });
   }
   return sim;
+}
+
+/**
+ * A colony beside the settlement ruins of a terrain body: the port on the first free 3-tile footprint
+ * nearest the settlement centre, then one-tile buildings on the nearest free tiles (extractors on
+ * deposits), never on a tile with a ruin building, a structure or unbuildable terrain. Deterministic.
+ */
+export function terrainColony(sim: Simulation, body: BodyId, count: number, existing: ReadonlyArray<Structure>): Structure[] {
+  const grid = sim.grids.get(body);
+  if (!grid?.terrain) throw new Error(`terrainColony: ${body} has no terrain`);
+  const plan = dressTerrain(grid);
+  const rules = sim.rules.terrain();
+  const ruins = new Set(plan.decor.filter((d) => !isNatureDecor(d.model)).map((d) => d.tile));
+  const used = new Set(existing.filter((s) => s.bodyId === body).flatMap((s) => s.tiles.map(tileIndexOf)));
+  const ok = (i: number) => !used.has(i) && !ruins.has(i) && tileBuildable(grid.tiles[i]!, rules);
+  // tiles by ring around the centre (breadth-first over neighbours: deterministic)
+  const start = plan.settlementCenter ?? 0;
+  const order = [start];
+  const seen = new Set(order);
+  for (let k = 0; k < order.length; k++) {
+    for (const n of grid.tiles[order[k]!]!.neighbors) {
+      if (seen.has(n)) continue;
+      seen.add(n);
+      order.push(n);
+    }
+  }
+  const out: Structure[] = [];
+  const take = (s: Structure) => {
+    out.push(s);
+    for (const t of s.tiles) used.add(tileIndexOf(t));
+  };
+  for (const a of order) {
+    const fp = footprintTiles(grid, a, 3);
+    if (fp && fp.every((i) => ok(i) && !grid.tiles[i]!.deposit)) {
+      take(standingStructure('HQ', body, fp));
+      break;
+    }
+  }
+  let k = 0;
+  for (const i of order) {
+    if (out.length >= count) break;
+    if (!ok(i)) continue;
+    const t = grid.tiles[i]!;
+    const kind = t.deposit ? extractorFor(t.deposit.resource) : COLONY_KINDS[k % COLONY_KINDS.length]!;
+    take(standingStructure(kind, body, [i], COLONY_LEVELS[k % COLONY_LEVELS.length]));
+    k++;
+  }
+  return out;
 }
 
 function extractorFor(material: string): string {

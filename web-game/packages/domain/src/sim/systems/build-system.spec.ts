@@ -4,6 +4,7 @@ import { crewBalance, powerBalance } from '../economy/colony';
 import { DomainEvent } from '../models/domain-event.model';
 import { tileId } from '../models/planet-grid.model';
 import { WorldState, reduce, storageOf } from '../reducer';
+import { tileBuildable } from '../terrain/terrain-rules';
 import { BuildSystem } from './build-system';
 
 // Ported from the 3D PoC and changed by the unified rules (web-game/docs/UNIFICATION.md, section 4):
@@ -15,9 +16,10 @@ describe('BuildSystem', () => {
   const system = new BuildSystem(WORLD_GRIDS, POC_RULES);
   const grid = WORLD_GRIDS.get(PLANET_ID)!;
   const used = new Set(INITIAL_STRUCTURES.flatMap((s) => s.tiles));
-  const freeTiles = () => grid.tiles.filter((t) => !t.deposit && !used.has(t.id));
+  // the PoC planet has terrain (T5): the catalog numbers hold on grass (100 %), so the tests build there
+  const freeTiles = () => grid.tiles.filter((t) => !t.deposit && !used.has(t.id) && t.terrain === 'grass');
   const freeTile = () => freeTiles()[0]!;
-  const depositTiles = (resource: string) => grid.tiles.filter((t) => t.deposit?.resource === resource && !used.has(t.id));
+  const depositTiles = (resource: string) => grid.tiles.filter((t) => t.deposit?.resource === resource && !used.has(t.id) && t.terrain === 'grass');
   const depositTile = (resource: string) => depositTiles(resource)[0]!;
   const rich = (): WorldState => ({ ...createInitialWorld(), storage: { [PLANET_ID]: { FER: 500, KRI: 200, SIL: 300 } } });
   const ok = (w: WorldState, e: DomainEvent): WorldState => {
@@ -97,7 +99,7 @@ describe('BuildSystem', () => {
 
   it('places a 3-tile Huta (E1) on two touching neighbours and refuses levels above the port', () => {
     let w: WorldState = { ...rich(), storage: { [PLANET_ID]: { FER: 500, SIL: 300 } } };
-    const anchor = grid.tiles.find((t) => t.neighbors.length === 6 && [t.index, ...t.neighbors].every((i) => !used.has(grid.tiles[i]!.id) && !grid.tiles[i]!.deposit))!;
+    const anchor = grid.tiles.find((t) => t.neighbors.length === 6 && [t.index, ...t.neighbors].every((i) => !used.has(grid.tiles[i]!.id) && !grid.tiles[i]!.deposit && tileBuildable(grid.tiles[i]!)))!;
     const habitat = freeTiles().find((t) => t.id !== anchor.id && !anchor.neighbors.includes(t.index))!;
     w = ok(w, system.build(w, PLANET_ID, habitat.id, 'HAB', 0)); // the Huta needs 4 crew
     const e = system.build(w, PLANET_ID, anchor.id, 'SMT', 0);

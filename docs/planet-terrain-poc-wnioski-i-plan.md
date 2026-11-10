@@ -523,3 +523,79 @@ Na ciałach z biomem `medieval` (dziś Tau Ceti c) budowle gracza stoją jako mo
 - **UI:** wiersz „Teren” w panelu pola, cena i czas po terenie w karcie ustawiania, slotach i katalogu otwartym z pola; aplikacja nie importuje logiki domeny (reguła F2), więc zaokrąglenie jest powtórzone w `format.ts` i sprawdzane testem przeciw `previewBuild` mocka.
 - **Render:** `TERRAIN_CONFIG` i `buildWorldTerrain` usunięte, render ubiera siatki z `terrain`.
 - **Odstępstwo od §9.4:** `fabryka` też wymaga ponownego nagrania (świat zawiera ciało Tau Ceti c), a nie tylko pola `source`.
+- **Recenzja TS ↔ Rust (krok F):** bez rozbieżności i bez błędu wyniku gry. Poprawione dwa błędy UI: katalog otwarty z pola włączał wiersze według ceny katalogowej zamiast ceny na polu; render nie przebudowywał siatek, gdy zmieniał się tylko styl terenu (zapis sprzed T8). Luki w pokryciu: powtórka `teren` nie ma rozbiórki, ulepszenia ani śniegu (ulepszenie bez `timePct` sprawdza test TS).
+
+### T8: część Rust wykonana (2026-11-09)
+
+`classify_terrain` zgodny z TS bit w bit od pierwszego przebiegu; reguły, port kosmiczny, `time_pct`, `load.rs` i `game-session` jak w TS. Nowa powtórka `teren` (port na wodzie odrzucony, ceny i czasy po terenie, zwrot 75 % ceny po terenie). `cargo test` 54/54, wektory 20/20 (w tym 21 klasyfikacji), powtórki 9/9, parytet WASM 22/22 (w tym `tileInfo` na wszystkich 252 polach Tau Ceti c).
+
+### T5 etap 1 (TS): wykonany (2026-11-10)
+
+| Ciało | `surfaceGrid.terrain` | Udziały klas |
+|---|---|---|
+| Planeta Matka (PoC) | `{biome: mixed, seed: 7, landingCap: 0.9}` | trawa, woda ok. 23 %, las, śnieg, skała; strefa lądowania trawiasta |
+| Księżyc (PoC) | `{biome: dry, seed: 8, ground: regolith}` | regolit 80 %, skała 19 %, wydma 1 % |
+| Tau Ceti b | `{biome: dry, seed: 3}` | piasek 70 %, skała 21 %, wydma 10 % |
+| Tau Ceti c | `{biome: medieval, seed: 2, basin: dune}` | trawa 48 %, las 21 %, wyschnięte jeziora (wydma) 17 %, śnieg 9 %, skała 5 % |
+| Tau Ceti d | `{biome: dry, seed: 4, ground: regolith}` | regolit 81 %, skała 14 %, wydma 5 % |
+| Tau Ceti e (start) | `{biome: mixed, seed: 5, basinLevel: 0.39, landingCap: 0.6}` | woda 14,6 %; strefa n.y > 0,6 (129 pól) w całości trawą, więc port pierwszej sesji kosztuje tyle, co w kanwie |
+| Tau Ceti f | `{biome: winter, seed: 6}` | śnieg 56 %, lód 30 %, las 10 %, skała 4 % |
+
+- Tabela biomów (`terrain-biomes.ts`) zamiast flagi `settle`; nowe rodzaje: piasek 110/120, wydma niebudowalna, lód 125/150, regolit 100/100. Wydma i lód używają geometrii basenu wody; w biomie dry nie ma przejść.
+- Odstępstwo: strefa lądowania to próg szerokości (`landingCap`), nie pierścienie wokół szczytu (siatki n = 3 i 5 mają remis najwyższego `normal.y`, który Rust mógłby rozstrzygnąć inaczej). Cała strefa jest zwykłym gruntem, nie tylko bez wody: szczyt tc-e leży w czapie śniegu, a port na śniegu kosztowałby ×1,2–1,4.
+- Testy właściwości: 854 kombinacje, margines progów 1,48e-6 (n.y/landingCap 8,9e-4). Scenariusz L ma 1400 budowli zamiast 1500, bo z terenem na wszystkich ciałach budowalnych jest ok. 1690 pól.
+
+### T5 etap 2 (Rust): wykonany (2026-11-10)
+
+Biomy, nowe rodzaje (`Sand`, `Dune`, `Ice`, `Regolith`), `TerrainBasin`/`TerrainGround` i konfiguracje ciał w `game-core`; 70 klasyfikacji (7 siatek × 10 stylów) zgodnych bit w bit, wszystkie 9 powtórek nagranych ponownie z `048d426`. `cargo test` 56/56, powtórki 36/36, parytet WASM 23/23 (w tym `tileInfo` na wszystkich polach ciał z nowymi biomami).
+
+### T4 i T4b: wykonane (2026-11-10)
+
+- **Odcinanie półkuli** (`HemisphereCuller`, `CulledInstances`) dla budowli, skał złóż i dekoru; test zachowawczy z pudełka modelu; picking, `tileOwner`, obrysy placów, wzrost budowy i `setHidden` bez zmian.
+- **LOD dekoru** w paśmie 80–200 px promienia: drzewa jednym `detail_treeA`, połowa według `hash3`.
+- **Bryły zastępcze (T4b):** ciało poniżej 80 px (powrót od 88 px) rysuje każdą część budowli i skałę złoża jako pudełko 12 trójkątów w średnim kolorze modelu, w jednej `InstancedMesh` na ciało; statki i łaziki krótsze niż 8 px (powrót od 10 px) albo przy dalekim ciele to bryły 8/12 trójkątów; jednostki poza kadrem i łaziki za horyzontem nie są rysowane.
+- **Harness:** `PERF_PORT` (domyślnie 4435), `PLAYWRIGHT_CHROME`, `PERF_DETAIL=full` (pomiar „przed” z tego samego buildu, `?detail=full`), preset `#/scenariusz-teren-m` (tylko mock TS; w trybie WASM i zdalnym startuje `load-m`), liczniki terenu, dekoru, budowli, jednostek i instancji.
+
+| Scenariusz · widok | Draw calls | Trójkąty przed → po |
+|---|---|---|
+| S planet | 28 → 21 | 179 847 → 130 947 |
+| M planet | 74 → 53 | 438 532 → **161 882** |
+| L planet | 132 → 112 | 1 236 706 → **276 708** (UWAGA) |
+| L system | 17 → 17 | 321 284 → 28 230 |
+| teren-M planet | 98 → 67 | 453 252 → **193 510** |
+| teren-M planet-far | 74 → 41 | 453 252 → 195 253 |
+
+Pomiar na innym komputerze niż raport z 2026-11-07 (Ryzen 7 8840HS, Radeon 780M, ekran 120 Hz): FPS 120 wszędzie (vsync), więc o budżecie decydują trójkąty i draw calle. Nigdzie nie ma „PRZEKROCZONY”. Powyżej 200 tys. zostaje tylko L planet: pełne modele budowli (140 tys.) i jednostek (49 tys.) na Tau Ceti e w fokusie. Dalej (zadania w `web-game/docs/PERF-REPORT.md`): pośredni LOD budowli na ciele w fokusie albo lżejsze modele. `BatchedMesh` i podział siatki terenu nie są potrzebne (≤ 112 draw calli, teren ≤ 53 tys. trójkątów w 1 draw callu).
+
+### T5 etap 3 (render): wykonany (2026-11-10)
+
+- **Dekor Kenney** (CC0, `apps/game/public/assets/kenney/`, 6 modeli, 89 KB): kratery, głazy i kryształy na ciałach dry (tc-d: 35 kraterów, 5 kryształów, 4 głazy; tc-b: 8 / 2 / 10; Księżyc: 9 / 5 / 1) i rzadkie kryształy na skałach tc-f. Id z prefiksem `kenney:`, modele wycentrowane i dogięte do sfery (płaskie kratery wisiały na krawędzi zakrzywionych pól), osobny limit `MAX_GROUND_DECOR` = 60.
+- **Tony obiektów:** zimą korony drzew w tonie lodu i ciemne pnie, na suchych ciałach oliwkowe krzewy; materiały Kenney według gruntu ciała. Mixed i medieval bez zmian (golden).
+- **Design system:** grupa tokenów `terrain` w `design-system/src/tokens/design-tokens.ts` (`--hud-terrain-*`), test zgodności z `terrain-tones.ts`. To propozycja T-7 czekająca na akceptację zrzutów.
+- **Zrzuty:** `docs/img/planet-terrain/biome-<ciało>-{orbit,close}.png` dla tc-b, tc-c, tc-d, tc-e, tc-f, Planety Matki i Księżyca (`render/harness/system/shot-biomes.mjs`).
+- **Budżet:** planeta w fokusie 19–129 tys. trójkątów własnych, kadr najwyżej 134 tys.
+- **Zostaje (znane):** na tc-e kilka drzew biomu mixed stoi nad zatoką wody pól brzegowych i wisi ok. 0,4 j.; poprawka zmienia plan dekoru mixed (golden), więc odłożona.
+
+### Weryfikacja końcowa (2026-11-10)
+
+| Bramka | Wynik |
+|---|---|
+| `npx vitest run` (web-game) | 62 pliki, 507 testów |
+| `npm run test:app` | 24 testy |
+| `cargo test --workspace` | 56 testów; wektory 20/20 (70 klasyfikacji terenu), powtórki 9/9 (36 porównań) |
+| Parytet WASM (`packages/wasm-host`) | 23/23 |
+| `npm run e2e` (mock TS, Chrome) | 17/17; przy 6 wątkach 5 testów (`atanor`, `flow` klawisze i szerokość laptopa) przekroczyło 5 s czekania na tym laptopie, w jednym wątku wszystkie przechodzą |
+| `npm run e2e:wasm` (kopia świata w Rust, 2 wątki) | 17/17, w tym Play flow |
+| `npm run perf` (Radeon 780M, 120 Hz) | brak „PRZEKROCZONY”; M planet 161 870, teren-M 193 510, L planet 278 944 trójkątów (UWAGA) i 119 draw calli; pierwsze pobranie 5,1 MB (1,9 MB gzip) przy budżecie 15 MB |
+
+### Decyzje czekające na użytkownika
+
+| ID | Co | Stan |
+|---|---|---|
+| T-15 | wartości kar terenu (las +10 %/+50 %, skała +40 %/+25 %, śnieg +20 %/+40 %, piasek +10 %/+20 %, lód +25 %/+50 %, droga −15 %/−25 %) | wdrożone wg rekomendacji, do strojenia po playteście |
+| T-22 | mapowanie typów budowli na modele (Space Base Bits i skórka medieval) | stykówki w `docs/img/structures/` |
+| T-23 | siła przygaszenia ruin (×0,8, 30 % do szarości) | wdrożone wg rekomendacji |
+| T-7 | grupa `terrain` w tokenach DS | dodana jako propozycja, po akceptacji zrzutów biomów |
+| T-8 | licencja KayKit Medieval (CC0 do potwierdzenia na stronie autora) | akcja użytkownika |
+| T-13 | budżet planety w fokusie 200 tys. | trzymany we wszystkich scenariuszach poza L planet |
+| — | pośredni LOD budowli na ciele w fokusie (L planet) | propozycja w `web-game/docs/PERF-REPORT.md` |

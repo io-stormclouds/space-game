@@ -1,6 +1,8 @@
 import { BodyId } from '../shared/ids';
 import { DomainEvent } from './models/domain-event.model';
-import { Tile, TileId } from './models/planet-grid.model';
+import { footprintTiles } from './math/footprint';
+import { PlanetGrid, Tile, TileId } from './models/planet-grid.model';
+import { scaleCost, siteTerrain, tileBuildable } from './terrain/terrain-rules';
 import { colonyObjectives } from './objectives';
 import { WorldState, storageOf } from './reducer';
 import { ARK_ID, TAU_CETI_ID, TAU_CETI_SCENARIO, TC_B, TC_BELT, TC_E, TC_F } from './scenarios/tau-ceti';
@@ -46,9 +48,20 @@ class Flow {
     return this.freeTiles(body).find((t) => t.deposit?.resource === material)!.id;
   }
 
+  /** A free hexagon without a deposit that can be built on (T5: Tau Ceti e has lakes). */
   plainTile(body: BodyId): TileId {
-    return this.freeTiles(body).find((t) => !t.deposit && t.neighbors.length === 6)!.id;
+    return this.freeTiles(body).find((t) => !t.deposit && t.neighbors.length === 6 && tileBuildable(t))!.id;
   }
+}
+
+/** Where the canvas flow lands the port on Tau Ceti e: the first hexagon clear of deposits around it whose footprint can be built on. */
+function portAnchor(grid: PlanetGrid): Tile {
+  return grid.tiles.find(
+    (t) =>
+      t.neighbors.length === 6 &&
+      [t.index, ...t.neighbors].every((i) => !grid.tiles[i]!.deposit) &&
+      (footprintTiles(grid, t.index, 3, 0) ?? [-1]).every((i) => i >= 0 && tileBuildable(grid.tiles[i]!)),
+  )!;
 }
 
 /** The whole first session of the canvas, as a script. Returns the flow for assertions. */
@@ -59,8 +72,7 @@ function playFirstSession(stopAfterPort = false): Flow {
   f.ok({ type: 'CHOOSE_COLONY_SITE', bodyId: TC_E });
   f.ok({ type: 'MOVE_SHIP', shipId: ARK_ID, to: TC_E });
   f.runUntil(() => f.world.ships[0]!.state === 'DOCKED', 60);
-  const grid = f.sim.grids.get(TC_E)!;
-  const anchor = grid.tiles.find((t) => t.neighbors.length === 6 && [t.index, ...t.neighbors].every((i) => !grid.tiles[i]!.deposit))!;
+  const anchor = portAnchor(f.sim.grids.get(TC_E)!);
   f.ok({ type: 'PLACE_SPACEPORT', bodyId: TC_E, tileId: anchor.id });
   if (stopAfterPort) return f;
   f.runUntil(() => f.world.colony.foundedAt !== null, 60);
@@ -135,18 +147,24 @@ describe('Canvas flow on the unified domain (W06 A: Tau Ceti)', () => {
     expect(f.send({ type: 'BUILD', bodyId: TC_E, tileId: tile, kind: 'SOL' })[0]).toMatchObject({ reason: 'NO_ROVER' });
   });
 
-  it('port: landed from the hold with two rovers, built in 12 min, the colony is founded', () => {
+  it('port: landed from the hold with two rovers, built in 12 min × the terrain, the colony is founded', () => {
     const f = playFirstSession(true);
     const ark = f.world.ships[0]!;
-    expect(ark.cargo).toMatchObject({ STA: 480, BET: 120, UKL: 50 });
+    // the canvas numbers (STA 120 · BET 80 · UKL 10, 12 min) scaled by the terrain of the footprint (T8, T5)
+    const grid = f.sim.grids.get(TC_E)!;
+    const port = f.world.structures.find((s) => s.kind === 'HQ')!;
+    const terrain = siteTerrain(grid, port.tiles.map(tileIndexOf));
+    expect(terrain.buildable).toBe(true);
+    const cost = scaleCost({ STA: 120, BET: 80, UKL: 10 }, terrain.costPct);
+    expect(ark.cargo).toMatchObject({ STA: 600 - cost['STA']!, BET: 200 - cost['BET']!, UKL: 60 - cost['UKL']! });
     expect(ark.onboard?.rovers).toBe(0);
     expect(f.world.rovers.filter((r) => r.bodyId === TC_E)).toHaveLength(2);
-    const port = f.world.structures.find((s) => s.kind === 'HQ')!;
     expect(port).toMatchObject({ state: 'PLANNED', tiles: expect.any(Array) });
     expect(port.tiles).toHaveLength(3);
     const building = f.runUntil(() => f.world.colony.foundedAt !== null, 60);
-    expect(building).toBeGreaterThanOrEqual(12);
-    expect(building).toBeLessThan(14); // drive to the site + 12 min
+    const minutes = (12 * terrain.timePct) / 100;
+    expect(building).toBeGreaterThanOrEqual(minutes);
+    expect(building).toBeLessThan(minutes + 2); // drive to the site + the build time
     expect(f.world.bodies.find((b) => b.id === TC_E)!.isHomeBase).toBe(true);
     expect(f.sim.colonyOf(TC_E).power.produced).toBe(5);
     expect(f.sim.colonyOf(TC_E).capacity).toEqual({ sypkie: 2000, sztukowe: 2000 });

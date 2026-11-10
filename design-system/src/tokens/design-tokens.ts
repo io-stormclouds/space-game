@@ -49,6 +49,48 @@ export const signalPresets = {
   cyan: { signal: '#4FFFB0', signalDim: 'rgba(79, 255, 176, 0.14)', signalTint: '#264644' },
 } as const;
 
+/**
+ * Muted terrain tones of the planet surfaces (PROPOSAL T-7, pending acceptance of the biome screenshots):
+ * KayKit colours pulled 40 % towards the grey of equal luminance and 20 % towards `metal`, so planets
+ * read as part of the HUD (docs/planet-terrain-design.md §4.7). None comes near `signal` or `alert`:
+ * the warmest, `thatch`, has luminance ≈ 0.65 and saturation ≈ 0.45. The 3D renderer keeps a numeric
+ * copy (`web-game/packages/render/src/system/terrain-tones.ts`) that a test holds identical to this table.
+ */
+export const terrain = {
+  /** Grass (mixed, medieval). */
+  grass: '#629A88',
+  /** Tree crowns. */
+  forest: '#47767A',
+  /** Sand; roads in mixed and medieval; plaster. */
+  sand: '#AD9A87',
+  /** Dunes, dune hollows, dried lake beds. */
+  dune: '#8F7D6C',
+  /** Rock tiles, roofs. */
+  rock: '#997C6D',
+  /** Soil band, wood, trunks. */
+  soil: '#765A54',
+  /** Snow, white plaster. */
+  snow: '#C4C6C9',
+  /** Frozen lakes (winter), winter tree crowns, crystals. */
+  ice: '#AEC1C8',
+  /** Lake surface. */
+  water: '#6AAFB8',
+  /** Stone, mountains, rocks, boulders. */
+  stone: '#6E757B',
+  /** Dark stone, winter trunks, crater floors on regolith. */
+  stoneDark: '#555C60',
+  /** Grain and thatch; stands in for KayKit red (red is reserved for `alert`). */
+  thatch: '#C3A562',
+  /** Metal parts. */
+  metal: '#969FA5',
+  /** Interiors, black. */
+  dark: '#31383D',
+  /** Grey regolith ground (airless dry bodies). */
+  regolith: '#8A8D8F',
+  /** Crowns of the dry bushes. */
+  olive: '#7F8763',
+} as const;
+
 export const font = {
   /** One technical face for everything; JetBrains Mono has full Polish coverage. */
   mono: '"JetBrains Mono", "IBM Plex Mono", "Cascadia Mono", Consolas, monospace',
@@ -136,6 +178,7 @@ export const motion = {
 
 export const tokens = {
   color,
+  terrain,
   font,
   fontSize,
   fontWeight,

@@ -1,6 +1,6 @@
 import { BodyId } from '../../shared/ids';
 import { Vec3 } from '../math/vec3';
-import type { TerrainBiome, TerrainKind } from '../terrain/terrain-types';
+import type { TerrainConfig, TerrainKind } from '../terrain/terrain-types';
 import { MaterialCode } from './resource.model';
 
 export type TileId = string & { readonly __brand: 'TileId' };
@@ -45,5 +45,5 @@ export interface PlanetGrid {
   /** Approximate edge length of a hexagonal tile; used to size what is placed on it. */
   tileEdge: number;
   /** Terrain style the tiles were classified with and the settlement centre (castle tile, null without one). */
-  terrain?: { biome: TerrainBiome; seed: number; settlementCenter: number | null };
+  terrain?: TerrainConfig & { settlementCenter: number | null };
 }

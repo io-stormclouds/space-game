@@ -1,7 +1,8 @@
 //! Load scenarios of F5 (`mock-server/src/load.ts`, `rng.ts`): S like the PoC (about 20 buildings,
-//! 1 ship, 1 rover); M a late colony (300 buildings, 40 ships, 20 rovers); L overload (1500
-//! buildings, 200 ships, 100 rovers). Generated deterministically from a seed, so every run
-//! measures the same world.
+//! 1 ship, 1 rover); M a late colony (300 buildings, 40 ships, 20 rovers); L overload (1400
+//! buildings, 200 ships, 100 rovers). Generated deterministically from a seed, so every run measures
+//! the same world. The mock's MT (`load-m-teren`, a performance preset of the TS mock only) is not
+//! ported.
 
 use std::collections::HashSet;
 
@@ -83,8 +84,9 @@ pub fn load_spec(level: LoadLevel) -> LoadSpec {
     match level {
         LoadLevel::S => LoadSpec { tau_ceti: false, structures: 20, ships: 1, rovers: 1 },
         LoadLevel::M => LoadSpec { tau_ceti: true, structures: 300, ships: 40, rovers: 20 },
-        // all grid bodies of Tau Ceti have 1870 tiles; 1500 (80 %) leaves rovers a way through
-        LoadLevel::L => LoadSpec { tau_ceti: true, structures: 1500, ships: 200, rovers: 100 },
+        // all grid bodies of Tau Ceti have 1870 tiles, about 1690 buildable since every body has terrain
+        // (T5); 1400 (83 % of those) leaves rovers a way through
+        LoadLevel::L => LoadSpec { tau_ceti: true, structures: 1400, ships: 200, rovers: 100 },
     }
 }
 

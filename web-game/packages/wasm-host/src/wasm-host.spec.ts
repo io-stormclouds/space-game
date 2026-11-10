@@ -100,8 +100,8 @@ describe.skipIf(!have)('GameApi on WebAssembly answers like the TS mock (B3)', (
       for (const material of [undefined, 'FER', 'KRI']) p.same({ kind: 'suggestTile', bodyId: home, buildingKind, ...(material ? { material } : {}) });
   });
 
-  // T8: terrain of Tau Ceti c (water refused, forest, rock, snow and roads priced) in the tile panel,
-  // the placement ghost (cost and build time after the terrain) and the suggestions
+  // T8: terrain of Tau Ceti c (dried lake beds refused since T5, forest, rock, snow and roads priced) in
+  // the tile panel, the placement ghost (cost and build time after the terrain) and the suggestions
   it('terrain on Tau Ceti c: tile info, placement ghosts and suggestions', async () => {
     const p = await pair();
     const body = 'tc-c' as BodyId;
@@ -121,7 +121,7 @@ describe.skipIf(!have)('GameApi on WebAssembly answers like the TS mock (B3)', (
         const list = picked.get(key(t)) ?? [];
         if (list.length < 2) picked.set(key(t), [...list, t.index]);
       }
-      for (const k of ['water', 'forest', 'rock', 'road']) expect(picked.get(k)?.length, `tc-c has ${k}`).toBe(2);
+      for (const k of ['dune', 'forest', 'rock', 'road']) expect(picked.get(k)?.length, `tc-c has ${k}`).toBe(2);
       return [...picked.values()].flat();
     };
     const ghosts = (tiles: number[]) => {
@@ -148,7 +148,7 @@ describe.skipIf(!have)('GameApi on WebAssembly answers like the TS mock (B3)', (
     const tiles = sample(start);
     expect(ghosts(tiles).some((g) => g.reason === 'NO_ROVER' && priced(g))).toBe(true);
 
-    // the Ark on the orbit of tc-c with the site chosen: the port ghost on water, roads, forest, rock
+    // the Ark on the orbit of tc-c with the site chosen: the port ghost on dunes, roads, forest, rock
     p.same({ kind: 'command', command: { type: 'SCAN_SYSTEM', shipId: 'arka-1' } as never });
     p.same({ kind: 'stepOnce', steps: 1000 });
     p.same({ kind: 'command', command: { type: 'CHOOSE_COLONY_SITE', bodyId: body } as never });
@@ -165,6 +165,33 @@ describe.skipIf(!have)('GameApi on WebAssembly answers like the TS mock (B3)', (
     tileInfoAll();
     expect(ghosts(tiles).some((g) => g.kind === 'SOL' && g.ok && priced(g))).toBe(true);
     suggest();
+  }, 120_000);
+
+  // T5: the biomes of the other bodies (sand and dunes, regolith, ice and snow, the start planet's lakes
+  // and landing cap, the PoC moon) in the tile panel and the placement ghosts
+  it('biomes of every body: tile info and placement ghosts', async () => {
+    const p = await pair();
+    const seen = new Set<string>();
+    const sweep = (bodyId: BodyId) => {
+      const firstOf = new Map<string, number>();
+      for (let tileIndex = 0; ; tileIndex++) {
+        const info = p.same({ kind: 'tileInfo', bodyId, tileIndex }) as TileInfo | null;
+        if (!info) break;
+        const kind = info.terrain?.kind ?? 'none';
+        seen.add(kind);
+        if (!firstOf.has(kind)) firstOf.set(kind, tileIndex);
+      }
+      for (const tileIndex of firstOf.values())
+        for (const buildingKind of ['SOL', 'PORT']) p.same({ kind: 'previewBuild', bodyId, tileIndex, buildingKind, rotation: 0 });
+    };
+    p.same({ kind: 'start', scenarioId: 'tau-ceti' });
+    p.same({ kind: 'pause' });
+    for (const body of ['tc-b', 'tc-d', 'tc-e', 'tc-f']) sweep(body as BodyId);
+    p.same({ kind: 'start', scenarioId: 'planeta-matka' });
+    p.same({ kind: 'pause' });
+    sweep('moon' as BodyId);
+    for (const k of ['sand', 'dune', 'regolith', 'ice', 'snow', 'forest', 'rock', 'water', 'grass']) expect(seen.has(k), `a body has ${k}`).toBe(true);
+    expect(seen.has('none')).toBe(false);
   }, 120_000);
 
   it('tempo, pause, steps, commands and rejections', async () => {

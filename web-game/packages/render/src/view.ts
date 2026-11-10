@@ -72,6 +72,22 @@ export interface RenderStats {
   textures: number;
   /** Live WebGL contexts owned by the host (must never exceed 1). */
   contexts: number;
+  /** What the planet detail put into the last frame (planet/system view only; T4 performance budgets). */
+  detail?: DetailStats;
+}
+
+/** Triangles of the planet detail drawn in a frame, by category, and the instances drawn. */
+export interface DetailStats {
+  /** Hex-kit terrain meshes. */
+  terrainTriangles: number;
+  /** Trees, rocks, mountains and settlement ruins on terrain bodies. */
+  decorTriangles: number;
+  /** The players' structures and the deposit rocks (full models or proxy boxes, T4b). */
+  structureTriangles: number;
+  /** Ships and rovers (full models or proxies, T4b). */
+  unitTriangles: number;
+  /** Instances of decor, structures and deposit rocks drawn (after hemisphere culling). */
+  instances: number;
 }
 
 /** Everything a view gets from the host. Three.js views share one renderer. */

@@ -83,11 +83,13 @@ describe('MockServer', () => {
       SMT: { ok: false, reason: 'NO_RESOURCES', detail: 'brakuje FER 120 · SIL 60' },
     });
     const grid = s.simulation.grids.get(planet)!;
-    const deposit = grid.tiles.find((t) => t.deposit?.resource === 'FER')!;
-    // T8: the preview prices the order (a body without terrain: the catalog numbers)
+    // T8: the preview prices the order (on grass, 100 %, the catalog numbers; the PoC planet has terrain since T5)
+    const deposit = grid.tiles.find((t) => t.deposit?.resource === 'FER' && t.terrain === 'grass')!;
     const min = cat.buildings.find((b) => b.id === 'MIN')!.levels[0]!;
     expect(s.previewBuild(planet, deposit.index, 'MIN', 0)).toEqual({ ok: true, tiles: [deposit.index], cost: min.cost, buildTime: min.buildTime });
     expect(cat.terrain.kinds.water).toEqual({ name: 'woda', buildable: false, costPct: 100, timePct: 100 });
+    expect(cat.terrain.kinds.dune).toEqual({ name: 'wydma', buildable: false, costPct: 100, timePct: 100 });
+    expect(cat.terrain.kinds.ice).toEqual({ name: 'lód', buildable: true, costPct: 125, timePct: 150 });
     expect(cat.terrain.road).toEqual({ name: 'droga', costPct: 85, timePct: 75 });
     expect(s.previewBuild(planet, deposit.index, 'SOL', 0)).toMatchObject({ ok: true });
     const pad = s.snapshot().world.structures.find((x) => x.kind === 'LAND')!;

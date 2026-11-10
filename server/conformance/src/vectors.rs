@@ -17,7 +17,7 @@ use game_core::math::orbit::OrbitSolver;
 use game_core::math::terrain::{classify_terrain, terrain_aim};
 use game_core::math::vec3::Vec3;
 use game_core::models::resource::Qty;
-use game_core::models::terrain::TerrainBiome;
+use game_core::models::terrain::TerrainConfig;
 use game_core::sim::scenarios::{poc_scenario, tau_ceti_scenario};
 use game_core::sim::{Rules, Simulation, SimulationOptions, create_world};
 use serde::Deserialize;
@@ -72,15 +72,16 @@ struct AtanorCase {
     ticks: u64,
 }
 
-/// One terrain classification: a recorded grid (`grids[grid]`), its body and a style.
+/// One terrain classification: a recorded grid (`grids[grid]`), its body and a style (biome, seed and
+/// the overrides `ground`, `basin`, `basinLevel`, `landingCap` when the entry sets them, T5).
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct TerrainVector {
     grid: usize,
     scenario: String,
     body_id: String,
-    biome: TerrainBiome,
-    seed: f64,
+    #[serde(flatten)]
+    config: TerrainConfig,
 }
 
 #[derive(Deserialize)]
@@ -159,7 +160,7 @@ pub fn run(file: &Path) -> bool {
         }
     }
 
-    // terrain classes and settlement roads (T8): the aim from the scenario body (libm cos/sin), the
+    // terrain classes and settlement roads (T8, T5 biomes): the aim from the scenario body (libm cos/sin), the
     // classes compared as strings, so they must be equal to the last bit of the noise
     if let Some(Value::Array(list)) = root.get("terrain") {
         let mut act = Vec::new();
@@ -180,18 +181,20 @@ pub fn run(file: &Path) -> bool {
                     message: format!("TS {recorded:?} vs Rust {:?} (not bit-identical)", aim.to_array()),
                 });
             }
-            let c = grids.get(input.grid).map(|g| classify_terrain(g, input.biome, input.seed, Some(aim)));
-            act.push(json!({
-                "grid": input.grid,
-                "scenario": input.scenario,
-                "bodyId": input.body_id,
-                "biome": input.biome,
-                "seed": input.seed,
-                "aim": v3(aim),
-                "kinds": c.as_ref().map(|c| c.kinds.clone()),
-                "road": c.as_ref().map(|c| c.road.clone()),
-                "settlementCenter": c.as_ref().and_then(|c| c.settlement_center),
-            }));
+            let c = grids.get(input.grid).map(|g| classify_terrain(g, &input.config, Some(aim)));
+            // keys in the TS order: the entry, the style (only the overrides it sets), the result
+            let mut entry = serde_json::Map::new();
+            entry.insert("grid".into(), json!(input.grid));
+            entry.insert("scenario".into(), json!(input.scenario));
+            entry.insert("bodyId".into(), json!(input.body_id));
+            if let Value::Object(style) = serde_json::to_value(input.config).expect("terrain style") {
+                entry.extend(style);
+            }
+            entry.insert("aim".into(), v3(aim));
+            entry.insert("kinds".into(), json!(c.as_ref().map(|c| c.kinds.clone())));
+            entry.insert("road".into(), json!(c.as_ref().map(|c| c.road.clone())));
+            entry.insert("settlementCenter".into(), json!(c.as_ref().and_then(|c| c.settlement_center)));
+            act.push(Value::Object(entry));
         }
         let name = format!("terrain ({} classifications: aim, classes, roads, settlement centre)", list.len());
         let mut diffs = compare(root.get("terrain").unwrap(), &Value::Array(act), tol);

@@ -46,38 +46,48 @@ interface PlanetData {
   terrain?: TerrainConfig;
 }
 
+// Biomes of the bodies (T-25, docs/planet-terrain-poc-wnioski-i-plan.md §11): b hot sand desert, c medieval
+// ruins with dried lakes (T-26: the profile says no water), d regolith, e the start planet (mixed, little
+// water, a dry landing zone), f ice.
 const PLANETS: PlanetData[] = [
   {
     id: TC_B, name: 'Tau Ceti b', unknown: 'Obiekt 1', n: 5, seed: 101, insolation: 2.1, atmosphere: 'none', phase: 0.4, color: 0xb0724a,
     profile: { type: 'gorąca planeta skalista', temperature: 'wysoka', water: 'brak', rating: 'trudny', shuttleLaunchFuel: 4,
       note: 'Bogata w metale, ale bez lodu i węgla: woda i paliwo musiałyby przylatywać z innych ciał.',
       deposits: { KUP: 80, TYT: 55, URA: 25 } },
+    terrain: { biome: 'dry', seed: 3 },
   },
   {
     id: TC_C, name: 'Tau Ceti c', unknown: 'Obiekt 2', n: 5, seed: 102, insolation: 1.4, atmosphere: 'trace', phase: 2.2, color: 0x9a8a78,
     profile: { type: 'skalista, śladowa atmosfera', temperature: 'umiarkowana', water: 'brak', rating: 'średni', shuttleLaunchFuel: 5,
       note: 'Dobre metale i słońce, brak lodu. Lepsza jako druga kolonia przemysłowa.',
       deposits: { TYT: 70, FER: 50, KUP: 35 } },
-    // ruined medieval settlement facing the sun (docs/planet-terrain-poc-wnioski-i-plan.md §9.1)
-    terrain: { biome: 'medieval', seed: 2 },
+    // ruined medieval settlement facing the sun (docs/planet-terrain-poc-wnioski-i-plan.md §9.1); its lakes dried out
+    terrain: { biome: 'medieval', seed: 2, basin: 'dune' },
   },
   {
     id: TC_D, name: 'Tau Ceti d', unknown: 'Obiekt 3', n: 6, seed: 103, insolation: 0.9, atmosphere: 'none', phase: 4.1, color: 0x8b8f96,
     profile: { type: 'skalista bez atmosfery', temperature: 'chłodna', water: 'śladowo', rating: 'średni', shuttleLaunchFuel: 6,
       note: 'Ferryt i Silicyt, mało wody. Niska grawitacja nadaje się na wyrzutnię masy.',
       deposits: { FER: 65, SIL: 60, REG: 90 } },
+    terrain: { biome: 'dry', seed: 4, ground: 'regolith' },
   },
   {
     id: TC_E, name: 'Tau Ceti e', unknown: 'Obiekt 4', n: 8, seed: 104, insolation: 0.7, atmosphere: 'dense', phase: 1.3, color: 0x4f7a5a,
     profile: { type: 'superziemia z atmosferą', temperature: 'umiarkowana', water: 'lód, dużo', rating: 'zalecana', shuttleLaunchFuel: 12,
       note: 'Pełny zestaw surowców T0 i atmosfera do turbin wiatrowych. Najprostszy start, ale droższy start promu z powierzchni.',
       deposits: { FER: 60, SIL: 55, KRI: 75, KAR: 45, KUP: 15 } },
+    // the start planet (T-25): fewer lakes (water ≤ 20 % of the tiles) and a dry cap n.y > 0.6 around the
+    // +Y pole (a fifth of the sphere): the automatic port placement starts at the top tile and the scripted
+    // first sessions land at n.y ≈ 0.85, so either port has at least 2 dry rings around it
+    terrain: { biome: 'mixed', seed: 5, basinLevel: 0.39, landingCap: 0.6 },
   },
   {
     id: TC_F, name: 'Tau Ceti f', unknown: 'Obiekt 5', n: 6, seed: 105, insolation: 0.4, atmosphere: 'thin', phase: 5.3, color: 0xa9c4d6,
     profile: { type: 'chłodna planeta lodowa', temperature: 'bardzo niska', water: 'lód, bardzo dużo', rating: 'trudny', shuttleLaunchFuel: 7,
       note: 'Źródło wody i paliwa na później. Słabe słońce: energia z reaktorów.',
       deposits: { KRI: 95, KAR: 50 } },
+    terrain: { biome: 'winter', seed: 6 },
   },
 ];
 

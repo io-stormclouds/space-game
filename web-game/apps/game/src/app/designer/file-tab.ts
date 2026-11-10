@@ -7,7 +7,7 @@ import { Designer, paramDiff } from './designer';
 import { downloadText } from './download';
 import { timeLabel } from './series';
 
-const SCENARIOS = new Set(['tau-ceti', 'planeta-matka', 'fabryka', 'load-s', 'load-m', 'load-l']);
+const SCENARIOS = new Set(['tau-ceti', 'planeta-matka', 'fabryka', 'load-s', 'load-m', 'load-l', 'load-m-teren']);
 
 /** Checks the shape of a save file before it reaches the worker. */
 export function asSaveFile(data: unknown): SaveFile | null {
