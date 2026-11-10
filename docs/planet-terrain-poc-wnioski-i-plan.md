@@ -544,3 +544,25 @@ Na ciałach z biomem `medieval` (dziś Tau Ceti c) budowle gracza stoją jako mo
 - Tabela biomów (`terrain-biomes.ts`) zamiast flagi `settle`; nowe rodzaje: piasek 110/120, wydma niebudowalna, lód 125/150, regolit 100/100. Wydma i lód używają geometrii basenu wody; w biomie dry nie ma przejść.
 - Odstępstwo: strefa lądowania to próg szerokości (`landingCap`), nie pierścienie wokół szczytu (siatki n = 3 i 5 mają remis najwyższego `normal.y`, który Rust mógłby rozstrzygnąć inaczej). Cała strefa jest zwykłym gruntem, nie tylko bez wody: szczyt tc-e leży w czapie śniegu, a port na śniegu kosztowałby ×1,2–1,4.
 - Testy właściwości: 854 kombinacje, margines progów 1,48e-6 (n.y/landingCap 8,9e-4). Scenariusz L ma 1400 budowli zamiast 1500, bo z terenem na wszystkich ciałach budowalnych jest ok. 1690 pól.
+
+### T5 etap 2 (Rust): wykonany (2026-11-10)
+
+Biomy, nowe rodzaje (`Sand`, `Dune`, `Ice`, `Regolith`), `TerrainBasin`/`TerrainGround` i konfiguracje ciał w `game-core`; 70 klasyfikacji (7 siatek × 10 stylów) zgodnych bit w bit, wszystkie 9 powtórek nagranych ponownie z `048d426`. `cargo test` 56/56, powtórki 36/36, parytet WASM 23/23 (w tym `tileInfo` na wszystkich polach ciał z nowymi biomami).
+
+### T4 i T4b: wykonane (2026-11-10)
+
+- **Odcinanie półkuli** (`HemisphereCuller`, `CulledInstances`) dla budowli, skał złóż i dekoru; test zachowawczy z pudełka modelu; picking, `tileOwner`, obrysy placów, wzrost budowy i `setHidden` bez zmian.
+- **LOD dekoru** w paśmie 80–200 px promienia: drzewa jednym `detail_treeA`, połowa według `hash3`.
+- **Bryły zastępcze (T4b):** ciało poniżej 80 px (powrót od 88 px) rysuje każdą część budowli i skałę złoża jako pudełko 12 trójkątów w średnim kolorze modelu, w jednej `InstancedMesh` na ciało; statki i łaziki krótsze niż 8 px (powrót od 10 px) albo przy dalekim ciele to bryły 8/12 trójkątów; jednostki poza kadrem i łaziki za horyzontem nie są rysowane.
+- **Harness:** `PERF_PORT` (domyślnie 4435), `PLAYWRIGHT_CHROME`, `PERF_DETAIL=full` (pomiar „przed” z tego samego buildu, `?detail=full`), preset `#/scenariusz-teren-m` (tylko mock TS; w trybie WASM i zdalnym startuje `load-m`), liczniki terenu, dekoru, budowli, jednostek i instancji.
+
+| Scenariusz · widok | Draw calls | Trójkąty przed → po |
+|---|---|---|
+| S planet | 28 → 21 | 179 847 → 130 947 |
+| M planet | 74 → 53 | 438 532 → **161 882** |
+| L planet | 132 → 112 | 1 236 706 → **276 708** (UWAGA) |
+| L system | 17 → 17 | 321 284 → 28 230 |
+| teren-M planet | 98 → 67 | 453 252 → **193 510** |
+| teren-M planet-far | 74 → 41 | 453 252 → 195 253 |
+
+Pomiar na innym komputerze niż raport z 2026-11-07 (Ryzen 7 8840HS, Radeon 780M, ekran 120 Hz): FPS 120 wszędzie (vsync), więc o budżecie decydują trójkąty i draw calle. Nigdzie nie ma „PRZEKROCZONY”. Powyżej 200 tys. zostaje tylko L planet: pełne modele budowli (140 tys.) i jednostek (49 tys.) na Tau Ceti e w fokusie. Dalej (zadania w `web-game/docs/PERF-REPORT.md`): pośredni LOD budowli na ciele w fokusie albo lżejsze modele. `BatchedMesh` i podział siatki terenu nie są potrzebne (≤ 112 draw calli, teren ≤ 53 tys. trójkątów w 1 draw callu).
