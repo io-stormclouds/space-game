@@ -77,6 +77,8 @@ pub enum GalaxyOp {
     PlaceOrder { hub_id: String, material: String, side: Side, quantity: f64, price: f64 },
     CancelOrder { order_id: String },
     ShipHome { hub_id: String, body_id: String, cargo: Qty },
+    TakeContract { contract_id: String },
+    DeliverContract { contract_id: String },
 }
 
 pub fn galaxy_path(cfg: &Config) -> PathBuf {
@@ -151,6 +153,8 @@ impl GalaxyService {
             }
             GalaxyOp::CancelOrder { order_id } => ex.cancel(account, &order_id).map(|o| reply_ok(id, o)),
             GalaxyOp::ShipHome { hub_id, body_id, cargo } => ex.ship_home(account, &hub_id, &body_id, &cargo, now).map(|s| reply_ok(id, s)),
+            GalaxyOp::TakeContract { contract_id } => ex.take_contract(account, &contract_id).map(|c| reply_ok(id, c)),
+            GalaxyOp::DeliverContract { contract_id } => ex.deliver_contract(account, &contract_id).map(|c| reply_ok(id, c)),
         };
         match out {
             Ok(r) => {
@@ -230,7 +234,7 @@ impl GalaxyService {
                 _ = tick.tick() => {
                     let now = wall_ms();
                     let ch = self.exchange.advance(now);
-                    if !ch.accounts.is_empty() || ch.quotes || ch.deliveries {
+                    if !ch.accounts.is_empty() || ch.quotes || ch.deliveries || ch.contracts {
                         self.dirty = true;
                         self.push_all();
                     }

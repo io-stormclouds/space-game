@@ -421,5 +421,63 @@ async fn factions_can_be_switched_off() {
         .await;
     assert_eq!(order["ok"], true);
     assert!(order["value"]["trades"].as_array().unwrap().is_empty(), "nobody sells");
+    assert!(v["contracts"].as_array().unwrap().is_empty(), "no factions, no contracts");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// 05-SOCIAL S1 gate, second half: a faction's contract settled. Kestrel takes a contract of the
+/// Sirius hub, buys its goods there (from the faction, with the fee and the 5% duty), delivers
+/// them, gets the reward and reputation; the premium contract needs reputation 75.
+#[tokio::test]
+async fn a_faction_contract_is_taken_delivered_and_paid() {
+    let dir = tmp("contract");
+    let mut cfg = config(&dir, true);
+    cfg.market.start_credits = 10_000.0;
+    let (url, _state) = start(cfg).await;
+    let hub_id = "hub-sirius";
+    let mut a = Client::login(&url, "Kestrel", "tajne-haslo").await;
+    let v = a.wait(|c| c.galaxy.is_some(), "the view").await.galaxy.clone().unwrap();
+    let contracts = v["contracts"].as_array().unwrap();
+    assert_eq!(contracts.len(), 12, "3 open per hub");
+    let premium = contracts.iter().find(|c| c["hubId"] == hub_id && c["minRep"] == 75.0).unwrap()["id"].clone();
+    let refused = a.galaxy_op(1, json!({ "op": "takeContract", "contractId": premium })).await;
+    assert_eq!(refused["ok"], false);
+    assert!(refused["error"].as_str().unwrap().contains("reputacji 75"), "{refused}");
+
+    let c = contracts.iter().find(|c| c["hubId"] == hub_id && c["minRep"] == 0.0).unwrap().clone();
+    let (id, material, quantity, reward) =
+        (c["id"].clone(), c["material"].as_str().unwrap().to_string(), c["quantity"].as_f64().unwrap(), c["reward"].as_f64().unwrap());
+    assert_eq!(hub(&v, hub_id)["tariff"].as_f64(), Some(0.05));
+    let taken = a.galaxy_op(2, json!({ "op": "takeContract", "contractId": id })).await;
+    assert_eq!(taken["value"]["state"], "taken", "{taken}");
+    let early = a.galaxy_op(3, json!({ "op": "deliverContract", "contractId": id })).await;
+    assert!(early["error"].as_str().unwrap().starts_with("w hubie brakuje"), "{early}");
+
+    let ask =
+        hub(&v, hub_id)["quotes"].as_array().unwrap().iter().find(|q| q["material"] == material.as_str()).unwrap()["ask"].as_f64().unwrap();
+    // above the ask: the faction's quote may move a little with the trade itself
+    let bought = a
+        .galaxy_op(
+            4,
+            json!({ "op": "placeOrder", "hubId": hub_id, "material": material, "side": "buy", "quantity": quantity, "price": ask * 2.0 }),
+        )
+        .await;
+    assert_eq!(bought["value"]["order"]["remaining"].as_f64(), Some(0.0), "{bought}");
+    let before = a
+        .wait(|c| c.galaxy.as_ref().is_some_and(|v| hub(v, hub_id)["stock"][&material].as_f64() == Some(quantity)), "the goods in the hub")
+        .await
+        .galaxy
+        .clone()
+        .unwrap()["credits"]
+        .as_f64()
+        .unwrap();
+    let done = a.galaxy_op(5, json!({ "op": "deliverContract", "contractId": id })).await;
+    assert_eq!(done["value"]["state"], "delivered", "{done}");
+    let after =
+        a.wait(|c| c.galaxy.as_ref().is_some_and(|v| v["credits"].as_f64().unwrap() > before), "the reward").await.galaxy.clone().unwrap();
+    assert!((after["credits"].as_f64().unwrap() - (before + reward)).abs() < 0.011);
+    let rep = hub(&after, hub_id)["reputation"].as_f64().unwrap();
+    assert!((5.0..6.0).contains(&rep), "5 for the contract and a little for the trade: {rep}");
+    assert!(after["contracts"].as_array().unwrap().iter().any(|x| x["id"] == id && x["state"] == "delivered"));
     let _ = std::fs::remove_dir_all(dir);
 }

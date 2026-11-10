@@ -58,6 +58,38 @@ const BOOK_LEVELS: usize = 5;
 /// Faction updates a long-sleeping server catches up at most.
 const MAX_NPC_UPDATES: u32 = 1000;
 
+// Reputation with a faction (05-SOCIAL §4): in [−100, 100].
+const REP_MIN: f64 = -100.0;
+const REP_MAX: f64 = 100.0;
+/// For a delivered contract (a premium one gives half more).
+pub const REP_PER_CONTRACT: f64 = 5.0;
+/// For a taken contract that was not delivered in time.
+pub const REP_PENALTY: f64 = 5.0;
+/// Per credit traded with the faction (0.5 per 1000 kr).
+const REP_PER_KR: f64 = 0.0005;
+/// Above 0, reputation fades by this much per day.
+const REP_DECAY_PER_DAY: f64 = 1.0;
+/// Premium contracts need this reputation (05-SOCIAL §4: 75).
+pub const PREMIUM_REP: f64 = 75.0;
+/// Contracts an account may hold at once.
+const MAX_TAKEN: usize = 3;
+/// Delivered and failed contracts kept for the views.
+const CONTRACTS_KEPT: usize = 200;
+
+/// The faction's duty on trades with it, by the trader's reputation (05-SOCIAL §3.1: 0–10%):
+/// below 0 → 10%, then 5%, from 25 halved, from 75 none.
+pub fn tariff(rep: f64) -> f64 {
+    if rep < 0.0 {
+        0.10
+    } else if rep < 25.0 {
+        0.05
+    } else if rep < PREMIUM_REP {
+        0.025
+    } else {
+        0.0
+    }
+}
+
 pub fn is_hub(id: &str) -> bool {
     GALAXY_HUBS.iter().any(|(h, _, _)| *h == id)
 }
@@ -115,12 +147,17 @@ pub struct MarketConfig {
     pub order_seconds: f64,
     /// Open orders per account.
     pub max_orders: usize,
-    /// NPC factions (R-7); `None`: a market of players only.
+    /// Time a faction's contract stays open, and a taken one has to be delivered [s].
+    pub contract_seconds: f64,
+    /// Open contracts each faction keeps in its hub.
+    pub contracts_per_hub: usize,
+    /// NPC factions (R-7); `None`: a market of players only (no contracts, duties or reputation changes).
     pub npc: Option<NpcConfig>,
 }
 
 impl Default for MarketConfig {
-    /// Production: 2 h per light year (05-SOCIAL S-10), orders for 7 days, factions every 10 minutes.
+    /// Production: 2 h per light year (05-SOCIAL S-10), orders for 7 days, contracts for 2 days,
+    /// factions every 10 minutes.
     fn default() -> MarketConfig {
         MarketConfig {
             fee: 0.02,
@@ -129,6 +166,8 @@ impl Default for MarketConfig {
             handling_seconds: 1800.0,
             order_seconds: 7.0 * 24.0 * 3600.0,
             max_orders: 50,
+            contract_seconds: 48.0 * 3600.0,
+            contracts_per_hub: 3,
             npc: Some(NpcConfig { seed: 20_261_107, players: 6, update_seconds: 600.0, depth: 50.0 }),
         }
     }
@@ -224,7 +263,40 @@ pub struct NpcState {
     pub asks_left: IndexMap<String, Qty>,
 }
 
-/// Everything the market keeps (the server writes it to `galaxy.json`).
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum ContractState {
+    Open,
+    Taken,
+    Delivered,
+    /// A taken contract not delivered in time.
+    Failed,
+}
+
+/// A faction's contract (05-SOCIAL §3.3): deliver `quantity` of `material` to its hub by `deadline`
+/// for `reward` credits (above the market) and reputation. Taken by one account, which then has
+/// until the deadline; open ones that nobody takes lapse.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Contract {
+    pub id: String,
+    pub hub_id: String,
+    pub faction: String,
+    pub material: String,
+    pub quantity: f64,
+    pub reward: f64,
+    /// Reputation for delivering it.
+    pub rep: f64,
+    /// Reputation needed to take it (premium: 75).
+    pub min_rep: f64,
+    pub issued_at: f64,
+    pub deadline: f64,
+    pub state: ContractState,
+    pub taker: Option<String>,
+}
+
+/// Everything the market keeps (the server writes it to `galaxy.json`). Fields added after the
+/// first version default, so older files load.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct ExchangeState {
@@ -238,6 +310,18 @@ pub struct ExchangeState {
     pub shipments: Vec<Shipment>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub npc: Option<NpcState>,
+    /// Open and taken contracts, then the last delivered and failed ones.
+    #[serde(default)]
+    pub contracts: Vec<Contract>,
+    /// Reputation of each account with each faction.
+    #[serde(default)]
+    pub reputation: IndexMap<String, IndexMap<String, f64>>,
+    /// Generator of the factions' contracts (Mulberry32 state).
+    #[serde(default)]
+    pub contract_rng: i32,
+    /// Unix ms reputation last faded.
+    #[serde(default)]
+    pub reputation_time: f64,
 }
 
 /// One price level of a hub's book.
@@ -265,6 +349,9 @@ pub struct HubView {
     /// The viewer's goods in this hub.
     pub stock: Qty,
     pub book: Vec<BookLevel>,
+    /// The viewer's reputation with the host faction and the duty it charges them.
+    pub reputation: f64,
+    pub tariff: f64,
 }
 
 #[derive(Serialize, Clone, Debug, PartialEq)]
@@ -291,6 +378,8 @@ pub struct GalaxyView {
     pub trades: Vec<Trade>,
     /// Others in the galaxy: faction commanders and players (not the viewer).
     pub players: Vec<GalaxyPlayer>,
+    /// Open contracts of every hub and the viewer's taken, delivered and failed ones (newest first).
+    pub contracts: Vec<Contract>,
     pub time: f64,
 }
 
@@ -310,6 +399,8 @@ pub struct Changes {
     pub quotes: bool,
     /// Shipments arrived at colonies ([`Exchange::deliveries`]).
     pub deliveries: bool,
+    /// Contracts were issued or lapsed (every view changed).
+    pub contracts: bool,
 }
 
 pub type ExResult<T> = Result<T, String>;
@@ -343,8 +434,186 @@ impl Exchange {
             if ex.state.npc.as_ref().is_some_and(|s| s.bids_left.is_empty()) {
                 ex.refill();
             }
+            if ex.state.contract_rng == 0 {
+                ex.state.contract_rng = n.seed.wrapping_add(0x2545_f491);
+            }
+            ex.issue_contracts();
+        }
+        if ex.state.reputation_time == 0.0 {
+            ex.state.reputation_time = ex.state.time;
         }
         ex
+    }
+
+    // ---- reputation, duties, contracts ----
+
+    /// The account's reputation with a faction.
+    pub fn reputation(&self, account: &str, faction: &str) -> f64 {
+        self.state.reputation.get(account).and_then(|r| r.get(faction)).copied().unwrap_or(0.0)
+    }
+
+    fn add_reputation(&mut self, account: &str, faction: &str, delta: f64) {
+        let r = self.state.reputation.entry(account.to_string()).or_default();
+        let cur = r.get(faction).copied().unwrap_or(0.0);
+        r.insert(faction.to_string(), (cur + delta).clamp(REP_MIN, REP_MAX));
+    }
+
+    /// The duty the hub's faction charges the account (none without factions).
+    pub fn tariff_of(&self, account: &str, hub_id: &str) -> f64 {
+        match (self.npc.is_some(), faction_of(hub_id)) {
+            (true, Some(f)) => tariff(self.reputation(account, f)),
+            _ => 0.0,
+        }
+    }
+
+    /// Each faction tops its hub up to `contracts_per_hub` open contracts: a material of the
+    /// catalog, worth 300–900 kr at its price (at most the faction's depth in units), paid 30% above
+    /// it (premium: 60%, needs reputation 75).
+    fn issue_contracts(&mut self) -> bool {
+        let Some(sim) = self.npc.as_ref() else { return false };
+        let materials: Vec<String> = self.values.keys().cloned().collect();
+        if materials.is_empty() {
+            return false;
+        }
+        let mut rng = game_core::sim::scenarios::Rng::new(self.state.contract_rng);
+        let mut issued = Vec::new();
+        for (hub, _, _) in GALAXY_HUBS {
+            let Some(faction) = faction_of(hub) else { continue };
+            let open: Vec<&Contract> = self.state.contracts.iter().filter(|c| c.hub_id == hub && c.state == ContractState::Open).collect();
+            let mut has_premium = open.iter().any(|c| c.min_rep >= PREMIUM_REP);
+            for k in open.len()..self.cfg.contracts_per_hub {
+                let material = materials[rng.int(materials.len())].clone();
+                let price = sim.price(hub, &material).unwrap_or(1.0).max(0.01);
+                // at most the faction's depth: what one update of a hub's market can supply
+                let depth = self.cfg.npc.map(|n| n.depth).unwrap_or(50.0).max(1.0);
+                let quantity = (rng.range(300.0, 900.0) / price).ceil().clamp(1.0, depth);
+                // one premium contract per hub, in its last slot
+                let premium = !has_premium && k + 1 == self.cfg.contracts_per_hub && self.cfg.contracts_per_hub > 1;
+                has_premium |= premium;
+                let reward = round2(quantity * price * if premium { 1.6 } else { 1.3 });
+                issued.push(Contract {
+                    id: String::new(),
+                    hub_id: hub.to_string(),
+                    faction: faction.to_string(),
+                    material,
+                    quantity,
+                    reward,
+                    rep: if premium { REP_PER_CONTRACT * 1.5 } else { REP_PER_CONTRACT },
+                    min_rep: if premium { PREMIUM_REP } else { 0.0 },
+                    issued_at: self.state.time,
+                    deadline: self.state.time + self.cfg.contract_seconds * 1000.0,
+                    state: ContractState::Open,
+                    taker: None,
+                });
+            }
+        }
+        self.state.contract_rng = rng.state;
+        let any = !issued.is_empty();
+        for mut c in issued {
+            c.id = self.new_id("contract");
+            self.state.contracts.push(c);
+        }
+        any
+    }
+
+    /// Takes an open contract: the account has until its deadline to deliver.
+    pub fn take_contract(&mut self, account: &str, contract_id: &str) -> ExResult<Contract> {
+        let taken = self.state.contracts.iter().filter(|c| c.state == ContractState::Taken && c.taker.as_deref() == Some(account)).count();
+        let Some(i) = self.state.contracts.iter().position(|c| c.id == contract_id) else {
+            return Err(format!("nie ma kontraktu {contract_id}"));
+        };
+        let c = &self.state.contracts[i];
+        if c.state != ContractState::Open {
+            return Err("kontrakt nie jest już otwarty".to_string());
+        }
+        let rep = self.reputation(account, &c.faction);
+        if rep < c.min_rep {
+            return Err(format!("kontrakt wymaga reputacji {} u frakcji {} (masz {})", c.min_rep, c.faction, js::round(rep)));
+        }
+        if taken >= MAX_TAKEN {
+            return Err(format!("najwyżej {MAX_TAKEN} przyjęte kontrakty naraz"));
+        }
+        let deadline = self.state.time + self.cfg.contract_seconds * 1000.0;
+        let c = &mut self.state.contracts[i];
+        c.state = ContractState::Taken;
+        c.taker = Some(account.to_string());
+        c.deadline = c.deadline.max(deadline);
+        Ok(c.clone())
+    }
+
+    /// Delivers a taken contract from the account's goods in its hub: the reward and the reputation.
+    pub fn deliver_contract(&mut self, account: &str, contract_id: &str) -> ExResult<Contract> {
+        let Some(i) = self
+            .state
+            .contracts
+            .iter()
+            .position(|c| c.id == contract_id && c.state == ContractState::Taken && c.taker.as_deref() == Some(account))
+        else {
+            return Err(format!("nie masz przyjętego kontraktu {contract_id}"));
+        };
+        let c = self.state.contracts[i].clone();
+        let want: Qty = [(c.material.clone(), c.quantity)].into_iter().collect();
+        let have = self.wallet(account).stock.get(&c.hub_id).cloned().unwrap_or_default();
+        if !can_afford(&have, &want) {
+            return Err(format!("w hubie brakuje {}", format_cost(&missing_for(&have, &want))));
+        }
+        let s = self.stock_mut(account, &c.hub_id);
+        *s = subtract_stock(s, &want);
+        self.wallet_mut(account).credits += c.reward;
+        self.add_reputation(account, &c.faction, c.rep);
+        self.state.contracts[i].state = ContractState::Delivered;
+        self.trim_contracts();
+        Ok(self.state.contracts.iter().find(|x| x.id == c.id).cloned().unwrap_or(c))
+    }
+
+    /// Keeps the newest closed contracts only.
+    fn trim_contracts(&mut self) {
+        let closed = self.state.contracts.iter().filter(|c| matches!(c.state, ContractState::Delivered | ContractState::Failed)).count();
+        let mut extra = closed.saturating_sub(CONTRACTS_KEPT);
+        self.state.contracts.retain(|c| {
+            if extra > 0 && matches!(c.state, ContractState::Delivered | ContractState::Failed) {
+                extra -= 1;
+                false
+            } else {
+                true
+            }
+        });
+    }
+
+    /// Deadlines: open contracts lapse, taken ones fail (the taker loses reputation); reputation
+    /// above 0 fades. Returns the accounts whose contracts or reputation changed.
+    fn age_contracts(&mut self, now: f64, ch: &mut Changes) {
+        let mut failed = Vec::new();
+        let before = self.state.contracts.len();
+        self.state.contracts.retain_mut(|c| match c.state {
+            ContractState::Open if c.deadline <= now => false,
+            ContractState::Taken if c.deadline <= now => {
+                c.state = ContractState::Failed;
+                failed.push((c.taker.clone().unwrap_or_default(), c.faction.clone()));
+                true
+            }
+            _ => true,
+        });
+        if self.state.contracts.len() != before || !failed.is_empty() {
+            ch.contracts = true;
+        }
+        for (account, faction) in failed {
+            self.add_reputation(&account, &faction, -REP_PENALTY);
+            ch.accounts.insert(account);
+        }
+        self.trim_contracts();
+        let days = (now - self.state.reputation_time) / 86_400_000.0;
+        if days >= 1.0 / 24.0 {
+            self.state.reputation_time = now;
+            for (account, r) in self.state.reputation.iter_mut() {
+                for v in r.values_mut() {
+                    if *v > 0.0 {
+                        *v = (*v - REP_DECAY_PER_DAY * days).max(0.0);
+                        ch.accounts.insert(account.clone());
+                    }
+                }
+            }
+        }
     }
 
     pub fn config(&self) -> &MarketConfig {
@@ -460,8 +729,11 @@ impl Exchange {
     /// The incoming order at `idx` meets the book until its limit, its quantity or the book ends.
     fn match_order(&mut self, idx: usize) -> Vec<Trade> {
         let fee = self.cfg.fee;
+        // the faction's duty on the taker's trades with it (players trade without it)
+        let duty = self.tariff_of(&self.state.orders[idx].account, &self.state.orders[idx].hub_id);
         let mut trades = Vec::new();
         let mut npc_units = 0.0; // bought from the faction (> 0) or sold to it (< 0)
+        let mut npc_value = 0.0; // credits traded with it
         loop {
             let o = self.state.orders[idx].clone();
             if o.remaining <= EPS {
@@ -504,6 +776,7 @@ impl Exchange {
                 let cur = amount_of(left, &o.material);
                 left.insert(o.material.clone(), (cur - q).max(0.0));
                 npc_units += if o.side == Side::Buy { q } else { -q };
+                npc_value += value;
                 match o.side {
                     Side::Buy => (Some(o.account.clone()), None),
                     Side::Sell => (None, Some(o.account.clone())),
@@ -521,11 +794,13 @@ impl Exchange {
                     Side::Sell => (Some(maker_account), Some(o.account.clone())),
                 }
             };
+            // the taker's charges: the fee, and the duty when the faction is the other side
+            let charge = if use_npc { fee + duty } else { fee };
             {
                 let taker = &mut self.state.orders[idx];
                 taker.remaining = round3(taker.remaining - q);
                 if taker.side == Side::Buy {
-                    taker.held -= value * (1.0 + fee);
+                    taker.held -= value * (1.0 + charge);
                 }
             }
             if let Some(b) = &buyer {
@@ -534,15 +809,20 @@ impl Exchange {
                 s.insert(o.material.clone(), round3(cur + q));
             }
             if let Some(s) = &seller {
-                self.wallet_mut(s).credits += value * (1.0 - fee);
+                let rate = if s == &o.account { charge } else { fee };
+                self.wallet_mut(s).credits += value * (1.0 - rate);
             }
             trades.push(self.record_trade(&o.hub_id, &o.material, price, q, buyer, seller));
         }
         if npc_units != 0.0 {
-            let (hub, material) = (self.state.orders[idx].hub_id.clone(), self.state.orders[idx].material.clone());
+            let (hub, material, account) =
+                (self.state.orders[idx].hub_id.clone(), self.state.orders[idx].material.clone(), self.state.orders[idx].account.clone());
             let depth = self.cfg.npc.map(|n| n.depth).unwrap_or(0.0);
             if let Some(sim) = self.npc.as_mut() {
                 sim.trade(&hub, &material, npc_units, depth);
+            }
+            if let Some(faction) = faction_of(&hub) {
+                self.add_reputation(&account, faction, npc_value * REP_PER_KR);
             }
         }
         // a buy that paid less than its limit gets the difference back now
@@ -615,10 +895,11 @@ impl Exchange {
             return Err(format!("najwyżej {} otwartych zleceń", self.cfg.max_orders));
         }
         self.state.time = self.state.time.max(now);
-        let fee = self.cfg.fee;
+        // a buy holds enough for the faction's duty too (it may fill from the faction at once)
+        let charge = self.cfg.fee + self.tariff_of(account, hub_id);
         let held = match side {
             Side::Buy => {
-                let need = price * quantity * (1.0 + fee);
+                let need = price * quantity * (1.0 + charge);
                 let w = self.wallet_mut(account);
                 if w.credits + EPS < need {
                     return Err(format!("brakuje kredytów: zlecenie wiąże {} kr, masz {} kr", round2(need), round2(w.credits)));
@@ -795,7 +1076,9 @@ impl Exchange {
             ch.accounts.insert(o.account.clone());
             self.release(&o);
         }
-        // factions
+        // contracts and reputation
+        self.age_contracts(now, &mut ch);
+        // factions: prices and depth; new contracts in place of the lapsed and delivered ones
         if let (Some(sim), Some(n)) = (self.npc.as_mut(), self.state.npc.as_ref()) {
             let minutes = (now - n.epoch) / 60_000.0;
             sim.fast_forward(minutes, MAX_NPC_UPDATES);
@@ -805,6 +1088,9 @@ impl Exchange {
         }
         if ch.quotes {
             self.refill();
+            if self.issue_contracts() {
+                ch.contracts = true;
+            }
         }
         ch
     }
@@ -914,6 +1200,8 @@ impl Exchange {
                     travel_seconds: self.travel_seconds(&star, &market.id),
                     stock: wallet.stock.get(&market.id).cloned().unwrap_or_default().into_iter().filter(|(_, q)| *q > EPS).collect(),
                     book: self.book(&market.id),
+                    reputation: faction_of(&market.id).map(|f| round2(self.reputation(account, f))).unwrap_or(0.0),
+                    tariff: self.tariff_of(account, &market.id),
                     market,
                 }
             })
@@ -921,6 +1209,15 @@ impl Exchange {
         let mine = |a: &Option<String>| a.as_deref() == Some(account);
         let trades: Vec<Trade> =
             self.state.trades.iter().rev().filter(|t| mine(&t.buyer) || mine(&t.seller)).take(TRADES_SHOWN).cloned().collect();
+        let contracts: Vec<Contract> = self
+            .state
+            .contracts
+            .iter()
+            .rev()
+            .filter(|c| c.state == ContractState::Open || mine(&c.taker))
+            .take(TRADES_SHOWN + GALAXY_HUBS.len() * self.cfg.contracts_per_hub)
+            .cloned()
+            .collect();
         GalaxyView {
             account: account.to_string(),
             credits: round2(wallet.credits),
@@ -931,6 +1228,7 @@ impl Exchange {
             shipments: self.state.shipments.iter().filter(|s| s.account == account).cloned().collect(),
             trades,
             players: self.players(account),
+            contracts,
             time: self.state.time,
         }
     }
@@ -1026,9 +1324,11 @@ mod tests {
         assert_eq!(out.order.remaining, 10.0);
         let after = m.npc.as_ref().unwrap().price(hub, "KRI").unwrap();
         assert!(after > before, "buying from the faction raises P: {before} → {after}");
-        // the rest holds credits for 10 units at its limit; the 50 were paid at the ask
+        // the rest holds credits for 10 units at its limit; the 50 were paid at the ask, with the
+        // fee and the faction's duty (5% at reputation 0)
         let c = credits(&m, "acc-1");
-        assert!((c - (1000.0 - ask * 50.0 * 1.02 - ask * 2.0 * 10.0 * 1.02)).abs() < 1e-6, "{c}");
+        assert!((c - (1000.0 - ask * 50.0 * 1.07 - ask * 2.0 * 10.0 * 1.02)).abs() < 1e-6, "{c}");
+        assert!((m.reputation("acc-1", "Unia Lagrange") - ask * 50.0 * REP_PER_KR).abs() < 1e-9, "trade volume builds reputation");
 
         // the faction's next update brings its depth back
         assert!(m.npc_quote(hub, "KRI", Side::Buy).is_none());
@@ -1117,6 +1417,61 @@ mod tests {
         assert!(m.delivered(&again.id).is_some());
         assert!(m.deliveries().is_empty());
         assert_eq!(stock(&m, "acc-1", hub, "FER"), 10.0);
+    }
+
+    /// 05-SOCIAL S1: the factions' contracts pay above the market and give reputation; a taken one
+    /// not delivered in time costs reputation; reputation fades and sets the duty.
+    #[test]
+    fn contracts_pay_and_build_reputation() {
+        assert_eq!((tariff(-1.0), tariff(0.0), tariff(30.0), tariff(80.0)), (0.10, 0.05, 0.025, 0.0));
+        let mut m = market(true);
+        let hub = "hub-sirius";
+        let open = |m: &Exchange| m.state.contracts.iter().filter(|c| c.state == ContractState::Open).count();
+        assert_eq!(open(&m), 12, "3 per hub from the start");
+        let c = m.state.contracts.iter().find(|c| c.hub_id == hub && c.min_rep == 0.0).unwrap().clone();
+        let price = m.npc.as_ref().unwrap().price(hub, &c.material).unwrap();
+        assert!((c.reward - round2(c.quantity * price * 1.3)).abs() < 1e-9, "{c:?}");
+        assert!(m.state.contracts.iter().all(|x| x.quantity >= 1.0 && x.quantity <= 50.0), "within the faction's depth");
+        let premium = m.state.contracts.iter().find(|x| x.hub_id == hub && x.min_rep == PREMIUM_REP).unwrap().id.clone();
+        assert!(m.take_contract("acc-1", &premium).unwrap_err().contains("wymaga reputacji 75"));
+
+        assert!(m.deliver_contract("acc-1", &c.id).is_err(), "taken first");
+        m.take_contract("acc-1", &c.id).unwrap();
+        assert!(m.take_contract("acc-2", &c.id).is_err(), "one taker");
+        assert!(!m.view("acc-2").contracts.iter().any(|x| x.id == c.id), "others no longer see it");
+        assert!(m.deliver_contract("acc-1", &c.id).unwrap_err().starts_with("w hubie brakuje"));
+        deliver_to_hub(&mut m, "acc-1", hub, [(c.material.clone(), c.quantity + 1.0)].into_iter().collect());
+        let before = credits(&m, "acc-1");
+        let done = m.deliver_contract("acc-1", &c.id).unwrap();
+        assert_eq!(done.state, ContractState::Delivered);
+        assert!((credits(&m, "acc-1") - (before + c.reward)).abs() < 1e-9);
+        assert_eq!(stock(&m, "acc-1", hub, &c.material), 1.0);
+        assert_eq!(m.reputation("acc-1", "Konsorcjum Orion"), REP_PER_CONTRACT);
+        assert!(m.view("acc-1").contracts.iter().any(|x| x.id == c.id && x.state == ContractState::Delivered));
+
+        // taken and missed: the reputation goes back down; the faction issues new ones
+        let next =
+            m.state.contracts.iter().find(|x| x.hub_id == hub && x.state == ContractState::Open && x.min_rep == 0.0).unwrap().id.clone();
+        m.take_contract("acc-1", &next).unwrap();
+        let ch = m.advance(m.state.time + 49.0 * 3_600_000.0);
+        assert!(ch.contracts && ch.accounts.contains("acc-1"));
+        assert_eq!(m.state.contracts.iter().find(|x| x.id == next).unwrap().state, ContractState::Failed);
+        assert_eq!(m.reputation("acc-1", "Konsorcjum Orion"), 0.0, "5 − 5 (and no fading below 0)");
+        assert_eq!(open(&m), 12, "new contracts in place of the lapsed ones");
+
+        // fading: 1 a day above 0; the duty follows the reputation
+        m.add_reputation("acc-1", "Unia Lagrange", 30.0);
+        assert_eq!(m.tariff_of("acc-1", "hub-sol"), 0.025);
+        m.advance(m.state.time + 2.0 * 86_400_000.0);
+        assert!((m.reputation("acc-1", "Unia Lagrange") - 28.0).abs() < 1e-9);
+        let v = m.view("acc-1");
+        let sol = v.hubs.iter().find(|h| h.market.id == "hub-sol").unwrap();
+        assert_eq!((sol.reputation, sol.tariff), (28.0, 0.025));
+
+        // without factions: no contracts, no duty
+        let off = market(false);
+        assert!(off.state.contracts.is_empty());
+        assert_eq!(off.tariff_of("acc-1", hub), 0.0);
     }
 
     /// The saved state continues as the uninterrupted market (the factions' clock and prices too),

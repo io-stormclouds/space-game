@@ -186,13 +186,24 @@ Zrobione:
   - Bez serwera panel mówi, że handel działa tylko w grze na serwerze.
   - e2e `hub.spec.ts` na `remote` (25 s): wysyłka do Epsilon Eridani, sprzedaż frakcji po jej cenie kupna, odkupienie, sprowadzenie do kolonii (zapas wraca dokładnie), zlecenie w księdze i anulowanie.
   - Pełny zestaw `remote` z hubem (2 workery): 17 z 18. Padł test pliku projektu Atanora (AT6): klikał fabrykę, zanim kamera doleciała do planety. Ten sam test był niestabilny na mocku przy 4 workerach. Poprawiony (czeka na kafle do 10 s); potem 4 z 4 powtórzeń, a pełny zestaw `remote` **18 z 18** (2,7 min).
-- Moduł WASM: 1357 kB (359 kB gzip).
+- **Scalenie z terenem (2026-11-10):** `server-b6` (T0–T8) scalone do `galaxy-b6`. Jedyny konflikt był w wierszu stanu tego README. Moduł WASM po scaleniu: 1398 kB (370 kB gzip).
+- **S1: kontrakty frakcji, reputacja, cła (R-23):**
+  - Każda frakcja trzyma w swoim hubie 3 otwarte kontrakty, jeden z nich premium (od reputacji 75).
+  - `takeContract` przyjmuje kontrakt, `deliverContract` dostarcza go z towaru w hubie przed terminem. Za to jest nagroda ponad cenę i reputacja; za niedotrzymany termin kara.
+  - Reputacja rośnie za kontrakty i obroty z frakcją, a powyżej zera maleje o 1 dziennie. Cło od transakcji z frakcją zależy od reputacji: 10% / 5% / 2,5% / 0%.
+  - Ekran hubu pokazuje reputację i cło u gospodarza oraz listę kontraktów z przyciskami „Przyjmij” i „Dostarcz”.
+  - Testy:
+    - `exchange::tests::contracts_pay_and_build_reputation`;
+    - przez WebSocket `a_faction_contract_is_taken_delivered_and_paid` (brama S1 „kontrakt NPC rozliczony”);
+    - e2e `hub.spec.ts`: najtańszy kontrakt przyjęty, kupiony w hubie, dostarczony i opłacony.
+  - Po S1 i scaleniu z terenem: `cargo test --workspace`, clippy, fmt; vitest 463/463; e2e `mock-ts` 18 przeszło + 1 pominięty (kontrakt tylko na serwerze), e2e `remote` **19 z 19** (2,4 min), oba przy 2 workerach.
 
-Zmienne: `NPC_FACTIONS` (on), `NPC_SEED`, `NPC_PLAYERS` (6), `NPC_UPDATE_SECONDS` (600; dev 10), `NPC_DEPTH` (50), `HUB_FEE` (0,02), `START_CREDITS` (1000), `ORDER_HOURS` (168), `SHIPPING_SECONDS_PER_LY` (7200; dev 2), `SHIPPING_HANDLING_SECONDS` (1800; dev 2).
+Zmienne: `NPC_FACTIONS` (on), `NPC_SEED`, `NPC_PLAYERS` (6), `NPC_UPDATE_SECONDS` (600; dev 10), `NPC_DEPTH` (50), `HUB_FEE` (0,02), `START_CREDITS` (1000), `ORDER_HOURS` (168), `SHIPPING_SECONDS_PER_LY` (7200; dev 2), `SHIPPING_HANDLING_SECONDS` (1800; dev 2), `CONTRACT_HOURS` (48; dev 1), `CONTRACTS_PER_HUB` (3).
 
 Brakuje względem B6 i 05-SOCIAL (następne kroki):
 - Ekran hubu: księga zleceń poziomami (dane już są w widoku), handel dwóch graczy w e2e (jest w teście WebSocket).
-- Kontrakty NPC, reputacja i cła frakcji (S1), korporacje (S2), czat, rankingi.
+- Specjalizacje frakcji (które materiały skupują chętniej, jakie kontrakty wystawiają) i receptury za reputację 50.
+- Korporacje (S2), czat, rankingi.
 - PostgreSQL dla rynku (transakcje SQL jak w planie §8) razem z adapterem światów.
 - Zgłoszenie wysyłki po awarii: jeśli serwer padnie między rozkazem `SHIP_TO_HUB` a zapisem `galaxy.json` (≤ 1 s), przesyłka przepada. Do usunięcia przez dziennik wysyłek albo przez transakcję w PostgreSQL.
 

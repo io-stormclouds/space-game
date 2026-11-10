@@ -33,7 +33,9 @@ pub struct Config {
     /// - `HUB_FEE` (each side's fee, default 0.02), `START_CREDITS` (default 1000), `ORDER_HOURS`
     ///   (order lifetime, default 168);
     /// - `SHIPPING_SECONDS_PER_LY` and `SHIPPING_HANDLING_SECONDS` (production 7200 = 2 h/ly and 1800;
-    ///   dev 2 and 2, so a test ship arrives in seconds).
+    ///   dev 2 and 2, so a test ship arrives in seconds);
+    /// - `CONTRACT_HOURS` (factions' contracts: open and to deliver once taken; production 48, dev 1)
+    ///   and `CONTRACTS_PER_HUB` (default 3, one of them premium).
     pub market: MarketConfig,
 }
 
@@ -59,6 +61,8 @@ impl Config {
             handling_seconds: non_negative("SHIPPING_HANDLING_SECONDS", if dev_mode { 2.0 } else { prod.handling_seconds }),
             order_seconds: num("ORDER_HOURS", prod.order_seconds / 3600.0) * 3600.0,
             max_orders: prod.max_orders,
+            contract_seconds: num("CONTRACT_HOURS", if dev_mode { 1.0 } else { prod.contract_seconds / 3600.0 }) * 3600.0,
+            contracts_per_hub: var("CONTRACTS_PER_HUB").and_then(|v| v.parse().ok()).unwrap_or(prod.contracts_per_hub),
             npc: if flag("NPC_FACTIONS").unwrap_or(true) { Some(npc) } else { None },
         };
         Config {

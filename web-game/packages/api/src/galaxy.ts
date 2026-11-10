@@ -70,6 +70,30 @@ export interface HubView extends MarketHub {
   travelSeconds: number;
   stock: Record<string, number>;
   book: BookLevel[];
+  /** The player's reputation with the host faction (−100…100) and the duty it charges them. */
+  reputation: number;
+  tariff: number;
+}
+
+export type ContractState = 'open' | 'taken' | 'delivered' | 'failed';
+
+/** A faction's contract (05-SOCIAL §3.3): deliver goods to its hub by the deadline. */
+export interface Contract {
+  id: string;
+  hubId: string;
+  faction: string;
+  material: string;
+  quantity: number;
+  /** Credits on delivery (above the market). */
+  reward: number;
+  /** Reputation on delivery. */
+  rep: number;
+  /** Reputation needed to take it (premium contracts: 75). */
+  minRep: number;
+  issuedAt: number;
+  deadline: number;
+  state: ContractState;
+  taker: string | null;
 }
 
 export interface GalaxyPlayer extends SimulatedPlayer {
@@ -91,6 +115,8 @@ export interface GalaxyView {
   trades: Trade[];
   /** Faction commanders and other players (not the viewer). */
   players: GalaxyPlayer[];
+  /** Open contracts of every hub and the player's own (taken, delivered, failed), newest first. */
+  contracts: Contract[];
   time: number;
 }
 
@@ -98,7 +124,9 @@ export type GalaxyOp =
   | { op: 'view' }
   | { op: 'placeOrder'; hubId: string; material: string; side: Side; quantity: number; price: number }
   | { op: 'cancelOrder'; orderId: string }
-  | { op: 'shipHome'; hubId: string; bodyId: string; cargo: Record<string, number> };
+  | { op: 'shipHome'; hubId: string; bodyId: string; cargo: Record<string, number> }
+  | { op: 'takeContract'; contractId: string }
+  | { op: 'deliverContract'; contractId: string };
 
 /** An order after it met the book: what is left of it (remaining 0: filled) and its trades. */
 export interface Placed {
@@ -106,7 +134,7 @@ export interface Placed {
   trades: Trade[];
 }
 
-export type GalaxyReply = GalaxyView | Placed | MarketOrder | Shipment;
+export type GalaxyReply = GalaxyView | Placed | MarketOrder | Shipment | Contract;
 
 /**
  * The world's command that sends cargo from the colony's storage to a hub (R-21). Only the Rust world

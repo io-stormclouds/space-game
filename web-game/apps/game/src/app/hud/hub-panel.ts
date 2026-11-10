@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import {
   shipToHubCommand,
+  type Contract,
   type GalaxyOp,
   type GalaxyReply,
   type HubView,
@@ -44,6 +45,9 @@ const qty = (n: number) => n.toLocaleString('pl-PL', { maximumFractionDigits: 1 
         </div>
         @if (hub(); as h) {
           <p class="dim small" data-hub-info>{{ h.faction ? t.host(h.faction) : t.noHost }} · {{ t.distance(ly(h.distanceLy), units.min(h.travelSeconds / 60)) }}</p>
+          @if (h.faction) {
+            <p class="dim small" data-standing [attr.data-reputation]="h.reputation" [attr.data-tariff]="h.tariff">{{ t.standing(num(h.reputation, 1), pct(h.tariff)) }}</p>
+          }
         }
         @if (message(); as m) {
           <p class="msg" role="status" data-message>{{ m }}</p>
@@ -106,6 +110,35 @@ const qty = (n: number) => n.toLocaleString('pl-PL', { maximumFractionDigits: 1 
                 </button>
               </div>
             </div>
+          }
+
+          @if (v.npc) {
+            <h3 class="hud-title">{{ t.contracts }}</h3>
+            <ul class="list" data-list="contracts">
+              @for (c of contracts(); track c.id) {
+                <li class="row" [attr.data-contract]="c.id" [attr.data-state]="c.state" [attr.data-material]="c.material" [attr.data-quantity]="c.quantity" [attr.data-reward]="c.reward" [attr.data-min-rep]="c.minRep">
+                  <span>
+                    {{ t.contract(qty(c.quantity), c.material, money(c.reward), num(c.rep, 1)) }}
+                    <span class="dim">
+                      · {{ t.contractState[c.state] }}
+                      @if (c.minRep > 0) {
+                        · {{ t.premium(num(c.minRep, 0)) }}
+                      }
+                      @if (c.state === 'open' || c.state === 'taken') {
+                        · {{ t.eta(units.min(until(c.deadline) / 60)) }}
+                      }
+                    </span>
+                  </span>
+                  @if (c.state === 'open') {
+                    <button type="button" class="btn" data-action="take" [disabled]="busy() || (hub()?.reputation ?? 0) < c.minRep" (click)="take(c.id)">{{ t.take }}</button>
+                  } @else if (c.state === 'taken' && c.taker === v.account) {
+                    <button type="button" class="btn btn--primary" data-action="deliver" [disabled]="busy()" (click)="deliver(c.id)">{{ t.deliver }}</button>
+                  }
+                </li>
+              } @empty {
+                <li class="dim">{{ t.noContracts }}</li>
+              }
+            </ul>
           }
 
           <h3 class="hud-title">{{ t.orders }}</h3>
@@ -213,6 +246,24 @@ export class HubPanel {
   });
 
   protected readonly ready = computed(() => this.quantity() > 0 && this.limit() > 0);
+
+  /** Contracts of the selected hub: open ones and the player's own. */
+  protected readonly contracts = computed(() => {
+    const h = this.hub();
+    return h ? (this.game.galaxy()?.contracts ?? []).filter((c) => c.hubId === h.id) : [];
+  });
+
+  protected until(at: number): number {
+    return Math.max(0, (at - this.now()) / 1000);
+  }
+
+  protected take(contractId: string): void {
+    void this.run<Contract>({ op: 'takeContract', contractId }, () => this.t.tookContract);
+  }
+
+  protected deliver(contractId: string): void {
+    void this.run<Contract>({ op: 'deliverContract', contractId }, (c) => this.t.deliveredContract(this.money(c.reward)));
+  }
 
   protected readonly money = (n: number) => num(n, 2);
   protected readonly num = num;

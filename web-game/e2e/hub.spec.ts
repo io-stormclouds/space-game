@@ -89,3 +89,52 @@ test('the hub panel: ship to a hub, sell to its faction, buy back and bring home
   await hub.locator('[data-list="orders"] [data-action="cancel"]').click();
   await expect(hub.locator('[data-list="orders"] [data-order]')).toHaveCount(0);
 });
+
+test("a faction's contract: taken, its goods bought in the hub, delivered and paid (remote only)", async ({ page }, info) => {
+  test.skip(info.project.name !== 'chromium-remote', 'contracts come from the galaxy service');
+  const hub = await openHub(page);
+  const credits = hub.locator('[data-credits]');
+  await expect(credits).toHaveAttribute('data-value', '1000');
+
+  // the cheapest ordinary contract of all hubs (what its goods cost at the faction's ask with the fee and duty)
+  let best: { hubId: string; id: string; material: string; quantity: number; cost: number } | null = null;
+  for (const hubId of ['hub-sirius', 'hub-sol', 'hub-procyon', 'hub-eridani']) {
+    await hub.locator(`[data-hub-id="${hubId}"]`).click();
+    const rows = hub.locator('[data-list="contracts"] [data-contract][data-state="open"][data-min-rep="0"]');
+    await expect(rows.first()).toBeVisible();
+    for (let i = 0; i < (await rows.count()); i++) {
+      const r = rows.nth(i);
+      const material = (await r.getAttribute('data-material'))!;
+      const quantity = await attr(r, 'data-quantity');
+      const ask = await attr(hub.locator(`tr[data-material="${material}"]`), 'data-ask');
+      const cost = quantity * ask * 1.07;
+      if (!best || cost < best.cost) best = { hubId, id: (await r.getAttribute('data-contract'))!, material, quantity, cost };
+    }
+  }
+  expect(best!.cost, 'an affordable contract').toBeLessThan(1000);
+  const c = best!;
+  await hub.locator(`[data-hub-id="${c.hubId}"]`).click();
+  const row = hub.locator(`[data-contract="${c.id}"]`);
+  await row.locator('[data-action="take"]').click();
+  await expect(hub.locator('[data-message]')).toContainText('Kontrakt przyjęty');
+  await expect(row).toHaveAttribute('data-state', 'taken');
+
+  // the goods from the faction in that hub
+  const quote = hub.locator(`tr[data-material="${c.material}"]`);
+  await quote.click();
+  const trade = hub.locator('[data-trade]');
+  await trade.locator('[data-input="quantity"]').fill(String(c.quantity));
+  await trade.locator('[data-input="price"]').fill(String(await attr(quote, 'data-ask')));
+  await trade.locator('[data-action="buy"]').click();
+  await expect(hub.locator('[data-message]')).toHaveText(`Zrealizowano ${c.quantity.toLocaleString('pl-PL')}`);
+  await expect(quote).toHaveAttribute('data-stock', String(c.quantity));
+
+  const before = await attr(credits, 'data-value');
+  const reward = await attr(row, 'data-reward');
+  await row.locator('[data-action="deliver"]').click();
+  await expect(hub.locator('[data-message]')).toContainText('Kontrakt rozliczony');
+  await expect(row).toHaveAttribute('data-state', 'delivered');
+  await expect(quote).toHaveAttribute('data-stock', '0');
+  await expect.poll(async () => Math.abs((await attr(credits, 'data-value')) - (before + reward))).toBeLessThan(0.011);
+  await expect.poll(async () => attr(hub.locator('[data-standing]'), 'data-reputation')).toBeGreaterThanOrEqual(5);
+});

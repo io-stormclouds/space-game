@@ -201,11 +201,26 @@ describe.skipIf(!existsSync(WASM))('replica of a server world (B4)', () => {
       credits: 1000,
       fee: 0.02,
       npc: true,
-      hubs: [{ id: 'hub-sirius', name: 'Syriusz', star: 'Sirius A', quotes: [], faction: 'Konsorcjum Orion', distanceLy: 17.4, travelSeconds: 100, stock: {}, book: [] }],
+      hubs: [
+        {
+          id: 'hub-sirius',
+          name: 'Syriusz',
+          star: 'Sirius A',
+          quotes: [],
+          faction: 'Konsorcjum Orion',
+          distanceLy: 17.4,
+          travelSeconds: 100,
+          stock: {},
+          book: [],
+          reputation: 0,
+          tariff: 0.05,
+        },
+      ],
       orders: [],
       shipments: [],
       trades: [],
       players: [{ id: 'npc-1', name: 'Dowódca Ares', corporation: 'Unia Lagrange', homeStar: 'Procyon A', colonies: 2, score: 900, npc: true }],
+      contracts: [],
       time: 0,
     };
     server.emit('message', { type: 'galaxy', view });
