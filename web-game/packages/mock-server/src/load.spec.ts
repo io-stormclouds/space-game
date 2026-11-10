@@ -1,4 +1,4 @@
-import { computeEconomy } from '@space-game/domain';
+import { TC_C, computeEconomy, dressTerrain, tileIndexOf } from '@space-game/domain';
 import { LOAD_SPECS, buildLoad } from './load';
 import { MockServer } from './server';
 
@@ -19,11 +19,41 @@ describe('load scenarios (F5)', () => {
     expect(JSON.stringify(buildLoad('M', eco).world)).toBe(JSON.stringify(buildLoad('M', eco).world));
   });
 
+  it('MT is the M world unchanged plus a colony beside the ruins of Tau Ceti c, where the colony site moves', () => {
+    const m = buildLoad('M', eco);
+    const mt = buildLoad('MT', eco);
+    const w = mt.world;
+    expect(w.structures.slice(0, m.world.structures.length)).toEqual(m.world.structures);
+    expect(w.ships).toEqual(m.world.ships);
+    expect(w.rovers).toEqual(m.world.rovers);
+    expect(w.colony.siteBodyId).toBe(TC_C);
+    const colony = w.structures.slice(m.world.structures.length);
+    expect(colony.length).toBe(LOAD_SPECS.MT.terrainColony!.buildings);
+    expect(colony.every((s) => s.bodyId === TC_C && s.state === 'ACTIVE')).toBe(true);
+    expect(colony[0]!.kind).toBe('HQ');
+    expect(new Set(colony.map((s) => s.level))).toEqual(new Set([1, 3, 5]));
+    // beside the settlement: within a few rings of its centre, never on a ruin building or another structure
+    const grid = mt.grids.get(TC_C)!;
+    const plan = dressTerrain(grid);
+    const ring = new Map([[plan.settlementCenter!, 0]]);
+    for (const [t, d] of ring) for (const n of grid.tiles[t]!.neighbors) if (!ring.has(n)) ring.set(n, d + 1);
+    const tiles = colony.flatMap((s) => s.tiles.map(tileIndexOf));
+    expect(Math.max(...tiles.map((t) => ring.get(t)!))).toBeLessThanOrEqual(5);
+    const ruins = new Set(plan.decor.filter((d) => !d.model.startsWith('detail_') && d.model !== 'mountain').map((d) => d.tile));
+    expect(tiles.filter((t) => ruins.has(t))).toEqual([]);
+    const all = w.structures.filter((s) => s.bodyId === TC_C).flatMap((s) => s.tiles);
+    expect(new Set(all).size).toBe(all.length);
+  });
+
   it('starts through the mock server and keeps stepping', () => {
     const s = new MockServer();
     s.start('load-m');
     s.stepMany(60);
     expect(s.snapshot().world.structures.length).toBe(300);
     expect(s.snapshot().scenarioId).toBe('load-m');
+    s.start('load-m-teren');
+    s.stepMany(60);
+    expect(s.snapshot().world.structures.length).toBe(300 + LOAD_SPECS.MT.terrainColony!.buildings);
+    expect(s.snapshot().world.colony.siteBodyId).toBe(TC_C);
   });
 });

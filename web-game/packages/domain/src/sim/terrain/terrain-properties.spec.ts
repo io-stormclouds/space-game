@@ -1,24 +1,29 @@
 import { readdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { TERRAIN_RULES } from '../../economy/terrain-data';
 import { bodyId } from '../../shared/ids';
-import { INITIAL_BODIES } from '../config/initial-world';
+import { INITIAL_BODIES, MOON_ID, PLANET_ID } from '../config/initial-world';
 import { buildGoldbergGrid } from '../math/goldberg-grid';
+import { footprintTiles } from '../math/footprint';
 import { fbm } from '../math/seeded-noise';
 import { Vec3, vec3 } from '../math/vec3';
 import { CelestialBody } from '../models/celestial-body.model';
 import { PlanetGrid } from '../models/planet-grid.model';
-import { TAU_CETI_BODIES } from '../scenarios/tau-ceti';
+import { buildWorldGrids } from '../scenario';
+import { TAU_CETI_BODIES, TC_B, TC_C, TC_D, TC_E, TC_F } from '../scenarios/tau-ceti';
+import { BIOMES } from './terrain-biomes';
 import { MAX_ROCKS, MAX_TREES, generateTerrain } from './terrain-generator';
-import { TerrainBiome, TerrainKind, TerrainPlan } from './terrain-types';
+import { TerrainBiome, TerrainConfig, TerrainKind, TerrainPlan } from './terrain-types';
 import { TileFrame, buildTileFrames } from './tile-frame';
 import { ROAD_MASKS, SHORE_MASKS } from './tile-variant';
 
 /*
  * Property tests of the terrain generator over a matrix: Goldberg grids n = 3…8 (the real Tau Ceti and PoC
- * deposit layouts plus single-ore layouts) × noise seeds × biomes × settlement aims. Each check collects
- * every offender as "<combination> tile <i>: <what>" and asserts the list is empty, so one run shows them
- * all. `terrain.spec.ts` keeps the detailed checks of Tau Ceti c.
+ * deposit layouts plus single-ore layouts) × noise seeds × styles (the four biomes and the config overrides
+ * the bodies use: regolith ground, dried lake beds, the start planet's fewer lakes and dry landing cap) ×
+ * settlement aims. Each check collects every offender as "<combination> tile <i>: <what>" and asserts the
+ * list is empty, so one run shows them all. `terrain.spec.ts` keeps the detailed checks of Tau Ceti c.
  */
 
 const KIT_DIR = resolve(
@@ -51,9 +56,11 @@ const fromBody = (b: CelestialBody): GridCase => ({
   phi: b.initialAngle,
 });
 
+const GAME_BODIES = [...INITIAL_BODIES, ...TAU_CETI_BODIES].filter((b) => b.surfaceGrid);
+
 const GRID_CASES: GridCase[] = [
   // PoC home planet (n = 8) and moon (n = 3), Tau Ceti b–f (n = 5, 5, 6, 8, 6)
-  ...[...INITIAL_BODIES, ...TAU_CETI_BODIES].filter((b) => b.surfaceGrid).map(fromBody),
+  ...GAME_BODIES.map(fromBody),
   // PoC medieval showcase planet (poc/space-3d-poc config: COLONY_SURFACE, phase 0.85π + 2 · 12°)
   { label: 'poc-medieval', n: 8, depositSeed: 31, phi: Math.PI * 0.85 + (24 * Math.PI) / 180 },
   // single-ore layouts
@@ -62,13 +69,28 @@ const GRID_CASES: GridCase[] = [
 ];
 
 const SEEDS = [1, 2, 7, 11, 23, 102];
-const BIOMES: TerrainBiome[] = ['mixed', 'medieval'];
+
+/** A terrain config without its seed (the seed comes from `SEEDS`). */
+type Style = Omit<TerrainConfig, 'seed'>;
+
+/** The four biomes and the overrides the bodies use (T-25, T-26). */
+const STYLES: ReadonlyArray<{ label: string; style: Style }> = [
+  { label: 'mixed', style: { biome: 'mixed' } },
+  { label: 'medieval', style: { biome: 'medieval' } },
+  { label: 'winter', style: { biome: 'winter' } },
+  { label: 'dry', style: { biome: 'dry' } },
+  { label: 'dry/regolith', style: { biome: 'dry', ground: 'regolith' } },
+  { label: 'medieval/dune', style: { biome: 'medieval', basin: 'dune' } },
+  { label: 'mixed/start', style: { biome: 'mixed', basinLevel: 0.39, landingCap: 0.6 } },
+];
 
 interface Combo {
   tag: string;
   gridCase: GridCase;
   n: number;
   seed: number;
+  label: string;
+  style: Style;
   biome: TerrainBiome;
   aim: Vec3 | undefined;
   grid: PlanetGrid;
@@ -85,26 +107,39 @@ const GRIDS = GRID_CASES.map((g) => {
   return { gridCase: g, grid, frames: buildTileFrames(grid) };
 });
 
-const COMBOS: Combo[] = GRIDS.flatMap(({ gridCase, grid, frames }) =>
-  SEEDS.flatMap((seed) =>
-    BIOMES.flatMap((biome) =>
-      [undefined, vec3(-Math.cos(gridCase.phi), 0.9, -Math.sin(gridCase.phi))].map((aim) => ({
-        tag: `n=${gridCase.n} grid=${gridCase.label} seed=${seed} biome=${biome} aim=${aim ? 'phi' : 'default'}`,
-        gridCase,
-        n: gridCase.n,
-        seed,
-        biome,
-        aim,
-        grid,
-        frames,
-      })),
-    ),
-  ),
+/** Grid × seed × style: the matrix, plus every game body with its own config (label `body`). */
+interface Case {
+  g: (typeof GRIDS)[number];
+  seed: number;
+  label: string;
+  style: Style;
+}
+const CASES: Case[] = [
+  ...GRIDS.flatMap((g) => SEEDS.flatMap((seed) => STYLES.map(({ label, style }) => ({ g, seed, label, style })))),
+  ...GAME_BODIES.map((b) => {
+    const { seed, ...style } = b.surfaceGrid!.terrain!;
+    return { g: GRIDS.find((x) => x.gridCase.label === b.id)!, seed, label: 'body', style };
+  }),
+];
+
+const COMBOS: Combo[] = CASES.flatMap(({ g: { gridCase, grid, frames }, seed, label, style }) =>
+  [undefined, vec3(-Math.cos(gridCase.phi), 0.9, -Math.sin(gridCase.phi))].map((aim) => ({
+    tag: `n=${gridCase.n} grid=${gridCase.label} seed=${seed} style=${label} aim=${aim ? 'phi' : 'default'}`,
+    gridCase,
+    n: gridCase.n,
+    seed,
+    label,
+    style,
+    biome: style.biome,
+    aim,
+    grid,
+    frames,
+  })),
 );
 
-const optsOf = (c: Combo) => ({ biome: c.biome, seed: c.seed, aim: c.aim });
+const optsOf = (c: Combo) => ({ ...c.style, seed: c.seed, aim: c.aim });
 
-/** Plans of every combination, generated lazily (so a throw fails a test, not the collection) and once. */
+/** Plans of every combination, generated once (in `beforeAll`, so a throw fails the suite, not the collection). */
 let runCache: Run[] | null = null;
 function runs(): Run[] {
   if (!runCache) {
@@ -139,6 +174,11 @@ const TREES = new Set(['detail_treeA', 'detail_treeB', 'detail_treeC']);
 const ROCKS = new Set(['detail_rocks', 'detail_rocks_small', 'mountain']);
 /** Settlement models (everything that is not scattered nature). */
 const isBuilding = (model: string): boolean => !model.startsWith('detail_') && model !== 'mountain';
+
+/** Classes drawn as a lowered basin (`hex_water`): lakes, frozen lakes, dune hollows and dried lake beds. */
+const BASINS = new Set<TerrainKind>(['water', 'ice', 'dune']);
+const isBasin = (k: TerrainKind | undefined): boolean => k !== undefined && BASINS.has(k);
+const buildable = (k: TerrainKind): boolean => TERRAIN_RULES.kinds[k].buildable;
 
 /** Kit side k of a tile turned by k0 lies on tile edge (k0 + k + 5) mod 6 (see `chooseVariant`). */
 const edgeOfSide = (k0: number, k: number): number => (k0 + k + 5) % 6;
@@ -176,6 +216,10 @@ function ringsAround(grid: PlanetGrid, center: number, maxRing: number): Map<num
   return ring;
 }
 
+/** Tile with the largest `normal.y` (first one on a tie): the top tile. */
+const topIndex = (grid: PlanetGrid): number =>
+  grid.tiles.reduce((best, t) => (t.normal.y > grid.tiles[best].normal.y ? t.index : best), 0);
+
 const firstDiff = (a: ReadonlyArray<unknown>, b: ReadonlyArray<unknown>): number => {
   for (let i = 0; i < Math.max(a.length, b.length); i++)
     if (JSON.stringify(a[i]) !== JSON.stringify(b[i])) return i;
@@ -184,63 +228,93 @@ const firstDiff = (a: ReadonlyArray<unknown>, b: ReadonlyArray<unknown>): number
 
 // ------------------------------------------------------------- classification replica (for the Rust port)
 
-/** Thresholds of `generateTerrain`, per biome (`settle` = medieval). */
-const THRESHOLDS: Readonly<
-  Record<TerrainBiome, { water: number; snow: number; rock: number; forest: number }>
-> = {
-  mixed: { water: 0.42, snow: 0.84, rock: 0.64, forest: 0.57 },
-  medieval: { water: 0.36, snow: 0.88, rock: 0.67, forest: 0.55 },
+/** Gameplay table of the biomes, written out here (the Rust port mirrors it); `null` = rule off. */
+interface ReplicaRules {
+  ground: TerrainKind;
+  basin: TerrainKind;
+  basinLevel: number;
+  polar: number | null;
+  rock: number | null;
+  forest: number | null;
+  forestLat: number | null;
+  settlement: boolean;
+}
+
+const REPLICA: Readonly<Record<TerrainBiome, ReplicaRules>> = {
+  mixed: { ground: 'grass', basin: 'water', basinLevel: 0.42, polar: 0.84, rock: 0.64, forest: 0.57, forestLat: null, settlement: false },
+  medieval: { ground: 'grass', basin: 'water', basinLevel: 0.36, polar: 0.88, rock: 0.67, forest: 0.55, forestLat: null, settlement: true },
+  winter: { ground: 'snow', basin: 'ice', basinLevel: 0.44, polar: null, rock: 0.66, forest: 0.6, forestLat: 0.7, settlement: false },
+  dry: { ground: 'sand', basin: 'dune', basinLevel: 0.33, polar: null, rock: 0.62, forest: null, forestLat: null, settlement: false },
 };
 
+const rulesOf = (s: Style): ReplicaRules => {
+  const b = REPLICA[s.biome];
+  return { ...b, ground: s.ground ?? b.ground, basin: s.basin ?? b.basin, basinLevel: s.basinLevel ?? b.basinLevel };
+};
+
+/** Smallest distance seen per compared threshold (`f1/basin`, `lat/polar`, …), for the margin report. */
+const MARGIN_BY: Record<string, number> = {};
+
 /**
- * The class chain of `generateTerrain` replicated term for term, plus the distance of each compared value
+ * The class chain of `classifyTerrain` replicated term for term, plus the distance of each compared value
  * to its threshold (only the comparisons the chain actually makes).
  */
-function classify(
-  normal: Vec3,
-  seed: number,
-  biome: TerrainBiome,
-): { kind: TerrainKind; margin: number; at: string } {
-  const T = THRESHOLDS[biome];
+function classify(normal: Vec3, seed: number, T: ReplicaRules): { kind: TerrainKind; margin: number; at: string } {
   const p = (k: number): Vec3 => vec3(normal.x * k + 7, normal.y * k + 7, normal.z * k + 7);
   const f1 = fbm(seed, p(2.6));
   const f2 = fbm(seed + 11, p(3.4));
   const f3 = fbm(seed + 23, p(4.2));
   const lat = Math.abs(normal.y);
-  let margin = Math.abs(f1 - T.water);
-  let at = 'f1/water';
+  let margin = Math.abs(f1 - T.basinLevel);
+  let at = 'f1/basin';
+  MARGIN_BY[at] = Math.min(MARGIN_BY[at] ?? Infinity, margin);
   const note = (d: number, what: string): void => {
+    MARGIN_BY[what] = Math.min(MARGIN_BY[what] ?? Infinity, Math.abs(d));
     if (Math.abs(d) < margin) {
       margin = Math.abs(d);
       at = what;
     }
   };
-  if (f1 < T.water) return { kind: 'water', margin, at };
-  note(lat - T.snow, 'lat/snow');
-  if (lat > T.snow) return { kind: 'snow', margin, at };
-  note(f2 - T.rock, 'f2/rock');
-  if (f2 > T.rock) return { kind: 'rock', margin, at };
-  note(f3 - T.forest, 'f3/forest');
-  if (f3 > T.forest) return { kind: 'forest', margin, at };
-  return { kind: 'grass', margin, at };
+  if (f1 < T.basinLevel) return { kind: T.basin, margin, at };
+  if (T.polar !== null) {
+    note(lat - T.polar, 'lat/polar');
+    if (lat > T.polar) return { kind: 'snow', margin, at };
+  }
+  if (T.rock !== null) {
+    note(f2 - T.rock, 'f2/rock');
+    if (f2 > T.rock) return { kind: 'rock', margin, at };
+  }
+  if (T.forest !== null) {
+    note(f3 - T.forest, 'f3/forest');
+    if (f3 > T.forest) {
+      if (T.forestLat === null) return { kind: 'forest', margin, at };
+      note(lat - T.forestLat, 'lat/forestLat');
+      if (lat < T.forestLat) return { kind: 'forest', margin, at };
+    }
+  }
+  return { kind: T.ground, margin, at };
 }
 
-/** Classes before the settlement, per grid × seed × biome (the aim does not enter the classification). */
-const CLASSIFIED = GRIDS.flatMap(({ gridCase, grid }) =>
-  SEEDS.flatMap((seed) =>
-    BIOMES.map((biome) => ({
-      key: `${gridCase.label}/${seed}/${biome}`,
-      tag: `n=${gridCase.n} grid=${gridCase.label} seed=${seed} biome=${biome}`,
-      tiles: grid.tiles.map((t) => {
-        const c = classify(t.normal, seed, biome);
-        // no water on a pentagon or a deposit (the generator's fix-up, no threshold involved)
-        const kind: TerrainKind =
-          c.kind === 'water' && (t.kind === 'PENT' || t.deposit !== null) ? 'grass' : c.kind;
-        return { ...c, kind };
-      }),
-    })),
-  ),
-);
+/** Classes before the settlement, per grid × seed × style (the aim does not enter the classification). */
+const CLASSIFIED = CASES.map(({ g: { gridCase, grid }, seed, label, style }) => {
+  const T = rulesOf(style);
+  const cap = style.landingCap;
+  return {
+    key: `${gridCase.label}/${seed}/${label}`,
+    tag: `n=${gridCase.n} grid=${gridCase.label} seed=${seed} style=${label}`,
+    tiles: grid.tiles.map((t) => {
+      const c = classify(t.normal, seed, T);
+      // no basin on a pentagon or a deposit (a fix-up, no threshold involved)
+      const fixed = c.kind === T.basin && (t.kind === 'PENT' || t.deposit !== null) ? { ...c, kind: T.ground } : c;
+      if (cap === undefined) return fixed;
+      // the landing zone compares normal.y with a threshold on every tile: it counts for the margin
+      const d = Math.abs(t.normal.y - cap);
+      MARGIN_BY['n.y/landingCap'] = Math.min(MARGIN_BY['n.y/landingCap'] ?? Infinity, d);
+      const margin = d < fixed.margin ? { margin: d, at: 'n.y/landingCap' } : {};
+      return { ...fixed, ...margin, kind: t.normal.y > cap ? T.ground : fixed.kind };
+    }),
+  };
+});
 const CLASSIFIED_BY_KEY = new Map(CLASSIFIED.map((c) => [c.key, c]));
 
 let MIN_MARGIN = Infinity;
@@ -257,10 +331,25 @@ for (const c of CLASSIFIED) {
 // ----------------------------------------------------------------------------------------------- tests
 
 describe(`terrain generator properties (${COMBOS.length} combinations)`, () => {
-  it('covers every grid size, seed and biome in at least 60 combinations', () => {
+  beforeAll(() => {
+    runs();
+  }, 120_000);
+
+  it('covers every grid size, seed and style in at least 60 combinations', () => {
     expect(COMBOS.length).toBeGreaterThanOrEqual(60);
     expect(new Set(COMBOS.map((c) => c.n))).toEqual(new Set([3, 4, 5, 6, 8]));
+    expect(new Set(COMBOS.map((c) => c.biome))).toEqual(new Set(['mixed', 'medieval', 'winter', 'dry']));
+    // every game body with its own config (seed and overrides), both aims
+    expect(COMBOS.filter((c) => c.label === 'body').map((c) => c.gridCase.label)).toEqual(GAME_BODIES.flatMap((b) => [b.id, b.id]));
     expect(KIT_FILES.has('hex_forest')).toBe(true);
+  });
+
+  it('the replica table is the biome table of the generator', () => {
+    for (const biome of Object.keys(REPLICA) as TerrainBiome[]) {
+      const { dress: _, ...rules } = BIOMES[biome];
+      expect(rules, biome).toEqual(REPLICA[biome]);
+    }
+    expect(Object.keys(BIOMES).sort()).toEqual(Object.keys(REPLICA).sort());
   });
 
   it('tile frames: every edge of every tile faces a distinct neighbour that faces back', () => {
@@ -306,22 +395,46 @@ describe(`terrain generator properties (${COMBOS.length} combinations)`, () => {
     );
   });
 
-  it('ignores the aim on mixed bodies (it only places the settlement)', () => {
+  it('ignores the aim on bodies without a settlement (it only places the settlement)', () => {
     const byKey = new Map<string, TerrainPlan>();
     expectNone(
       collect(
-        runs().filter((r) => r.biome === 'mixed'),
+        runs().filter((r) => !REPLICA[r.biome].settlement),
         (r, fail) => {
-          const key = `${r.gridCase.label}/${r.seed}`;
+          const key = `${r.gridCase.label}/${r.seed}/${r.label}`;
           const other = byKey.get(key);
           if (!other) return void byKey.set(key, r.plan);
           const i = firstDiff(
-            [...r.plan.variants, ...r.plan.decor],
-            [...other.variants, ...other.decor],
+            [...r.plan.kinds, ...r.plan.variants, ...r.plan.decor],
+            [...other.kinds, ...other.variants, ...other.decor],
           );
-          if (i >= 0) fail(i < r.plan.variants.length ? i : null, 'plan depends on the aim');
+          if (i >= 0) fail(null, `plan depends on the aim (item ${i})`);
         },
       ),
+    );
+  });
+
+  it('uses only the classes of its biome; the plan names the basin and the ground of the config', () => {
+    const allowed: Readonly<Record<TerrainBiome, ReadonlyArray<TerrainKind>>> = {
+      mixed: ['grass', 'forest', 'rock', 'snow', 'water'],
+      medieval: ['grass', 'forest', 'rock', 'snow', 'water'],
+      winter: ['snow', 'forest', 'rock', 'ice'],
+      dry: ['sand', 'rock', 'dune'],
+    };
+    expectNone(
+      collect(runs(), ({ plan, style, biome, grid }, fail) => {
+        const T = rulesOf(style);
+        if (plan.basin !== T.basin) fail(null, `plan basin ${plan.basin}, config ${T.basin}`);
+        if (plan.ground !== T.ground) fail(null, `plan ground ${plan.ground}, config ${T.ground}`);
+        // the ground and the basin of the config replace the biome's
+        const ok = new Set(allowed[biome].map((k) => (k === REPLICA[biome].ground ? T.ground : k === REPLICA[biome].basin ? T.basin : k)));
+        plan.kinds.forEach((k, i) => {
+          if (!ok.has(k)) fail(i, `${k} on a ${biome} body`);
+          // winter forest only at |lat| < 0.7
+          if (biome === 'winter' && k === 'forest' && Math.abs(grid.tiles[i].normal.y) >= 0.7)
+            fail(i, `forest at |lat| ${Math.abs(grid.tiles[i].normal.y).toFixed(3)}`);
+        });
+      }),
     );
   });
 
@@ -344,27 +457,45 @@ describe(`terrain generator properties (${COMBOS.length} combinations)`, () => {
     );
   });
 
-  it('keeps deposits free of water, roads, decor and raised transitions; pentagons free of water, roads and buildings', () => {
+  it('keeps deposits free of basins, unbuildable classes, roads, decor and raised transitions; pentagons free of basins, unbuildable classes, roads and buildings', () => {
     expectNone(
       collect(runs(), ({ grid, plan }, fail) => {
         const decorOn = new Map<number, string[]>();
         for (const d of plan.decor) decorOn.set(d.tile, [...(decorOn.get(d.tile) ?? []), d.model]);
         grid.tiles.forEach((t, i) => {
+          const k = plan.kinds[i];
           if (t.deposit) {
-            if (plan.kinds[i] === 'water') fail(i, 'water on a deposit');
+            if (isBasin(k)) fail(i, `${k} on a deposit`);
+            if (!buildable(k)) fail(i, `unbuildable ${k} on a deposit`);
             if (plan.road.has(i)) fail(i, 'road on a deposit');
             if (decorOn.has(i)) fail(i, `decor ${decorOn.get(i)} on a deposit`);
             if (plan.variants[i]?.id.startsWith('hex_forest_transition') || plan.variants[i]?.id === 'hex_forest_waterD')
               fail(i, `${plan.variants[i]!.id} on a deposit`);
           }
           if (t.kind === 'PENT') {
-            if (plan.kinds[i] === 'water') fail(i, 'water on a pentagon');
+            if (isBasin(k)) fail(i, `${k} on a pentagon`);
+            if (!buildable(k)) fail(i, `unbuildable ${k} on a pentagon`);
             if (plan.road.has(i)) fail(i, 'road on a pentagon');
             const buildings = (decorOn.get(i) ?? []).filter(isBuilding);
             if (buildings.length) fail(i, `building ${buildings} on a pentagon`);
           }
         });
       }),
+    );
+  });
+
+  it('makes the landing zone plain ground: every tile with normal.y > landingCap, the top tile inside', () => {
+    expectNone(
+      collect(
+        runs().filter((r) => r.style.landingCap !== undefined),
+        ({ grid, plan, style }, fail) => {
+          const cap = style.landingCap!;
+          if (!(grid.tiles[topIndex(grid)].normal.y > cap)) fail(topIndex(grid), 'top tile outside the cap');
+          grid.tiles.forEach((t, i) => {
+            if (t.normal.y > cap && plan.kinds[i] !== rulesOf(style).ground) fail(i, `${plan.kinds[i]} in the landing zone`);
+          });
+        },
+      ),
     );
   });
 
@@ -386,7 +517,7 @@ describe(`terrain generator properties (${COMBOS.length} combinations)`, () => {
             fail(i, 'road on a tile without a kit tile');
             continue;
           }
-          if (plan.kinds[i] !== 'grass') fail(i, `road tile is ${plan.kinds[i]}`);
+          if (plan.kinds[i] !== plan.ground) fail(i, `road tile is ${plan.kinds[i]}, ground ${plan.ground}`);
           const want = frames[i].edgeNb.map((nb) => plan.road.has(nb));
           const roadSides = want.filter(Boolean).length;
           if (roadSides === 0) {
@@ -419,77 +550,93 @@ describe(`terrain generator properties (${COMBOS.length} combinations)`, () => {
   });
 
   /*
-   * Shore rule of `chooseVariant`: exact match. A land tile (not road) with 1 water side or 2 adjacent water
-   * sides gets waterB/C or waterA turned so the mask's water sides are exactly the water edges; anything
-   * else gets no shore tile. The pond waterD needs grass and no water neighbour.
+   * Shore rule of `chooseVariant`: exact match. Every basin class (water, ice, dune) is a lowered hex_water
+   * tile, and a land tile (not road) with 1 basin side or 2 adjacent basin sides gets waterB/C or waterA
+   * turned so the mask's water sides are exactly the basin edges; anything else gets no shore tile. The
+   * pond waterD needs the biome's pond class (grass in mixed and medieval, none in winter and dry) and no
+   * basin neighbour.
    */
-  it('shore tiles match the water edges exactly, ponds sit away from water, hex_water only on water', () => {
+  it('shore tiles match the basin edges exactly, ponds sit away from basins, hex_water only on basins', () => {
     expectNone(
-      collect(runs(), ({ grid, plan, frames }, fail) => {
+      collect(runs(), ({ grid, plan, frames, biome }, fail) => {
+        const pond = BIOMES[biome].dress.pond;
         grid.tiles.forEach((t, i) => {
           const v = plan.variants[i];
           if (!v) return;
-          if ((v.id === 'hex_water') !== (plan.kinds[i] === 'water'))
+          if ((v.id === 'hex_water') !== isBasin(plan.kinds[i]))
             fail(i, `${v.id} on ${plan.kinds[i]}`);
-          const water = frames[i].edgeNb.map((nb) => plan.kinds[nb] === 'water');
+          const water = frames[i].edgeNb.map((nb) => isBasin(plan.kinds[nb]));
           const nWater = water.filter(Boolean).length;
           const shore = /^hex_forest_water([ABC])$/.exec(v.id)?.[1];
           if (shore !== undefined) {
             const mask = SHORE_MASKS[shore]!;
-            if (plan.kinds[i] === 'water' || plan.road.has(i))
+            if (isBasin(plan.kinds[i]) || plan.road.has(i))
               fail(i, `${v.id} on ${plan.kinds[i]} road=${plan.road.has(i)}`);
             if (mismatches(mask, v.k0, water) !== 0)
               fail(
                 i,
-                `${v.id}/${v.k0} water sides [${[...maskEdges(mask, v.k0)]}] ≠ water edges [${water.flatMap((w, e) => (w ? [e] : []))}]`,
+                `${v.id}/${v.k0} water sides [${[...maskEdges(mask, v.k0)]}] ≠ basin edges [${water.flatMap((w, e) => (w ? [e] : []))}]`,
               );
           }
           if (v.id === 'hex_forest_waterD') {
-            if (plan.kinds[i] !== 'grass') fail(i, `pond on ${plan.kinds[i]}`);
-            if (t.neighbors.some((nb) => plan.kinds[nb] === 'water')) fail(i, 'pond next to water');
+            if (pond === null || plan.kinds[i] !== pond) fail(i, `pond on ${plan.kinds[i]} in ${biome}`);
+            if (t.neighbors.some((nb) => isBasin(plan.kinds[nb]))) fail(i, 'pond next to a basin');
           }
           // coverage: a shore the masks can express is never missed
-          if (plan.kinds[i] !== 'water' && !plan.road.has(i)) {
+          if (!isBasin(plan.kinds[i]) && !plan.road.has(i)) {
             const adjacentPair = nWater === 2 && water.some((w, e) => w && water[(e + 1) % 6]);
             if (nWater === 1 && v.id !== 'hex_forest_waterB' && v.id !== 'hex_forest_waterC')
-              fail(i, `one water side but ${v.id}`);
+              fail(i, `one basin side but ${v.id}`);
             if (adjacentPair && v.id !== 'hex_forest_waterA')
-              fail(i, `two adjacent water sides but ${v.id}`);
+              fail(i, `two adjacent basin sides but ${v.id}`);
           }
         });
       }),
     );
   });
 
-  it('uses both one-side shore tiles (waterB and waterC) about equally', () => {
-    let b = 0;
-    let c = 0;
-    for (const { plan } of runs()) for (const v of plan.variants) {
-      if (v?.id === 'hex_forest_waterB') b++;
-      if (v?.id === 'hex_forest_waterC') c++;
+  it('uses both one-side shore tiles (waterB and waterC) about equally, in every biome', () => {
+    for (const biome of ['mixed', 'medieval', 'winter', 'dry'] as const) {
+      let b = 0;
+      let c = 0;
+      for (const { plan } of runs().filter((r) => r.biome === biome)) for (const v of plan.variants) {
+        if (v?.id === 'hex_forest_waterB') b++;
+        if (v?.id === 'hex_forest_waterC') c++;
+      }
+      expect(b, biome).toBeGreaterThan(100);
+      expect(c / (b + c), biome).toBeGreaterThan(0.35);
+      expect(c / (b + c), biome).toBeLessThan(0.65);
     }
-    expect(b).toBeGreaterThan(100);
-    expect(c / (b + c)).toBeGreaterThan(0.35);
-    expect(c / (b + c)).toBeLessThan(0.65);
   });
 
   /*
-   * Transition rule of `chooseVariant`: only grass or forest tiles; B when a neighbour is snow (and a hash
-   * passes), else A when a neighbour is rock. The raised half (kit side 0, tile edge (k0 + 5) mod 6) faces
-   * the FIRST edge with that neighbour (findIndex). Never on a deposit (the generator falls back to hex_forest).
+   * Transition rule of `chooseVariant`: only on the biome's `transitionOn` classes (grass and forest in
+   * mixed and medieval; forest and the snow ground in winter; none in dry); B when a neighbour is snow (and a hash
+   * passes), else A when a neighbour is rock, never towards its own class. The raised half (kit side 0,
+   * tile edge (k0 + 5) mod 6) faces the FIRST edge with that neighbour (findIndex). Never on a deposit (the
+   * generator falls back to hex_forest).
    */
-  it('raised transitions face the first rock (A) or snow (B) neighbour of a grass or forest tile', () => {
+  it('raised transitions face the first rock (A) or snow (B) neighbour of a tile the biome raises', () => {
     const target: Readonly<Record<string, TerrainKind>> = {
       hex_forest_transitionA: 'rock',
       hex_forest_transitionB: 'snow',
     };
+    const raises: Readonly<Record<TerrainBiome, ReadonlyArray<TerrainKind>>> = {
+      mixed: ['grass', 'forest'],
+      medieval: ['grass', 'forest'],
+      winter: ['forest', 'snow'],
+      dry: [],
+    };
+    const seen: Record<string, number> = {};
     expectNone(
-      collect(runs(), ({ grid, plan, frames }, fail) => {
+      collect(runs(), ({ grid, plan, frames, biome }, fail) => {
+        expect(BIOMES[biome].dress.transitionOn).toEqual(raises[biome]);
         plan.variants.forEach((v, i) => {
           const want = v ? target[v.id] : undefined;
           if (!v || want === undefined) return;
-          if (plan.kinds[i] !== 'grass' && plan.kinds[i] !== 'forest')
-            fail(i, `${v.id} on ${plan.kinds[i]}`);
+          seen[`${biome} ${plan.kinds[i]} ${v.id}`] = (seen[`${biome} ${plan.kinds[i]} ${v.id}`] ?? 0) + 1;
+          if (!raises[biome].includes(plan.kinds[i])) fail(i, `${v.id} on ${plan.kinds[i]} in ${biome}`);
+          if (plan.kinds[i] === want) fail(i, `${v.id} towards its own class`);
           if (grid.tiles[i].deposit) fail(i, `${v.id} on a deposit`);
           const raised = (v.k0 + 5) % 6;
           const first = frames[i].edgeNb.findIndex((nb) => plan.kinds[nb] === want);
@@ -499,11 +646,21 @@ describe(`terrain generator properties (${COMBOS.length} combinations)`, () => {
         });
       }),
     );
+    // winter raises its forest (B) and its snow ground (A); dry is flat
+    expect(seen['winter forest hex_forest_transitionB']).toBeGreaterThan(0);
+    expect(seen['winter snow hex_forest_transitionA']).toBeGreaterThan(0);
+    expect(Object.keys(seen).filter((k) => k.startsWith('dry '))).toEqual([]);
   });
 
-  it('places decor on existing tiles within budget: trees on forest, rocks on rock, one building per tile', () => {
+  /*
+   * Decor: trees on forest (temperate and winter), and in dry a few small trees as bushes (`sm` < 1) on the
+   * ground; mountains and rock piles on rock; small rocks also on the ground in winter and dry. Only models
+   * of the hex kit, within the budget.
+   */
+  it('places decor on existing tiles within budget: trees and rocks where the biome puts them, one building per tile', () => {
+    const counts: Record<string, number> = {};
     expectNone(
-      collect(runs(), ({ grid, plan }, fail) => {
+      collect(runs(), ({ grid, plan, biome }, fail) => {
         const buildingOn = new Map<number, string>();
         for (const d of plan.decor) {
           if (!isBuilding(d.model)) continue;
@@ -519,40 +676,50 @@ describe(`terrain generator properties (${COMBOS.length} combinations)`, () => {
             fail(null, `${d.model} on missing tile ${i}`);
             continue;
           }
+          const k = plan.kinds[i];
           if (!KIT_FILES.has(d.model)) fail(i, `unknown model ${d.model}`);
           if (TREES.has(d.model)) {
             trees++;
-            if (plan.kinds[i] !== 'forest') fail(i, `${d.model} on ${plan.kinds[i]}`);
+            const bush = biome === 'dry' && k === plan.ground && d.sm !== undefined && d.sm < 1;
+            if (bush) counts[`${biome} bush`] = (counts[`${biome} bush`] ?? 0) + 1;
+            if (!(k === 'forest' && biome !== 'dry') && !bush) fail(i, `${d.model} on ${k} in ${biome} (sm ${d.sm})`);
           } else if (ROCKS.has(d.model)) {
             rocks++;
-            if (plan.kinds[i] !== 'rock') fail(i, `${d.model} on ${plan.kinds[i]}`);
+            const onGround = d.model === 'detail_rocks_small' && k === plan.ground && (biome === 'winter' || biome === 'dry');
+            if (onGround) counts[`${biome} ground rocks`] = (counts[`${biome} ground rocks`] ?? 0) + 1;
+            if (k !== 'rock' && !onGround) fail(i, `${d.model} on ${k} in ${biome}`);
           } else if (grid.tiles[i].kind !== 'HEX' || grid.tiles[i].deposit) {
             fail(i, `${d.model} on ${grid.tiles[i].kind} deposit=${!!grid.tiles[i].deposit}`);
           }
           if ((TREES.has(d.model) || ROCKS.has(d.model)) && (plan.road.has(i) || buildingOn.has(i)))
             fail(i, `${d.model} on a road or under ${buildingOn.get(i)}`);
+          if ((TREES.has(d.model) || ROCKS.has(d.model)) && grid.tiles[i].deposit) fail(i, `${d.model} on a deposit`);
         }
         if (trees > MAX_TREES) fail(null, `${trees} trees > ${MAX_TREES}`);
         if (rocks > MAX_ROCKS) fail(null, `${rocks} rocks and mountains > ${MAX_ROCKS}`);
       }),
     );
+    expect(counts['dry bush']).toBeGreaterThan(0);
+    expect(counts['dry ground rocks']).toBeGreaterThan(0);
+    expect(counts['winter ground rocks']).toBeGreaterThan(0);
   });
 
   /*
    * GP(n,0) puts the 12 pentagons n steps apart, so with n ≤ 4 no hexagon is 3 steps from every pentagon
    * and there is no valid centre; from n = 5 on there always is one.
    */
-  it('medieval: plans a settlement far from pentagons when the grid allows one, none otherwise', () => {
-    for (const c of COMBOS.filter((x) => x.biome === 'medieval' && x.n <= 4)) {
+  it('medieval: plans a settlement far from pentagons when the grid allows one, none otherwise or in other biomes', () => {
+    for (const c of COMBOS.filter((x) => REPLICA[x.biome].settlement && x.n <= 4)) {
       expect(() => generateTerrain(c.grid, optsOf(c)), c.tag).not.toThrow();
     }
     expectNone(
       collect(runs(), ({ grid, plan, n, biome }, fail) => {
         const center = plan.settlementCenter;
         const buildings = plan.decor.filter((d) => isBuilding(d.model));
-        if (biome === 'mixed' || center === null) {
-          if (biome === 'medieval' && n >= 5) fail(null, 'no settlement centre');
-          if (center !== null) fail(center, 'mixed body has a settlement centre');
+        const settles = REPLICA[biome].settlement;
+        if (!settles || center === null) {
+          if (settles && n >= 5) fail(null, 'no settlement centre');
+          if (center !== null) fail(center, `${biome} body has a settlement centre`);
           if (plan.road.size)
             fail([...plan.road][0]!, `${plan.road.size} road tiles without a settlement`);
           if (buildings.length)
@@ -565,6 +732,8 @@ describe(`terrain generator properties (${COMBOS.length} combinations)`, () => {
         for (const [j, r] of ring)
           if (r <= 2 && grid.tiles[j].kind === 'PENT')
             fail(j, `pentagon in ring ${r} of centre ${center}`);
+        // the cleared ground: no basin within two rings of the castle
+        for (const [j, r] of ring) if (r <= 2 && isBasin(plan.kinds[j])) fail(j, `${plan.kinds[j]} in ring ${r} of the settlement`);
         const castle = plan.decor.some((d) => d.model === 'castle' && d.tile === center);
         if (castle === !!grid.tiles[center].deposit)
           fail(center, `castle = ${castle}, deposit = ${!!grid.tiles[center].deposit}`);
@@ -580,25 +749,47 @@ describe(`terrain generator properties (${COMBOS.length} combinations)`, () => {
     );
   });
 
-  it('keeps the class shares in a sane band for n ≥ 5', () => {
-    // measured over this matrix (n ≥ 5): mixed grass 0.35–0.47, water 0.15–0.31, forest 0.11–0.21;
-    // medieval grass 0.44–0.56, water 0.05–0.19, forest 0.19–0.32. The bands only catch degenerate output.
-    const bands: Readonly<
-      Record<TerrainBiome, Readonly<Record<'grass' | 'water' | 'forest', [number, number]>>>
-    > = {
-      mixed: { grass: [0.25, 0.6], water: [0.08, 0.45], forest: [0.05, 0.35] },
-      medieval: { grass: [0.3, 0.7], water: [0.02, 0.35], forest: [0.1, 0.45] },
+  it('dried lake beds change the basin class only: medieval/dune is medieval with every lake a dune', () => {
+    const plain = new Map(runs().filter((r) => r.label === 'medieval').map((r) => [`${r.gridCase.label}/${r.seed}/${r.aim ? 'phi' : 'default'}`, r.plan]));
+    expectNone(
+      collect(
+        runs().filter((r) => r.label === 'medieval/dune'),
+        (r, fail) => {
+          const m = plain.get(`${r.gridCase.label}/${r.seed}/${r.aim ? 'phi' : 'default'}`)!;
+          const i = firstDiff(r.plan.kinds, m.kinds.map((k) => (k === 'water' ? 'dune' : k)));
+          if (i >= 0) fail(i, `${r.plan.kinds[i]} vs medieval ${m.kinds[i]}`);
+          const j = firstDiff([...r.plan.variants, ...r.plan.decor, ...r.plan.road], [...m.variants, ...m.decor, ...m.road]);
+          if (j >= 0) fail(null, `kit tiles, decor or roads differ (item ${j})`);
+          if (r.plan.settlementCenter !== m.settlementCenter) fail(r.plan.settlementCenter, 'centre moved');
+        },
+      ),
+    );
+  });
+
+  it('keeps the class shares of every style in its band for n ≥ 5', () => {
+    // measured over this matrix (n ≥ 5): mixed grass 0.35–0.47, water 0.15–0.31, forest 0.11–0.21; medieval
+    // grass 0.45–0.56, water 0.05–0.19, forest 0.19–0.31; winter snow 0.48–0.65, ice 0.19–0.36, forest
+    // 0.06–0.12, rock 0.02–0.11; dry ground 0.69–0.86, rock 0.12–0.21, dune 0.02–0.15; mixed/start water
+    // 0.06–0.19. The bands only catch degenerate output (and the start planet's water ceiling, T-25).
+    type Bands = Partial<Record<TerrainKind, [number, number]>>;
+    const bands: Readonly<Record<string, Bands>> = {
+      mixed: { grass: [0.25, 0.6], water: [0.08, 0.45], forest: [0.05, 0.35], rock: [0.01, 0.2], snow: [0.05, 0.25] },
+      medieval: { grass: [0.3, 0.7], water: [0.02, 0.35], forest: [0.1, 0.45], rock: [0.005, 0.2], snow: [0.03, 0.2] },
+      winter: { snow: [0.4, 0.75], ice: [0.12, 0.45], forest: [0.02, 0.2], rock: [0.01, 0.2] },
+      dry: { sand: [0.6, 0.92], rock: [0.07, 0.3], dune: [0.01, 0.2] },
+      'dry/regolith': { regolith: [0.6, 0.92], rock: [0.07, 0.3], dune: [0.01, 0.2] },
+      'medieval/dune': { grass: [0.3, 0.7], dune: [0.02, 0.35], forest: [0.1, 0.45], water: [0, 0] },
+      'mixed/start': { grass: [0.3, 0.65], water: [0.03, 0.2], forest: [0.05, 0.35] },
     };
     const seen: Record<string, [number, number]> = {};
     const failures = collect(
-      runs().filter((r) => r.n >= 5),
-      ({ plan, biome }, fail) => {
-        for (const kind of ['grass', 'water', 'forest'] as const) {
+      runs().filter((r) => r.n >= 5 && r.label !== 'body'), // the bodies: `terrain of the game bodies`
+      ({ plan, label }, fail) => {
+        for (const [kind, [min, max]] of Object.entries(bands[label]!) as Array<[TerrainKind, [number, number]]>) {
           const share = plan.kinds.filter((k) => k === kind).length / plan.kinds.length;
-          const key = `${biome} ${kind}`;
+          const key = `${label} ${kind}`;
           const [lo, hi] = seen[key] ?? [1, 0];
           seen[key] = [Math.min(lo, share), Math.max(hi, share)];
-          const [min, max] = bands[biome][kind];
           if (share < min || share > max)
             fail(null, `${kind} share ${share.toFixed(3)} outside ${min}–${max}`);
         }
@@ -610,13 +801,14 @@ describe(`terrain generator properties (${COMBOS.length} combinations)`, () => {
         .map(([k, [lo, hi]]) => `${k} ${lo.toFixed(3)}–${hi.toFixed(3)}`)
         .join(', '),
     );
+    expect(Object.keys(bands).sort()).toEqual(STYLES.map((s) => s.label).sort());
     expectNone(failures);
   });
 
   it('classification replica matches the generator (outside the settlement, which rewrites classes)', () => {
     expectNone(
-      collect(runs(), ({ gridCase, seed, biome, grid, plan }, fail) => {
-        const replica = CLASSIFIED_BY_KEY.get(`${gridCase.label}/${seed}/${biome}`)!;
+      collect(runs(), ({ gridCase, seed, label, grid, plan }, fail) => {
+        const replica = CLASSIFIED_BY_KEY.get(`${gridCase.label}/${seed}/${label}`)!;
         const rewritten =
           plan.settlementCenter === null
             ? new Map<number, number>()
@@ -632,7 +824,82 @@ describe(`terrain generator properties (${COMBOS.length} combinations)`, () => {
   // A bit-exact port must classify every tile the same; the closer a value sits to its threshold, the more
   // a last-bit difference in fbm (e.g. a fused multiply-add) could flip the class.
   it(`classification noise stays > 1e-12 from every compared threshold (min ${MIN_MARGIN.toExponential(3)} at ${MIN_MARGIN_AT})`, () => {
-    console.log(`terrain threshold margin: min ${MIN_MARGIN} at ${MIN_MARGIN_AT}`);
+    console.log(`terrain threshold margin: min ${MIN_MARGIN} at ${MIN_MARGIN_AT}; per threshold ${JSON.stringify(MARGIN_BY)}`);
     expect(MIN_MARGIN).toBeGreaterThan(1e-12);
+    // every threshold of every style was compared somewhere in the matrix
+    expect(Object.keys(MARGIN_BY).sort()).toEqual(['f1/basin', 'f2/rock', 'f3/forest', 'lat/forestLat', 'lat/polar', 'n.y/landingCap']);
+  });
+});
+
+// ------------------------------------------------------------------------------- the bodies of the game
+
+describe('terrain of the game bodies (T-25, T-26)', () => {
+  const grids = buildWorldGrids([...INITIAL_BODIES, ...TAU_CETI_BODIES]);
+  const share = (grid: PlanetGrid, kind: TerrainKind) => grid.tiles.filter((t) => t.terrain === kind).length / grid.tiles.length;
+
+  it('gives every body with a grid its biome', () => {
+    const biomes = Object.fromEntries([...grids].map(([id, g]) => [id, g.terrain && { biome: g.terrain.biome, ground: g.terrain.ground, basin: g.terrain.basin }]));
+    expect(biomes).toEqual({
+      [PLANET_ID]: { biome: 'mixed', ground: undefined, basin: undefined },
+      [MOON_ID]: { biome: 'dry', ground: 'regolith', basin: undefined },
+      [TC_B]: { biome: 'dry', ground: undefined, basin: undefined },
+      [TC_C]: { biome: 'medieval', ground: undefined, basin: 'dune' },
+      [TC_D]: { biome: 'dry', ground: 'regolith', basin: undefined },
+      [TC_E]: { biome: 'mixed', ground: undefined, basin: undefined },
+      [TC_F]: { biome: 'winter', ground: undefined, basin: undefined },
+    });
+  });
+
+  it('no water where the profile says there is none: b, c and d have dunes, f frozen lakes', () => {
+    for (const id of [TC_B, TC_C, TC_D, TC_F, MOON_ID]) expect(share(grids.get(id)!, 'water'), id).toBe(0);
+    expect(share(grids.get(TC_B)!, 'sand')).toBeGreaterThan(0.5);
+    expect(share(grids.get(TC_D)!, 'regolith')).toBeGreaterThan(0.5);
+    expect(share(grids.get(TC_C)!, 'dune')).toBeGreaterThan(0.05);
+    expect(share(grids.get(TC_F)!, 'ice')).toBeGreaterThan(0.1);
+    expect(share(grids.get(TC_F)!, 'snow')).toBeGreaterThan(0.4);
+  });
+
+  it('Tau Ceti e, the start planet: water ≤ 20 % and a dry cap n.y > 0.6 (holding the top tile and 5 rings around it)', () => {
+    const grid = grids.get(TC_E)!;
+    expect(grid.terrain).toMatchObject({ biome: 'mixed', basinLevel: 0.39, landingCap: 0.6 });
+    expect(share(grid, 'water')).toBeGreaterThan(0.05);
+    expect(share(grid, 'water')).toBeLessThanOrEqual(0.2);
+    const cap = grid.tiles.filter((t) => t.normal.y > 0.6).map((t) => t.index);
+    expect(cap.length).toBeGreaterThan(100);
+    expect(cap.filter((i) => !buildable(grid.tiles[i].terrain!))).toEqual([]);
+    // the cap holds the top tile and the rings around it the first buildings go to
+    const rings = ringsAround(grid, topIndex(grid), 5);
+    expect([...rings.keys()].filter((i) => !cap.includes(i))).toEqual([]);
+  });
+
+  it('Tau Ceti e: 2 dry rings around the port of the scripted first session and of the automatic placement', () => {
+    const grid = grids.get(TC_E)!;
+    const ok = (i: number) => buildable(grid.tiles[i].terrain!);
+    // the scripted first session (simulation.spec, record-replays kanwa, the render harness): the first
+    // hexagon clear of deposits around it whose footprint can be built on
+    const scripted = grid.tiles.find(
+      (t) =>
+        t.neighbors.length === 6 &&
+        [t.index, ...t.neighbors].every((i) => !grid.tiles[i].deposit) &&
+        (footprintTiles(grid, t.index, 3, 0) ?? [-1]).every((i) => i >= 0 && ok(i)),
+    )!;
+    // the automatic placement (mock `suggestTile('PORT')`): breadth-first from the top tile, rotations in order
+    let automatic: number | null = null;
+    const queue = [topIndex(grid)];
+    const seen = new Set(queue);
+    for (let q = 0; q < queue.length && automatic === null; q++) {
+      const t = grid.tiles[queue[q]];
+      for (let r = 0; r < t.neighbors.length && automatic === null; r++)
+        if ((footprintTiles(grid, t.index, 3, r) ?? [-1]).every((i) => i >= 0 && ok(i))) automatic = t.index;
+      for (const nb of t.neighbors) {
+        if (seen.has(nb)) continue;
+        seen.add(nb);
+        queue.push(nb);
+      }
+    }
+    for (const anchor of [scripted.index, automatic!]) {
+      const near = ringsAround(grid, anchor, 2);
+      expect([...near.keys()].filter((i) => !ok(i)), `port at ${anchor}`).toEqual([]);
+    }
   });
 });

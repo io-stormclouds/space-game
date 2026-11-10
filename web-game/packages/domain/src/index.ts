@@ -49,10 +49,12 @@ export * from './sim/config/initial-world';
 // hex-kit terrain: classes and settlement roads (gameplay), kit tile per hexagon and decor (render);
 // pure, deterministic
 export * from './sim/terrain/terrain-types';
+export { BIOMES, BASIN_KINDS, biomeRules, isBasin, type BiomeDress, type BiomeRules, type BiomeSpec, type DecorSet } from './sim/terrain/terrain-biomes';
 export {
   classifyTerrain,
   gridClassification,
   terrainAim,
+  terrainConfigOf,
   withTerrain,
   type ClassifyOptions,
   type SettlementRings,

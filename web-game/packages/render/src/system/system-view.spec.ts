@@ -460,8 +460,8 @@ describe('SystemView (planet + system kinds, one scene)', () => {
     expect(c.grid!.edges.visible).toBe(false);
     expect(c.surface).toBe(c.grid!.mesh);
     expect(h.pickAt(s.screenOf(TC_C))).toMatchObject({ kind: 'TILE', bodyId: TC_C });
-    // other gridded bodies keep the plain grid
-    expect(s.bodyParts(TC_E)!.terrain).toBeNull();
+    // every Tau Ceti planet has terrain since T5 (tc-e: mixed)
+    expect(s.bodyParts(TC_E)!.terrain).not.toBeNull();
     // far (system overview): the cheap fan grid again
     h.view.setKind('system');
     h.frames(Math.ceil(TRANSITION_SECONDS * 60) + 5);

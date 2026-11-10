@@ -1,6 +1,7 @@
 import { hash3 } from '../math/seeded-noise';
 import { PlanetGrid } from '../models/planet-grid.model';
-import { ClassifyOptions, TerrainClassification, classifyTerrain, clearSettlement, gridClassification, noiseKinds, ring2Built } from './terrain-classify';
+import { ClassifyOptions, TerrainClassification, classifyTerrain, clearSettlement, gridClassification, noiseKinds, ring2Built, terrainConfigOf } from './terrain-classify';
+import { BIOMES, DecorSet, biomeRules } from './terrain-biomes';
 import { DecorItem, TerrainConfig, TerrainKind, TerrainPlan, TileVariant } from './terrain-types';
 import { buildTileFrames } from './tile-frame';
 import { chooseVariant } from './tile-variant';
@@ -9,7 +10,7 @@ import { chooseVariant } from './tile-variant';
 export const MAX_TREES = 200;
 export const MAX_ROCKS = 60;
 
-/** Biome, noise seed and settlement direction (`classifyTerrain`). */
+/** Biome, noise seed, the config's overrides and the settlement direction (`classifyTerrain`). */
 export type TerrainOptions = ClassifyOptions;
 
 /**
@@ -17,7 +18,7 @@ export type TerrainOptions = ClassifyOptions;
  * followed by `dressTerrain` (render). Pure and deterministic.
  */
 export function generateTerrain(grid: PlanetGrid, opts: TerrainOptions): TerrainPlan {
-  return dressTerrain(grid, { biome: opts.biome, seed: opts.seed, ...classifyTerrain(grid, opts) });
+  return dressTerrain(grid, { ...terrainConfigOf(opts), ...classifyTerrain(grid, opts) });
 }
 
 /**
@@ -30,6 +31,8 @@ export function generateTerrain(grid: PlanetGrid, opts: TerrainOptions): Terrain
  */
 export function dressTerrain(grid: PlanetGrid, terrain: TerrainConfig & TerrainClassification = classified(grid)): TerrainPlan {
   const { biome, seed, kinds, road } = terrain;
+  const rules = biomeRules(terrain);
+  const dress = BIOMES[biome].dress;
   const tiles = grid.tiles;
   const frames = buildTileFrames(grid);
   const hasDeposit = (i: number): boolean => tiles[i]!.deposit !== null;
@@ -37,9 +40,9 @@ export function dressTerrain(grid: PlanetGrid, terrain: TerrainConfig & TerrainC
   const decor: DecorItem[] = [];
   const center = terrain.settlementCenter;
   if (center !== null && terrain.rings) {
-    // the buildings were laid out on the cleared classes, before the roads turned to grass
-    const cleared = noiseKinds(grid, biome, seed);
-    clearSettlement(cleared, center, terrain.rings);
+    // the buildings were laid out on the cleared classes, before the roads turned to ground
+    const cleared = noiseKinds(grid, terrain);
+    clearSettlement(cleared, center, terrain.rings, rules);
     settlementDecor(grid, cleared, center, terrain.rings, seed, decor);
   }
 
@@ -48,15 +51,7 @@ export function dressTerrain(grid: PlanetGrid, terrain: TerrainConfig & TerrainC
   const scatter: DecorItem[] = [];
   tiles.forEach((_, i) => {
     if (road.has(i) || hasDeposit(i) || taken.has(i)) return;
-    const h = hash3(seed, i, 5, 0);
-    if (kinds[i] === 'forest') {
-      scatter.push({ model: 'detail_treeA', tile: i, fill: 0.3, ox: -0.2, oz: 0.1 });
-      scatter.push({ model: 'detail_treeC', tile: i, fill: 0.3, ox: 0.15, oz: -0.18 });
-      if (h > 0.6) scatter.push({ model: 'detail_treeB', tile: i, fill: 0.28, ox: 0.18, oz: 0.2 });
-    } else if (kinds[i] === 'rock') {
-      if (h > 0.62) scatter.push({ model: 'mountain', tile: i, fill: 0.8, yaw: h * Math.PI * 2 });
-      else scatter.push({ model: h > 0.3 ? 'detail_rocks' : 'detail_rocks_small', tile: i, fill: h > 0.3 ? 0.75 : 0.35, yaw: h * Math.PI * 2 });
-    }
+    scatterDecor(dress.decor, i, kinds[i]!, rules.ground, seed, scatter);
   });
   const isTree = (d: DecorItem): boolean => d.model.startsWith('detail_tree');
   const treeKeep = Math.min(1, MAX_TREES / Math.max(1, scatter.filter(isTree).length));
@@ -76,19 +71,44 @@ export function dressTerrain(grid: PlanetGrid, terrain: TerrainConfig & TerrainC
   // kit tile per hexagon
   const variants: (TileVariant | null)[] = tiles.map((t, i) => {
     if (t.kind !== 'HEX') return null;
-    const v = chooseVariant(i, frames[i]!, kinds, road, seed);
+    const v = chooseVariant(i, frames[i]!, kinds, road, seed, dress);
     // a raised half would bury a structure standing on a deposit, a pond would put it in water
     if (hasDeposit(i) && (v.id.startsWith('hex_forest_transition') || v.id === 'hex_forest_waterD')) return { id: 'hex_forest', k0: 0 };
     return v;
   });
 
-  return { bodyId: grid.bodyId, biome, seed, kinds, variants, road, decor, settlementCenter: center };
+  return { bodyId: grid.bodyId, biome, seed, basin: rules.basin, ground: rules.ground, kinds, variants, road, decor, settlementCenter: center };
 }
 
 function classified(grid: PlanetGrid): TerrainConfig & TerrainClassification {
   const c = gridClassification(grid);
   if (!c) throw new Error(`dressTerrain: grid ${grid.bodyId} has no terrain`);
   return c;
+}
+
+/**
+ * Scattered nature on one free tile, by the biome's decor set (only models of the hex kit):
+ * - temperate: 2–3 trees on forest; a mountain or a rock pile on rock;
+ * - winter: the same (crowns in the ice tone are a render step of T5 phase 2), plus a few small rocks on the snow;
+ * - dry: mountains and rock piles on rock; small rocks and a few bushes (small trees) on the ground.
+ */
+function scatterDecor(set: DecorSet, i: number, kind: TerrainKind, ground: TerrainKind, seed: number, out: DecorItem[]): void {
+  const h = hash3(seed, i, 5, 0);
+  if (kind === 'forest' && set !== 'dry') {
+    out.push({ model: 'detail_treeA', tile: i, fill: 0.3, ox: -0.2, oz: 0.1 });
+    out.push({ model: 'detail_treeC', tile: i, fill: 0.3, ox: 0.15, oz: -0.18 });
+    if (h > 0.6) out.push({ model: 'detail_treeB', tile: i, fill: 0.28, ox: 0.18, oz: 0.2 });
+  } else if (kind === 'rock') {
+    if (h > 0.62) out.push({ model: 'mountain', tile: i, fill: 0.8, yaw: h * Math.PI * 2 });
+    else out.push({ model: h > 0.3 ? 'detail_rocks' : 'detail_rocks_small', tile: i, fill: h > 0.3 ? 0.75 : 0.35, yaw: h * Math.PI * 2 });
+  } else if (kind === ground && set !== 'temperate') {
+    const g = hash3(seed, i, 15, 0);
+    if (set === 'dry' && g > 0.985) {
+      out.push({ model: g > 0.9925 ? 'detail_treeA' : 'detail_treeC', tile: i, fill: 0.25, ox: 0.12, oz: -0.1, sm: 0.7 });
+    } else if (g > (set === 'dry' ? 0.925 : 0.95)) {
+      out.push({ model: 'detail_rocks_small', tile: i, fill: 0.3, yaw: g * Math.PI * 2 });
+    }
+  }
 }
 
 /** Castle, watchtowers, market, barracks, houses, fields and workshops around the centre (ruins). */

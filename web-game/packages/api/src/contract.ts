@@ -18,8 +18,11 @@ import type {
 // Web Worker (W03 A); later a real, authoritative server can implement the same contract.
 // Everything that crosses it is plain, structured-clone-safe data.
 
-/** Playable scenarios and the load levels of F5 (generated from them, deterministic). */
-export type ScenarioId = 'tau-ceti' | 'planeta-matka' | 'fabryka' | 'load-s' | 'load-m' | 'load-l';
+/**
+ * Playable scenarios and the load levels of F5 (generated from them, deterministic). `load-m-teren`
+ * (T4: M with the colony beside the ruins of Tau Ceti c) is a performance preset of the TS mock only.
+ */
+export type ScenarioId = 'tau-ceti' | 'planeta-matka' | 'fabryka' | 'load-s' | 'load-m' | 'load-l' | 'load-m-teren';
 
 export const TEMPO_PRESETS = [1, 10, 60, 600] as const;
 export type Tempo = number;

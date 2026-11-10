@@ -23,7 +23,10 @@ function clickable(page: Page, bodyId: string): Promise<Array<Point & { index: n
   }, bodyId);
 }
 
-/** Clicks near-side tiles until one opens the tile panel and its deposit line passes `accept`. */
+/**
+ * Clicks near-side tiles until one opens the tile panel, can be built on (T5: Tau Ceti e has lakes; the
+ * terrain line of an unbuildable tile is marked `.al`) and its deposit line passes `accept`.
+ */
 async function pickTile(page: Page, bodyId: string, accept: (deposit: string) => boolean, skip: ReadonlySet<number> = new Set()): Promise<number> {
   for (const t of (await clickable(page, bodyId)).filter((x) => !skip.has(x.index)).slice(0, 80)) {
     await page.mouse.click(t.x, t.y);
@@ -35,6 +38,7 @@ async function pickTile(page: Page, bodyId: string, accept: (deposit: string) =>
     }
     const deposit = panel(page).locator('[data-tile-deposit]');
     await deposit.waitFor({ timeout: 3_000 });
+    if ((await panel(page).locator('[data-tile-terrain].al').count()) > 0) continue; // water: nothing fits
     if (accept((await deposit.textContent()) ?? '')) return t.index;
   }
   throw new Error(`no suitable tile on the near side of ${bodyId}`);
@@ -46,6 +50,9 @@ test('planet: tile panel; a landing pad and a solar panel on selected tiles; a r
   test.setTimeout(150_000);
   await ready(page, 'kolonia');
   await page.getByRole('group', { name: 'Tempo czasu' }).getByRole('button', { name: '×600' }).click();
+  // T5: the first buildings of the preset stand on the snow of Tau Ceti e's top (cost × 1.2), so the
+  // colony has FER 24 left; the mine brings 2 a minute, and the pad needs 30–42 (by terrain): let it mine
+  await page.waitForTimeout(1_500);
 
   // the tile panel of the 3D PoC: tile number and shape, deposit, what fits here
   const padTile = await pickTile(page, 'tc-e', plain);

@@ -54,9 +54,10 @@ export const SCENARIOS: Readonly<Record<ScenarioId, Scenario>> = {
   'load-s': LOAD_SPECS.S.base,
   'load-m': LOAD_SPECS.M.base,
   'load-l': LOAD_SPECS.L.base,
+  'load-m-teren': LOAD_SPECS.MT.base,
 };
 
-const LOAD_LEVELS: Partial<Record<ScenarioId, LoadLevel>> = { 'load-s': 'S', 'load-m': 'M', 'load-l': 'L' };
+const LOAD_LEVELS: Partial<Record<ScenarioId, LoadLevel>> = { 'load-s': 'S', 'load-m': 'M', 'load-l': 'L', 'load-m-teren': 'MT' };
 
 export interface MockServerOptions {
   /** Real seconds per fixed step. */

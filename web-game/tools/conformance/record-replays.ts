@@ -20,6 +20,7 @@ import {
   ASTEROID_ID,
   SHIP_ID,
   footprintTiles,
+  tileBuildable,
   tileId,
 } from '@space-game/domain';
 import { MockServer } from '@space-game/mock-server';
@@ -110,8 +111,9 @@ class Recorder {
     return this.freeTiles(body).find((t) => t.deposit?.resource === material)!.id;
   }
 
+  /** A free hexagon without a deposit that can be built on (T5: lakes on Tau Ceti e and the PoC planet). */
   plainTile(body: string) {
-    return this.freeTiles(body).find((t) => !t.deposit && t.neighbors.length === 6)!.id;
+    return this.freeTiles(body).find((t) => !t.deposit && t.neighbors.length === 6 && tileBuildable(t))!.id;
   }
 
   /** A free hexagon of a terrain class (T8), off the settlement roads and without a deposit. */
@@ -161,11 +163,15 @@ function kanwaPierwszaSesja(): void {
   r.cmd({ type: 'MOVE_SHIP', shipId: ARK_ID, to: TC_E });
   r.until(() => r.world.ships[0]!.state === 'DOCKED', 60 * 60);
   const grid = r.server.simulation.grids.get(TC_E)!;
+  // the first hexagon clear of deposits around it whose footprint can be built on (T5: Tau Ceti e has
+  // lakes, none in its landing cap where this lands)
   const anchor = grid.tiles.find(
     (t) =>
-      t.neighbors.length === 6 && [t.index, ...t.neighbors].every((i) => !grid.tiles[i]!.deposit),
+      t.neighbors.length === 6 &&
+      [t.index, ...t.neighbors].every((i) => !grid.tiles[i]!.deposit) &&
+      (footprintTiles(grid, t.index, 3, 0) ?? [-1]).every((i) => i >= 0 && tileBuildable(grid.tiles[i]!)),
   )!;
-  r.cmd({ type: 'PLACE_SPACEPORT', bodyId: TC_E, tileId: anchor.id });
+  if (!r.cmd({ type: 'PLACE_SPACEPORT', bodyId: TC_E, tileId: anchor.id })) throw new Error('kanwa: the port did not land');
   r.until(() => r.world.colony.foundedAt !== null, 60 * 60);
   r.cmd({ type: 'CALL_SHUTTLE', bodyId: TC_E, cargo: { FER: 150, SIL: 80, KRI: 20 } });
   r.until(() => (storageOf(r.world, TC_E)['FER'] ?? 0) >= 150, 30 * 60);
@@ -189,6 +195,10 @@ function kanwaPierwszaSesja(): void {
   r.until(() => r.world.ships[0]!.state === 'DOCKED', 200 * 60);
   r.cmd({ type: 'PRODUCE_ROVER', bodyId: TC_E }); // ROVER_LIMIT: port L1 allows 2 rovers (D2) and two landed
   r.steps(60);
+  // the first session goes through on the terrain of Tau Ceti e (T5): one refusal, none of them terrain
+  const refusals = r.events.flatMap((b) => b.events).filter((e) => e.type === 'COMMAND_REJECTED');
+  if (refusals.length !== 1 || refusals.some((e) => e.reason === 'BAD_TERRAIN'))
+    throw new Error(`kanwa: refusals ${JSON.stringify(refusals)}`);
   r.write('kanwa-pierwsza-sesja');
 }
 
@@ -224,9 +234,11 @@ function pocEkonomia(): void {
   const r = new Recorder('planeta-matka');
   const grid = r.server.simulation.grids.get(PLANET_ID)!;
   const used = () => new Set(r.world.structures.flatMap((s) => s.tiles));
+  // on grass (T5: the PoC planet has terrain), so the costs below are the catalog numbers
+  const grass = (t: (typeof grid.tiles)[number]) => t.terrain === 'grass' && !t.road;
   const ferrite = () =>
-    grid.tiles.filter((t) => t.deposit?.resource === 'FER' && !used().has(t.id));
-  const free = () => grid.tiles.find((t) => !t.deposit && !used().has(t.id))!;
+    grid.tiles.filter((t) => t.deposit?.resource === 'FER' && grass(t) && !used().has(t.id));
+  const free = () => grid.tiles.find((t) => !t.deposit && grass(t) && !used().has(t.id))!;
   // FER 40 · KRI 10 · SIL 20: one mine (FER 15), then a habitat (FER 20 · SIL 10), the rest refused
   r.cmd({ type: 'BUILD', bodyId: PLANET_ID, tileId: ferrite()[0]!.id, kind: 'MIN' });
   r.cmd({ type: 'BUILD', bodyId: PLANET_ID, tileId: ferrite()[0]!.id, kind: 'MIN' }); // NO_CREW
@@ -249,8 +261,14 @@ function pocEkonomia(): void {
   r.cmd({ type: 'PRODUCE_ROVER', bodyId: PLANET_ID });
   r.cmd({ type: 'PRODUCE_ROVER', bodyId: PLANET_ID }); // BUSY
   r.until(() => r.world.rovers.length === 2, 10 * 60);
-  // a Huta (3 tiles) needs FER 160 · SIL 80: wait for ore, build, let it run
-  r.cmd({ type: 'BUILD', bodyId: PLANET_ID, tileId: ferrite()[0]!.id, kind: 'MIN' });
+  // a Huta (3 tiles) needs FER 160 · SIL 80: wait for ore, build, let it run (a fresh deposit on any
+  // terrain: the grass ones left are partly mined)
+  r.cmd({
+    type: 'BUILD',
+    bodyId: PLANET_ID,
+    tileId: grid.tiles.find((t) => t.deposit?.resource === 'FER' && !used().has(t.id))!.id,
+    kind: 'MIN',
+  });
   r.cmd({
     type: 'BUILD',
     bodyId: PLANET_ID,
@@ -267,7 +285,7 @@ function pocEkonomia(): void {
     (t) =>
       t.neighbors.length === 6 &&
       [t.index, ...t.neighbors].every(
-        (i) => !used().has(grid.tiles[i]!.id) && !grid.tiles[i]!.deposit,
+        (i) => !used().has(grid.tiles[i]!.id) && !grid.tiles[i]!.deposit && grass(grid.tiles[i]!),
       ),
   )!;
   r.cmd({ type: 'BUILD', bodyId: PLANET_ID, tileId: anchor.id, kind: 'SMT' }); // NO_CREW or ordered
@@ -387,10 +405,10 @@ const sameCost = (a: Cost, b: Cost): boolean => JSON.stringify(a) === JSON.strin
 
 /**
  * Terrain in play on Tau Ceti c (T8, docs/planet-terrain-poc-wnioski-i-plan.md §9.4): the port refused
- * on water (BAD_TERRAIN), landed on the settlement road (cost × 85 %, time × 75 %); a shuttle; solar
- * panels on a road and in a forest, a habitat on rock, a panel refused on water; the forest site
- * cancelled (75 % of its terrain cost back); everything else built in its terrain time. tc-c has a
- * trace atmosphere, so no wind turbines.
+ * on a dried lake bed (`dune`, T-26: BAD_TERRAIN), landed on the settlement road (cost × 85 %, time ×
+ * 75 %); a shuttle; solar panels on a road and in a forest, a habitat on rock, a panel refused on a dune;
+ * the forest site cancelled (75 % of its terrain cost back); everything else built in its terrain time.
+ * tc-c has a trace atmosphere, so no wind turbines.
  */
 function teren(): void {
   const r = new Recorder('tau-ceti');
@@ -409,11 +427,11 @@ function teren(): void {
   r.cmd({ type: 'MOVE_SHIP', shipId: ARK_ID, to: TC_C });
   r.until(() => r.world.ships[0]!.state === 'DOCKED', 60 * 60);
 
-  // the port on a lake: refused
-  const lake = grid.tiles.find((t) => t.terrain === 'water' && footprintTiles(grid, t.index, 3, 0))!;
+  // the port on a dried lake bed (T-26: the lakes of Tau Ceti c are dunes): refused
+  const lake = grid.tiles.find((t) => t.terrain === 'dune' && footprintTiles(grid, t.index, 3, 0))!;
   r.cmd({ type: 'PLACE_SPACEPORT', bodyId: TC_C, tileId: lake.id });
-  const wet = eventOf(r.lastCommand, 'COMMAND_REJECTED', 'port on water');
-  expect(wet.reason === 'BAD_TERRAIN' && wet.detail === rules.kinds.water.name, `port on water: ${wet.reason} ${wet.detail}`);
+  const wet = eventOf(r.lastCommand, 'COMMAND_REJECTED', 'port on a dune');
+  expect(wet.reason === 'BAD_TERRAIN' && wet.detail === rules.kinds.dune.name, `port on a dune: ${wet.reason} ${wet.detail}`);
 
   // the port on three road tiles (else on grass): cheaper and faster than the catalog
   let anchor: { index: number; rotation: number } | null = null;
@@ -440,7 +458,7 @@ function teren(): void {
   r.cmd({ type: 'CALL_SHUTTLE', bodyId: TC_C, cargo: { FER: 60, SIL: 60 } });
   r.until(() => (storageOf(r.world, TC_C)['SIL'] ?? 0) >= 60, 30 * 60);
 
-  // three sites at their terrain prices, one refused on water
+  // three sites at their terrain prices, one refused on a dune
   const order = (kind: string, tile: TileId, what: string) => {
     r.cmd({ type: 'BUILD', bodyId: TC_C, tileId: tile, kind });
     const e = eventOf(r.lastCommand, 'CONSTRUCTION_ORDERED', what);
@@ -454,9 +472,9 @@ function teren(): void {
   const road = order('SOL', r.roadTile(TC_C), 'SOL on a road');
   const forest = order('SOL', r.terrainTile(TC_C, 'forest'), 'SOL in a forest');
   const rock = order('HAB', r.terrainTile(TC_C, 'rock'), 'HAB on rock');
-  r.cmd({ type: 'BUILD', bodyId: TC_C, tileId: r.terrainTile(TC_C, 'water'), kind: 'SOL' });
-  const sunk = eventOf(r.lastCommand, 'COMMAND_REJECTED', 'SOL on water');
-  expect(sunk.reason === 'BAD_TERRAIN' && sunk.detail === rules.kinds.water.name, `SOL on water: ${sunk.reason} ${sunk.detail}`);
+  r.cmd({ type: 'BUILD', bodyId: TC_C, tileId: r.terrainTile(TC_C, 'dune'), kind: 'SOL' });
+  const sunk = eventOf(r.lastCommand, 'COMMAND_REJECTED', 'SOL on a dune');
+  expect(sunk.reason === 'BAD_TERRAIN' && sunk.detail === rules.kinds.dune.name, `SOL on a dune: ${sunk.reason} ${sunk.detail}`);
 
   // the forest site cancelled: 75 % (rounded down) of what it cost after the terrain
   r.cmd({ type: 'CANCEL_CONSTRUCTION', structureId: forest.id });

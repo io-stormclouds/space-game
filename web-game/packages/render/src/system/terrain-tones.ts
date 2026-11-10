@@ -1,4 +1,4 @@
-import type { TerrainKind } from '@space-game/domain';
+import type { TerrainBasin, TerrainKind } from '@space-game/domain';
 
 /**
  * Muted palette of the hex kit (KayKit colours pulled 40 % towards grey and 20 % towards metal, see
@@ -17,6 +17,9 @@ export const TONE = {
   thatch: 0xc3a562,
   metal: 0x969fa5,
   dark: 0x31383d,
+  dune: 0x8f7d6c,
+  ice: 0xaec1c8,
+  regolith: 0x8a8d8f,
 } as const;
 
 const GROUND: Record<TerrainKind, number> = {
@@ -25,15 +28,33 @@ const GROUND: Record<TerrainKind, number> = {
   rock: TONE.rock,
   snow: TONE.snow,
   water: TONE.water,
+  sand: TONE.sand,
+  dune: TONE.dune,
+  ice: TONE.ice,
+  regolith: TONE.regolith,
 };
 
-/** Colour of a tile material on a tile of the given class (`Green` is the top surface of every class). */
-export function groundTone(mat: string, kind: TerrainKind): number {
+/** Tone of the lowered `Water` surface per basin class (T5): lakes, frozen lakes, dune hollows and dried lake beds. */
+const BASIN_TONE: Record<TerrainBasin, number> = {
+  water: TONE.water,
+  ice: TONE.ice,
+  dune: TONE.dune,
+};
+
+/**
+ * Colour of a tile material on a tile of the given class (`Green` is the top surface of every class). With
+ * the body's `basin` and `ground` (`TerrainPlan`, T5): the forest floor is the ground (snow in winter), and
+ * the `Water` surface of a land tile (a shore bay or a pond) the basin (frozen lakes, dunes, dried lake
+ * beds). A basin tile (hex_water) keeps its own tone. Without them: forest on grass, and a bay of sand or
+ * regolith (only dry bodies have them) faces dunes, any other one water.
+ */
+export function groundTone(mat: string, kind: TerrainKind, body?: { basin: TerrainBasin; ground: TerrainKind }): number {
   switch (mat) {
     case 'Green':
-      return GROUND[kind];
+      return kind === 'forest' && body ? GROUND[body.ground] : GROUND[kind];
     case 'Water':
-      return TONE.water;
+      if (kind === 'water' || kind === 'ice' || kind === 'dune') return BASIN_TONE[kind];
+      return BASIN_TONE[body?.basin ?? (kind === 'sand' || kind === 'regolith' ? 'dune' : 'water')];
     case 'Beige':
       return TONE.sand; // roads
     case 'BrownDark':

@@ -46,7 +46,10 @@ export const INITIAL_BODIES: ReadonlyArray<CelestialBody> = [
     orbitalAltitudeFactor: 1.25,
     isHomeBase: true,
     color: 0x3b82f6,
-    surfaceGrid: { frequency: 8, depositSeed: 11 },
+    // hex-kit terrain (T-25): the PoC showcase style; the dry landing cap (n.y > 0.9: the top tile, two rings
+    // and part of the third) keeps the standing pad, panel and port of the preset off a lake, where they
+    // stood before T5 (it dries two lakes of mixed/7 under the port)
+    surfaceGrid: { frequency: 8, depositSeed: 11, terrain: { biome: 'mixed', seed: 7, landingCap: 0.9 } },
     atmosphere: 'dense',
   },
   {
@@ -61,7 +64,7 @@ export const INITIAL_BODIES: ReadonlyArray<CelestialBody> = [
     orbitalAltitudeFactor: 1.25,
     isHomeBase: false,
     color: 0x9ca3af,
-    surfaceGrid: { frequency: 3, depositSeed: 23 },
+    surfaceGrid: { frequency: 3, depositSeed: 23, terrain: { biome: 'dry', seed: 8, ground: 'regolith' } },
   },
   {
     id: ASTEROID_ID,

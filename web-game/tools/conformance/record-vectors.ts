@@ -27,6 +27,7 @@ import {
   maxStarRadius,
   STARS,
   terrainAim,
+  terrainConfigOf,
   type CelestialBody,
   type TerrainConfig,
   type Vec3,
@@ -97,24 +98,33 @@ const grids = builtGrids.map((grid, i) => {
 });
 
 // terrain classes and settlement roads (T8, `classifyTerrain`): every grid body of both scenarios in
-// three styles, the settlement facing the body's sun at t = 0 as `buildWorldGrids` aims it. Classes are
-// compared as exact strings (one ulp in the noise may flip a class).
+// every style, the settlement facing the body's sun at t = 0 as `buildWorldGrids` aims it. Classes are
+// compared as exact strings (one ulp in the noise may flip a class). T5 adds the winter and dry biomes
+// and the config overrides (`ground`, `basin`, `basinLevel`, `landingCap`), with the configs of every
+// game body among them; an entry carries the overrides of its style only when they are set.
 const TERRAIN_STYLES: TerrainConfig[] = [
   { biome: 'medieval', seed: 2 },
   { biome: 'mixed', seed: 7 },
   { biome: 'medieval', seed: 11 },
+  // T5: the configs of the bodies (tc-c, the PoC planet, tc-e, tc-b, tc-d, tc-f, the PoC moon)
+  { biome: 'medieval', seed: 2, basin: 'dune' },
+  { biome: 'mixed', seed: 7, landingCap: 0.9 },
+  { biome: 'mixed', seed: 5, basinLevel: 0.39, landingCap: 0.6 },
+  { biome: 'dry', seed: 3 },
+  { biome: 'dry', seed: 4, ground: 'regolith' },
+  { biome: 'winter', seed: 6 },
+  { biome: 'dry', seed: 8, ground: 'regolith' },
 ];
 const terrain = builtGrids.flatMap((grid, i) => {
   const { scenario, body } = gridBodies[i]!;
   const aim = terrainAim(body);
   return TERRAIN_STYLES.map((style) => {
-    const c = classifyTerrain(grid, { biome: style.biome, seed: style.seed, aim });
+    const c = classifyTerrain(grid, { ...style, aim });
     return {
       grid: i,
       scenario,
       bodyId: body.id,
-      biome: style.biome,
-      seed: style.seed,
+      ...terrainConfigOf(style),
       aim: arr(aim),
       kinds: c.kinds,
       road: [...c.road].sort((a, b) => a - b),
