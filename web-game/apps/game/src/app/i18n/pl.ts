@@ -461,6 +461,11 @@ export const PL = {
     gpu: 'Geometrie / tekstury',
     contexts: 'Konteksty WebGL',
     view: 'Widok',
+    terrain: 'Trójkąty terenu',
+    decor: 'Trójkąty dekoru',
+    structures: 'Trójkąty budowli',
+    units: 'Trójkąty jednostek',
+    instances: 'Instancje widoczne',
   },
   world: {
     placeholder: 'Widok świata',

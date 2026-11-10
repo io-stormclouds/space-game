@@ -100,6 +100,7 @@ export class RenderHost {
       geometries: own.geometries ?? info?.memory.geometries ?? 0,
       textures: own.textures ?? info?.memory.textures ?? 0,
       contexts: (this.three ? 1 : 0) + (own.contexts ?? 0),
+      ...(own.detail ? { detail: own.detail } : {}),
     };
   }
 

@@ -21,11 +21,15 @@ import {
   type WorldState,
 } from '@space-game/domain';
 import type { PickResult, Placement, Selection, ViewInput } from '../view';
+import { geometryTriangles } from './buffers';
 import type { FetchBytes } from './model-library';
+import { boxMatrix } from './model-kit';
 import { MODELS } from './model-registry';
-import { DS } from './palette';
+import { DS, SCENE } from './palette';
 import { TRANSITION_SECONDS } from './camera-rig';
+import { STRUCTURE_FULL_PX, STRUCTURE_LOD_PX } from './system-scene';
 import { SystemView } from './system-view';
+import { SHIP_LENGTH } from './units-layer';
 import { createSystemView } from './index';
 
 const PUBLIC = join(process.cwd(), 'apps', 'game', 'public');
@@ -73,7 +77,7 @@ interface Harness {
 }
 
 /** The host's part: one renderer (stubbed: jsdom has no WebGL), a container, the frame loop. */
-function mount(snapshot: GameSnapshot, opts: { loadModels?: boolean; fetchBytes?: FetchBytes } = {}): Harness {
+function mount(snapshot: GameSnapshot, opts: { loadModels?: boolean; fetchBytes?: FetchBytes; cullDetail?: boolean } = {}): Harness {
   const container = document.createElement('div');
   document.body.appendChild(container);
   const canvas = document.createElement('canvas');
@@ -96,7 +100,7 @@ function mount(snapshot: GameSnapshot, opts: { loadModels?: boolean; fetchBytes?
     render: vi.fn(),
     clearDepth: vi.fn(),
   } as unknown as Harness['renderer'];
-  const view = new SystemView({ loadModels: opts.loadModels ?? false, fetchBytes: opts.fetchBytes ?? fromDisk });
+  const view = new SystemView({ loadModels: opts.loadModels ?? false, fetchBytes: opts.fetchBytes ?? fromDisk, cullDetail: opts.cullDetail });
   view.mount({ container, three: renderer, assetsBase: 'assets/', width: W, height: H });
   const input: ViewInput = { snapshot, frame: null, focusBodyId: null, selection: { kind: 'NONE' }, hover: null, placement: null };
   const h: Harness = {
@@ -148,6 +152,16 @@ function facingTile(h: Harness, bodyId: typeof PLANET_ID, world: WorldState) {
   return grid.tiles
     .filter((t) => !used.has(t.index) && !near.has(t.index) && !t.deposit && t.index !== top.index && !top.neighbors.includes(t.index))
     .reduce((best, t) => (cam.dot(new THREE.Vector3(t.normal.x, t.normal.y, t.normal.z)) > cam.dot(new THREE.Vector3(best.normal.x, best.normal.y, best.normal.z)) ? t : best));
+}
+
+/** Moves the camera along its direction from the target until the body shows this apparent radius [px] (OrbitControls keep it). */
+function zoomTo(h: Harness, bodyId: typeof PLANET_ID, px: number): void {
+  const s = scene(h);
+  const R = s.gridOf(bodyId)!.radius;
+  const target = s.rig.target.clone();
+  const dir = s.rig.camera.position.clone().sub(target).normalize();
+  s.rig.camera.position.copy(target).addScaledVector(dir, (R * H) / (2 * Math.tan((25 * Math.PI) / 180) * px));
+  h.frames(2);
 }
 
 describe('SystemView (planet + system kinds, one scene)', () => {
@@ -386,6 +400,213 @@ describe('SystemView (planet + system kinds, one scene)', () => {
     expect([...owned].filter((r) => !disposed.has(r)).map((r) => r.type)).toEqual([]);
   });
 
+  it('hemisphere culling (T4): structures behind the planet are not drawn, yet keep their parts, tiles, outlines and picking; turning the camera brings them back', async () => {
+    const world = structuredClone(sim.world);
+    h = mount(snapshotOf(world), { loadModels: true });
+    await h.view.ready;
+    h.frames(2);
+    const s = scene(h);
+    const grid = s.gridOf(PLANET_ID)!;
+    const front = facingTile(h, PLANET_ID, world);
+    const used = new Set(world.structures.filter((x) => x.bodyId === PLANET_ID).flatMap((x) => x.tiles.map(tileIndexOf)));
+    const along = (t: { normal: { x: number; y: number; z: number } }) => t.normal.x * front.normal.x + t.normal.y * front.normal.y + t.normal.z * front.normal.z;
+    const behind = grid.tiles.filter((t) => !used.has(t.index) && !t.deposit && t.neighbors.length === 6).sort((p, q) => along(p) - along(q));
+    const near = standingStructure('HAB', PLANET_ID, [front.index]);
+    const far = standingStructure('HAB', PLANET_ID, [behind[0]!.index]);
+    const site: Structure = { ...standingStructure('HAB', PLANET_ID, [behind[1]!.index]), state: 'PLANNED', progress: 0 };
+    // two sites going up, one on each side: the growth (height × progress) survives the compaction
+    const ahead = behind.filter((t) => t.index !== front.index && !front.neighbors.includes(t.index)).at(-1)!;
+    const rising: Structure = { ...standingStructure('HAB', PLANET_ID, [ahead.index]), state: 'CONSTRUCTING', progress: 0.5 };
+    const risingFar: Structure = { ...standingStructure('HAB', PLANET_ID, [behind[2]!.index]), state: 'CONSTRUCTING', progress: 0.3 };
+    h.input = { ...h.input, snapshot: snapshotOf({ ...world, structures: [...world.structures, near, far, site, rising, risingFar] }) };
+    h.frames(2);
+    const layer = s.bodyParts(PLANET_ID)!.structures!;
+    const [nearPart] = layer.partsOf(near.id);
+    const [farPart] = layer.partsOf(far.id);
+    expect(layer.slotOfPart(nearPart!)).toBeGreaterThanOrEqual(0);
+    expect(layer.slotOfPart(farPart!)).toBe(-1);
+    const hab = layer.instancesOf('basemodule_A');
+    expect(hab.drawn).toBeLessThan(hab.written);
+    // the compacted buffer holds the near one's own matrix
+    const mesh = layer.group.children.find((o) => o.name === `${PLANET_ID}_basemodule_A`) as THREE.InstancedMesh;
+    const m = mesh.getMatrixAt(layer.slotOfPart(nearPart!), new THREE.Matrix4());
+    m.elements.forEach((x, i) => expect(x).toBeCloseTo(nearPart!.local.elements[i]!, 4));
+    /** Drawn height of a part over its full height, or null when it is not drawn. */
+    const grown = (id: string): number | null => {
+      const part = layer.partsOf(id)[0]!;
+      const slot = layer.slotOfPart(part);
+      if (slot < 0) return null;
+      const now = layer.group.children.find((o) => o.name === `${PLANET_ID}_basemodule_A`) as THREE.InstancedMesh;
+      const y = new THREE.Vector3().setFromMatrixColumn(now.getMatrixAt(slot, new THREE.Matrix4()), 1).length();
+      return y / new THREE.Vector3().setFromMatrixColumn(part.local, 1).length();
+    };
+    expect(grown(rising.id)).toBeCloseTo(0.5, 2);
+    expect(grown(risingFar.id)).toBeNull();
+    // the culled one still exists for everything but drawing: parts, tile ownership, its site's outline
+    expect(layer.parts.filter((p) => p.structureId === far.id)).toHaveLength(1);
+    expect(layer.tileOwner.get(behind[0]!.index)?.id).toBe(far.id);
+    const sites = layer.group.children.find((o) => o.name === `${PLANET_ID}_basemodule_A_Sites`) as THREE.LineSegments;
+    expect(sites.geometry.drawRange.count).toBeGreaterThan(0);
+    expect(h.pickAt(s.screenOfLocal(PLANET_ID, nearPart!.center))).toMatchObject({ kind: 'STRUCTURE', structureId: near.id });
+    const culled = { ...s.frameStats };
+
+    // the camera on the other side (OrbitControls keep a position set from outside): the far one is drawn, the near one not
+    const target = s.rig.target.clone();
+    const distance = s.rig.distance;
+    const n = behind[0]!.normal;
+    s.rig.camera.position.copy(target).addScaledVector(new THREE.Vector3(n.x, n.y, n.z), distance);
+    h.frames(3);
+    expect(layer.slotOfPart(farPart!)).toBeGreaterThanOrEqual(0);
+    expect(layer.slotOfPart(nearPart!)).toBe(-1);
+    expect(h.pickAt(s.screenOfLocal(PLANET_ID, farPart!.center))).toMatchObject({ kind: 'STRUCTURE', structureId: far.id });
+    expect(grown(risingFar.id)).toBeCloseTo(0.3, 2);
+    expect(grown(rising.id)).toBeNull();
+    // progress on the drawn side rewrites the solids: still compacted, at the new height
+    h.input = { ...h.input, snapshot: snapshotOf({ ...world, structures: [...world.structures, near, far, site, rising, { ...risingFar, progress: 0.6 }] }) };
+    h.frames(1);
+    expect(grown(risingFar.id)).toBeCloseTo(0.6, 2);
+
+    // without culling every instance is drawn, and the counters show the difference
+    const full = mount(snapshotOf({ ...world, structures: [...world.structures, near, far, site, rising, risingFar] }), { loadModels: true, cullDetail: false });
+    await full.view.ready;
+    full.frames(3);
+    const all = scene(full).bodyParts(PLANET_ID)!.structures!;
+    expect(all.instancesOf('basemodule_A')).toEqual({ written: hab.written, drawn: hab.written });
+    expect(scene(full).frameStats.instances).toBeGreaterThan(culled.instances);
+    expect(scene(full).frameStats.structureTriangles).toBeGreaterThan(culled.structureTriangles);
+    full.view.dispose();
+    full.container.remove();
+  });
+
+  it('structure LOD (T4b): a small body draws every part and deposit rock as one proxy box, in one draw call, and the models again near (hysteresis); growth, tone, culling and picking hold, nothing leaks', async () => {
+    const world = structuredClone(sim.world);
+    h = mount(snapshotOf(world), { loadModels: true });
+    await h.view.ready;
+    h.frames(2);
+    const s = scene(h);
+    const front = facingTile(h, PLANET_ID, world);
+    const rising: Structure = { ...standingStructure('HAB', PLANET_ID, [front.index]), state: 'CONSTRUCTING', progress: 0.5 };
+    const show = (x: Structure) => {
+      h.input = { ...h.input, snapshot: snapshotOf({ ...world, structures: [...world.structures, x] }) };
+      h.frames(1);
+    };
+    show(rising);
+    const layer = s.bodyParts(PLANET_ID)!.structures!;
+    const proxy = () => layer.proxyMesh!; // replaced when the batch grows
+    const models = () => layer.group.children.filter((o): o is THREE.InstancedMesh => o instanceof THREE.InstancedMesh && o !== proxy());
+    const solidParts = layer.parts.filter((p) => p.look.solid);
+    const rocks = s.gridOf(PLANET_ID)!.tiles.filter((t) => t.deposit && !layer.tileOwner.has(t.index) && (world.deposits[t.id] ?? 1) > 0).length;
+    const gpu = resources(s.scene);
+    // near (3.4 R, about 250 px): the models
+    expect(layer.proxied).toBe(false);
+    expect(proxy().visible).toBe(false);
+    expect(models().some((m) => m.visible)).toBe(true);
+
+    zoomTo(h, PLANET_ID, 60);
+    expect(layer.proxied).toBe(true);
+    expect(models().filter((m) => m.visible).map((m) => `${m.name}:${m.count}`)).toEqual([]); // model batches and deposit rocks parked
+    expect(proxy().visible).toBe(true);
+    expect(proxy().geometry).toBe(s.kit.proxyBox());
+    expect(proxy().geometry.index!.count / 3).toBe(12);
+    const { written, drawn } = layer.proxyInstances;
+    expect(written).toBe(solidParts.length + rocks);
+    expect(drawn).toBeGreaterThan(0);
+    expect(drawn).toBeLessThan(written); // the far side is culled, proxies too
+    expect(s.frameStats.structureTriangles).toBe(12 * drawn);
+    expect(layer.group.children.filter((o) => o.visible && o instanceof THREE.InstancedMesh)).toEqual([proxy()]); // one draw call
+    // a part's proxy: its model's box (the one picking tests) under the part matrix, grown in Y, in the model's tone
+    const part = layer.partsOf(rising.id)[0]!;
+    const yLen = (m: THREE.Matrix4) => new THREE.Vector3().setFromMatrixColumn(m, 1).length();
+    const fit = boxMatrix(s.kit.box(part.model), new THREE.Matrix4());
+    const proxyOf = (p: typeof part) => proxy().getMatrixAt(layer.proxySlotOfPart(p), new THREE.Matrix4());
+    expect(layer.proxySlotOfPart(part)).toBeGreaterThanOrEqual(0);
+    const want = part.local.clone().multiply(new THREE.Matrix4().makeScale(1, part.look.height, 1)).multiply(fit);
+    proxyOf(part).elements.forEach((x, i) => expect(x).toBeCloseTo(want.elements[i]!, 4));
+    expect(yLen(proxyOf(part)) / yLen(part.local.clone().multiply(fit))).toBeCloseTo(0.5, 2);
+    const tone = s.kit.tone(part.model);
+    expect(proxy().getColorAt(layer.proxySlotOfPart(part), new THREE.Color()).getHex()).toBe(tone.getHex());
+    expect(tone.getHex()).not.toBe(new THREE.Color(SCENE.placeholder).getHex()); // the loaded model's mean colour
+    // progress while far: the proxy grows
+    show({ ...rising, progress: 0.7 });
+    expect(yLen(proxyOf(layer.partsOf(rising.id)[0]!)) / yLen(part.local.clone().multiply(fit))).toBeCloseTo(0.7, 2);
+    // picking at this distance: the same boxes (a part facing the camera, away from the ship and rover on screen)
+    const units = [SHIP_ID, ...world.rovers.map((r) => r.id)].map((id) => s.screenOfUnit(id)!);
+    const cam = s.rig.camera.position.clone().sub(s.bodyParts(PLANET_ID)!.world).normalize();
+    const target = solidParts
+      .filter((p) => layer.proxySlotOfPart(p) >= 0)
+      .map((p) => ({ p, at: s.screenOfLocal(PLANET_ID, new THREE.Vector3(0, s.kit.box(p.model).max.y * 0.8, 0).applyMatrix4(p.local))! }))
+      .filter(({ at }) => at.visible && units.every((u) => Math.hypot(at.x - u.x, at.y - u.y) > 16))
+      .sort((a, b) => b.p.center.clone().normalize().dot(cam) - a.p.center.clone().normalize().dot(cam))[0]!;
+    expect(h.pickAt(target.at)).toMatchObject({ kind: 'STRUCTURE', bodyId: PLANET_ID, structureId: target.p.structureId });
+
+    const gap = (STRUCTURE_LOD_PX + STRUCTURE_FULL_PX) / 2;
+    zoomTo(h, PLANET_ID, gap); // inside the hysteresis gap: still proxies
+    expect(layer.proxied).toBe(true);
+    zoomTo(h, PLANET_ID, STRUCTURE_FULL_PX + 8);
+    expect(layer.proxied).toBe(false);
+    expect(proxy().visible).toBe(false);
+    expect(layer.proxyInstances.drawn).toBe(0);
+    expect(layer.slotOfPart(layer.partsOf(rising.id)[0]!)).toBeGreaterThanOrEqual(0); // the model is back
+    expect(s.frameStats.structureTriangles).toBeGreaterThan(12 * written);
+    zoomTo(h, PLANET_ID, gap); // from above: the models stay
+    expect(layer.proxied).toBe(false);
+    // switching made and freed no GPU objects
+    expect(resources(s.scene)).toEqual(gpu);
+
+    // cullDetail false: no proxies at any distance
+    const full = mount(snapshotOf({ ...world, structures: [...world.structures, rising] }), { loadModels: true, cullDetail: false });
+    await full.view.ready;
+    full.frames(2);
+    zoomTo(full, PLANET_ID, 60);
+    const all = scene(full).bodyParts(PLANET_ID)!.structures!;
+    expect(all.proxyMesh).toBeNull();
+    expect(all.proxied).toBe(false);
+    expect(all.instancesOf('basemodule_A').drawn).toBe(all.instancesOf('basemodule_A').written);
+    expect(scene(full).frameStats.structureTriangles).toBeGreaterThan(12 * written);
+    full.view.dispose();
+    full.container.remove();
+
+    zoomTo(h, PLANET_ID, 60);
+    const owned = new Set([...resources(s.scene), ...resources(s.overlay.scene)]);
+    const disposed = new Set<unknown>();
+    for (const r of owned) r.addEventListener('dispose', () => disposed.add(r));
+    h.view.dispose();
+    expect([...owned].filter((r) => !disposed.has(r)).map((r) => r.type)).toEqual([]);
+  });
+
+  it('unit LOD (T4b): ships and rovers far away are proxies (the system view), near ones models; picked by screen position either way; cullDetail false keeps the models', () => {
+    h = mount(snapshotOf(sim.world));
+    h.frames(3);
+    const s = scene(h);
+    const shipProxies = s.units.group.children.find((o) => o.name === 'ShipProxies') as THREE.InstancedMesh;
+    const roverProxies = s.units.group.children.find((o) => o.name === 'RoverProxies') as THREE.InstancedMesh;
+    // the planet view: the docked ship and the rover are tens of pixels long
+    expect(s.units.drawnUnits).toEqual({ ships: 1, shipProxies: 0, rovers: 1, roverProxies: 0 });
+    expect(s.frameStats.unitTriangles).toBe(geometryTriangles(s.kit.geometry('dropship')) + geometryTriangles(s.kit.geometry('spacetruck')));
+    const gpu = resources(s.scene);
+    h.view.setKind('system');
+    h.frames(Math.ceil(TRANSITION_SECONDS * 60) + 5);
+    expect(s.units.drawnUnits).toEqual({ ships: 0, shipProxies: 1, rovers: 0, roverProxies: 1 });
+    expect(shipProxies.geometry.getAttribute('position').count / 3).toBe(8);
+    expect(roverProxies.geometry.index!.count / 3).toBe(12);
+    expect(s.frameStats.unitTriangles).toBe(8 + 12);
+    expect(resources(s.scene)).toEqual(gpu); // made up front, nothing new
+    // the proxy stands where the model would
+    const at = new THREE.Vector3().setFromMatrixPosition(shipProxies.getMatrixAt(0, new THREE.Matrix4()));
+    expect(at.distanceTo(s.units.shipPos.get(SHIP_ID)!)).toBeLessThan(SHIP_LENGTH);
+    expect(h.pickAt(s.screenOfUnit(SHIP_ID))).toEqual({ kind: 'SHIP', shipId: SHIP_ID });
+    h.view.setKind('planet');
+    h.frames(Math.ceil(TRANSITION_SECONDS * 60) + 5);
+    expect(s.units.drawnUnits).toEqual({ ships: 1, shipProxies: 0, rovers: 1, roverProxies: 0 });
+
+    const full = mount(snapshotOf(sim.world), { cullDetail: false });
+    full.view.setKind('system');
+    full.frames(Math.ceil(TRANSITION_SECONDS * 60) + 5);
+    expect(scene(full).units.drawnUnits).toEqual({ ships: 1, shipProxies: 0, rovers: 1, roverProxies: 0 });
+    full.view.dispose();
+    full.container.remove();
+  });
+
   it('a ship in transit flies the plan curve with its flight path drawn; the selected one in signal', () => {
     const own = new Simulation(POC_SCENARIO);
     own.dispatch({ type: 'MOVE_SHIP', shipId: SHIP_ID, to: MOON_ID });
@@ -475,6 +696,56 @@ describe('SystemView (planet + system kinds, one scene)', () => {
     expect([...owned].filter((r) => !disposed.has(r)).map((r) => r.type)).toEqual([]);
   });
 
+  it('Tau Ceti c decor (T4): only the visible cap is drawn, and the trees go cheap in the LOD band, with hysteresis', async () => {
+    const tc = new Simulation(TAU_CETI_SCENARIO);
+    tc.dispatch({ type: 'SCAN_SYSTEM', shipId: ARK_ID });
+    while (tc.world.scan.state !== 'DONE') tc.step(0.5);
+    h = mount(snapshotOf(tc.world, 'tau-ceti'), { loadModels: true });
+    h.input = { ...h.input, focusBodyId: TC_C };
+    h.view.setKind('planet');
+    h.frames(Math.ceil(TRANSITION_SECONDS * 60) + 5);
+    const s = scene(h);
+    await vi.waitFor(() => expect(s.bodyParts(TC_C)!.terrainDecor).not.toBeNull(), { timeout: 10000 });
+    h.frames(3);
+    const decor = s.bodyParts(TC_C)!.terrainDecor!;
+    const drawn = () => {
+      const o = { triangles: 0, instances: 0 };
+      decor.drawn(o);
+      return o;
+    };
+    expect(decor.group.visible).toBe(true);
+    expect(drawn().instances).toBeGreaterThan(0);
+    expect(drawn().instances).toBeLessThan(decor.instances); // the far side is left out
+    expect(s.frameStats.decorTriangles).toBe(drawn().triangles);
+    expect(decor.lodActive).toBe(false); // the default 3.4 R: about 250 px
+
+    // zoom to an apparent radius: the camera along its direction from the body
+    const R = s.gridOf(TC_C)!.radius;
+    const zoomTo = (px: number) => {
+      const target = s.rig.target.clone();
+      const dir = s.rig.camera.position.clone().sub(target).normalize();
+      s.rig.camera.position.copy(target).addScaledVector(dir, (R * H) / (2 * Math.tan((25 * Math.PI) / 180) * px));
+      h.frames(2);
+    };
+    const full = drawn();
+    zoomTo(210);
+    expect(decor.lodActive).toBe(false);
+    zoomTo(190);
+    expect(decor.lodActive).toBe(true);
+    const band = drawn();
+    expect(band.triangles).toBeLessThan(full.triangles);
+    expect(decor.instancesOf('lod').drawn).toBeGreaterThan(0);
+    expect(decor.instancesOf('detail_treeB').drawn).toBe(0);
+    zoomTo(210); // inside the hysteresis gap: stays in the band
+    expect(decor.lodActive).toBe(true);
+    zoomTo(230);
+    expect(decor.lodActive).toBe(false);
+    expect(decor.instancesOf('lod').drawn).toBe(0);
+    zoomTo(60); // below the terrain threshold: the fan grid, no decor drawn
+    expect(decor.group.visible).toBe(false);
+    expect(s.frameStats.decorTriangles).toBe(0);
+  });
+
   it('rebuilds the surface when only the terrain style of a body changes (a save from before T8 has none)', () => {
     const tc = new Simulation(TAU_CETI_SCENARIO);
     tc.dispatch({ type: 'SCAN_SYSTEM', shipId: ARK_ID }); // surfaces are built once the bodies are revealed
@@ -539,7 +810,11 @@ describe('SystemView (planet + system kinds, one scene)', () => {
     expect(house.material).toBe(s.kit.material);
     expect(batch(c, TC_C, 'basemodule_A')).toBeUndefined();
     expect(batch(e, TC_E, 'house')).toBeUndefined();
-    expect(batch(e, TC_E, 'basemodule_A')!.count).toBe(1);
+    expect(e.instancesOf('basemodule_A').written).toBe(1);
+    // tc-e is small on screen beside the focus: its HAB is a proxy box in the model's tone (T4b), the model batch parked
+    expect(e.proxied).toBe(true);
+    expect(batch(e, TC_E, 'basemodule_A')!.visible).toBe(false);
+    expect(e.proxyInstances.written).toBeGreaterThanOrEqual(1); // with the deposit rocks
 
     // picking: a ray through the top of the house hits its box (the loaded model's, from the kit)
     const part = c.partsOf(habC.id)[0]!;

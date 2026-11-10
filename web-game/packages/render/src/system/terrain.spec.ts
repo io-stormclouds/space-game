@@ -2,8 +2,9 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import * as THREE from 'three';
 import { TAU_CETI_BODIES, TC_C, buildWorldGrids, dressTerrain, type TerrainPlan } from '@space-game/domain';
+import { HemisphereCuller } from './hemisphere-culler';
 import { HexKit, hexKitUrl, type KitModel } from './hex-kit';
-import { TerrainDecor } from './terrain-decor';
+import { LOD_TREE, TerrainDecor } from './terrain-decor';
 import { RUIN_FADE, RUIN_GREY, TONE, isRuinBuilding, objectTone, ruinTone } from './terrain-tones';
 import { TerrainView } from './terrain-view';
 
@@ -174,13 +175,114 @@ describe('TerrainDecor on Tau Ceti c', () => {
     mesh.getMatrixAt(0, m);
     const shown = m.elements.slice();
     expect(Math.abs(m.determinant())).toBeGreaterThan(0);
+    expect(mesh.count).toBe(1);
+    // hidden = left out of the instance buffer (T4: not drawn at zero scale), no draw call when nothing is left
     decor.setHidden([castle]);
-    mesh.getMatrixAt(0, m);
-    expect(m.determinant()).toBe(0);
+    expect(mesh.count).toBe(0);
+    expect(mesh.visible).toBe(false);
+    expect(decor.slotsOn(castle)).toEqual([{ mesh: 'Decor_castle', slot: -1 }]);
     decor.setHidden([castle]); // idempotent
     decor.setHidden([]);
+    expect(mesh.count).toBe(1);
+    expect(mesh.visible).toBe(true);
     mesh.getMatrixAt(0, m);
     expect(m.elements).toEqual(shown);
+    // a forest tile: its trees leave their meshes, every other instance keeps its matrix in the compacted order
+    const forest = plan.decor.find((d) => d.model === 'detail_treeA')!.tile;
+    const trees = decor.group.children.find((c) => c.name === 'Decor_detail_treeA') as THREE.InstancedMesh;
+    const before = trees.count;
+    const others = Array.from({ length: before }, (_, i) => trees.getMatrixAt(i, new THREE.Matrix4()).elements.slice());
+    const own = decor.slotsOn(forest).filter((s) => s.mesh === 'Decor_detail_treeA').map((s) => s.slot);
+    decor.setHidden([forest]);
+    expect(trees.count).toBe(before - own.length);
+    const left = Array.from({ length: trees.count }, (_, i) => trees.getMatrixAt(i, new THREE.Matrix4()).elements.slice());
+    expect(left).toEqual(others.filter((_, i) => !own.includes(i)));
+    decor.setHidden([]);
+    expect(trees.count).toBe(before);
+    decor.dispose();
+    view.dispose();
+  });
+
+  it('draws only the instances in the visible cap of the culler, keeps hidden tiles hidden, and restores all (T4)', async () => {
+    const kit = await new HexKit('assets/', fromDisk).loadAll(idsOf(plan));
+    const view = new TerrainView(grid, plan);
+    const culler = new HemisphereCuller(R);
+    const decor = new TerrainDecor(grid, plan, view.frames, kit, culler);
+    const all = { triangles: 0, instances: 0 };
+    decor.drawn(all);
+    expect(all.instances).toBe(decor.instances); // before the first update: everything
+    // the camera over the settlement at 3.4 R (the planet view's default distance)
+    const centre = grid.tiles[plan.settlementCenter!]!.normal;
+    const dir = new THREE.Vector3(centre.x, centre.y, centre.z).normalize();
+    expect(culler.update(dir.clone().multiplyScalar(3.4 * R))).toBe(true);
+    decor.recull();
+    const near = { triangles: 0, instances: 0 };
+    decor.drawn(near);
+    expect(near.instances).toBeLessThan(all.instances);
+    expect(near.triangles).toBeLessThan(all.triangles);
+    // what is drawn is exactly what faces the camera beyond the horizon slack: every item of the plan, by tile
+    const facing = (tile: number) => {
+      const n = grid.tiles[tile]!.normal;
+      return n.x * dir.x + n.y * dir.y + n.z * dir.z;
+    };
+    for (const d of plan.decor) {
+      const slots = decor.slotsOn(d.tile);
+      if (facing(d.tile) > R / (3.4 * R)) expect(slots.every((s) => s.slot >= 0), `tile ${d.tile} faces the camera`).toBe(true);
+      // behind the horizon: tall models (the castle reaches 1.31 R) may still show over it, at most ~40° further
+      if (facing(d.tile) < -0.6) expect(slots.every((s) => s.slot === -1), `tile ${d.tile} is behind the body`).toBe(true);
+    }
+    // the castle stands under the camera: hiding and showing it again works on the culled buffers
+    const castle = plan.settlementCenter!;
+    decor.setHidden([castle]);
+    expect(decor.instancesOf('castle')).toEqual({ written: 1, drawn: 0 });
+    decor.setHidden([]);
+    expect(decor.instancesOf('castle')).toEqual({ written: 1, drawn: 1 });
+    // the far side: the settlement is gone, its antipode shows
+    culler.update(dir.clone().multiplyScalar(-3.4 * R));
+    decor.recull();
+    expect(decor.instancesOf('castle').drawn).toBe(0);
+    for (const d of plan.decor) if (facing(d.tile) < -R / (3.4 * R)) expect(decor.slotsOn(d.tile).every((s) => s.slot >= 0)).toBe(true);
+    decor.dispose();
+    view.dispose();
+  });
+
+  it('LOD band: every tree as detail_treeA, about half of them, one draw call; full detail again when it ends (T4)', async () => {
+    const kit = await new HexKit('assets/', fromDisk).loadAll(idsOf(plan));
+    const view = new TerrainView(grid, plan);
+    const decor = new TerrainDecor(grid, plan, view.frames, kit);
+    const trees = plan.decor.filter((d) => d.model.startsWith('detail_tree'));
+    const treeModels = [...new Set(trees.map((d) => d.model))];
+    expect(treeModels.length).toBeGreaterThan(1);
+    const full = { triangles: 0, instances: 0 };
+    decor.drawn(full);
+    const tri = (id: string) => kit.get(id)!.triangles;
+    expect(tri(LOD_TREE)).toBe(Math.min(...treeModels.map(tri))); // the cheapest tree
+
+    decor.setLod(true);
+    expect(decor.lodActive).toBe(true);
+    for (const id of treeModels) expect(decor.instancesOf(id).drawn, id).toBe(0);
+    const lod = decor.instancesOf('lod');
+    expect(lod.written).toBe(trees.length);
+    expect(lod.drawn).toBeGreaterThan(trees.length * 0.35);
+    expect(lod.drawn).toBeLessThan(trees.length * 0.65);
+    const band = { triangles: 0, instances: 0 };
+    decor.drawn(band);
+    expect(band.instances).toBe(full.instances - trees.length + lod.drawn);
+    expect(band.triangles).toBe(full.triangles - trees.reduce((s, d) => s + tri(d.model), 0) + lod.drawn * tri(LOD_TREE));
+    // ruins, rocks and mountains keep their models
+    expect(decor.instancesOf('castle').drawn).toBe(1);
+    // the same trees every time (hash of the tile), and hidden tiles stay hidden in the band
+    const kept = trees.filter((d) => decor.slotsOn(d.tile).some((s) => s.mesh === 'Decor_lod_trees' && s.slot >= 0));
+    expect(kept.length).toBeGreaterThan(0);
+    const tile = kept[0]!.tile;
+    decor.setHidden([tile]);
+    expect(decor.slotsOn(tile).every((s) => s.slot === -1)).toBe(true);
+    decor.setHidden([]);
+    decor.setLod(false);
+    const back = { triangles: 0, instances: 0 };
+    decor.drawn(back);
+    expect(back).toEqual(full);
+    expect(decor.instancesOf('lod').drawn).toBe(0);
     decor.dispose();
     view.dispose();
   });

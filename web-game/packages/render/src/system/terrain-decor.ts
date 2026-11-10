@@ -1,14 +1,30 @@
 import * as THREE from 'three';
 import { hash3, type DecorItem, type PlanetGrid, type TerrainPlan, type TileFrame } from '@space-game/domain';
+import { drawnInstances } from './buffers';
+import { CulledInstances, type HemisphereCuller } from './hemisphere-culler';
 import { kitGeometry, type KitModel } from './hex-kit';
 import { isRuinBuilding, objectTone, ruinTone } from './terrain-tones';
 
 const ruinObjectTone = (mat: string): number => ruinTone(objectTone(mat));
 
-interface Slot {
+/** Tree model drawn for every tree in the LOD band (the cheapest of the three, 287 triangles). */
+export const LOD_TREE = 'detail_treeA';
+/** Share of the trees kept in the LOD band (by `hash3` of the tile, so the same trees stay). */
+export const LOD_TREE_KEEP = 0.5;
+
+export const isTree = (model: string): boolean => model.startsWith('detail_tree');
+
+/** One model's instances: the mesh draws the culled, compacted `set`. */
+interface DecorMesh {
+  id: string;
   mesh: THREE.InstancedMesh;
+  set: CulledInstances;
+  tree: boolean;
+}
+
+interface Slot {
+  set: CulledInstances;
   index: number;
-  matrix: THREE.Matrix4;
 }
 
 /**
@@ -16,14 +32,25 @@ interface Slot {
  * turned to the tile frame. Settlement buildings are ruins in faded tones (`ruinTone`, T-23), trees,
  * rocks and mountains keep theirs. `setHidden(tiles)` hides everything on the given tiles (a structure stands
  * there) and restores it when a tile leaves the set (the structure was demolished).
+ *
+ * T4: with the body's culler only instances in the camera's visible cap are drawn (`recull` each frame), and in
+ * the LOD band (`setLod`, the scene decides by apparent radius) every tree is drawn as `LOD_TREE`, about half of
+ * them (`LOD_TREE_KEEP`): one draw call for all trees instead of three. Hidden and culled instances are left
+ * out of the instance buffers (not drawn at zero scale); `slotOf` maps a tile's instance to its slot.
  */
 export class TerrainDecor {
   readonly group = new THREE.Group();
   private readonly material = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
   private readonly byTile = new Map<number, Slot[]>();
+  private readonly parts: DecorMesh[] = [];
   private readonly meshes: THREE.InstancedMesh[] = [];
   private readonly hidden = new Set<number>();
-  private readonly zero = new THREE.Matrix4().makeScale(0, 0, 0);
+  /** Every tree as `LOD_TREE` (null when the kit has no such model or the plan no trees). */
+  private readonly lodMesh: THREE.InstancedMesh | null = null;
+  private readonly lodSet: CulledInstances | null = null;
+  private readonly lodKeep: Uint8Array = new Uint8Array(0);
+  private readonly lodFilter = (i: number): boolean => this.lodKeep[i] === 1;
+  private lod = false;
   private _triangles = 0;
   private _instances = 0;
   private _topRadius = 0;
@@ -33,6 +60,8 @@ export class TerrainDecor {
     plan: TerrainPlan,
     frames: ReadonlyArray<TileFrame>,
     kit: ReadonlyMap<string, KitModel>,
+    /** Visible cap of the body (hemisphere culling); null = draw every instance. */
+    private readonly culler: HemisphereCuller | null = null,
   ) {
     this.group.name = `${grid.bodyId}_TerrainDecor`;
     const tileWidth = grid.tileEdge * Math.sqrt(3);
@@ -52,47 +81,89 @@ export class TerrainDecor {
     const X = new THREE.Vector3();
     const Y = new THREE.Vector3();
     const Z = new THREE.Vector3();
+    const m = new THREE.Matrix4();
+    /** Model → body matrix of a decor item drawn as `model`, turned by its yaw (`n`: its index among its model's). */
+    const place = (d: DecorItem, n: number, model: KitModel, out: THREE.Matrix4): number => {
+      const f = frames[d.tile]!;
+      const s = ((tileWidth * d.fill) / Math.max(model.size.x, model.size.z)) * (d.sm ?? 1);
+      X.set(f.x.x, f.x.y, f.x.z);
+      Y.set(f.y.x, f.y.y, f.y.z);
+      Z.set(f.z.x, f.z.y, f.z.z);
+      basis.makeBasis(X, Y, Z);
+      q.setFromRotationMatrix(basis);
+      yawQ.setFromAxisAngle(Y, d.yaw ?? hash3(plan.seed, d.tile, 8, n) * Math.PI * 2);
+      q.premultiply(yawQ);
+      pos
+        .set(f.center.x, f.center.y, f.center.z)
+        .addScaledVector(X, (d.ox ?? 0) * tileWidth)
+        .addScaledVector(Z, (d.oz ?? 0) * tileWidth)
+        .normalize()
+        .multiplyScalar(R - model.box.min.y * s);
+      out.compose(pos, q, sc.setScalar(s));
+      return s;
+    };
+    const slot = (tile: number, set: CulledInstances, index: number) => {
+      const slots = this.byTile.get(tile) ?? [];
+      slots.push({ set, index });
+      this.byTile.set(tile, slots);
+    };
+
     for (const [id, items] of byModel) {
       const model = kit.get(id);
       if (!model) continue;
       // settlement buildings are ruins: faded, so the player's own (full-tone) buildings stand out
       const geometry = kitGeometry(model, isRuinBuilding(id) ? ruinObjectTone : objectTone);
-
       const mesh = new THREE.InstancedMesh(geometry, this.material, items.length);
       mesh.name = `Decor_${id}`;
       mesh.frustumCulled = false; // instances span the whole sphere; the bounding sphere is the model's
-      const footprint = Math.max(model.size.x, model.size.z);
+      const set = new CulledInstances(items.length);
       items.forEach((d, n) => {
-        const f = frames[d.tile]!;
-        const s = ((tileWidth * d.fill) / footprint) * (d.sm ?? 1);
-        X.set(f.x.x, f.x.y, f.x.z);
-        Y.set(f.y.x, f.y.y, f.y.z);
-        Z.set(f.z.x, f.z.y, f.z.z);
-        basis.makeBasis(X, Y, Z);
-        q.setFromRotationMatrix(basis);
-        yawQ.setFromAxisAngle(Y, d.yaw ?? hash3(plan.seed, d.tile, 8, n) * Math.PI * 2);
-        q.premultiply(yawQ);
-        pos
-          .set(f.center.x, f.center.y, f.center.z)
-          .addScaledVector(X, (d.ox ?? 0) * tileWidth)
-          .addScaledVector(Z, (d.oz ?? 0) * tileWidth)
-          .normalize()
-          .multiplyScalar(R - model.box.min.y * s);
+        const s = place(d, n, model, m);
         this._topRadius = Math.max(this._topRadius, R + model.size.y * s);
-        const m = new THREE.Matrix4().compose(pos, q, sc.setScalar(s));
-        mesh.setMatrixAt(n, m);
-        const slots = this.byTile.get(d.tile) ?? [];
-        slots.push({ mesh, index: n, matrix: m });
-        this.byTile.set(d.tile, slots);
+        set.set(n, m);
+        slot(d.tile, set, n);
       });
-      mesh.instanceMatrix.needsUpdate = true;
+      set.count = items.length;
+      set.apply(mesh, null);
       this.group.add(mesh);
       this.meshes.push(mesh);
+      this.parts.push({ id, mesh, set, tree: isTree(id) });
       this._triangles += model.triangles * items.length;
       this._instances += items.length;
     }
+
+    // LOD band: every tree as the cheapest tree model, about half of them
+    const lodModel = kit.get(LOD_TREE);
+    const trees = lodModel ? [...byModel].filter(([id]) => isTree(id) && kit.has(id)) : [];
+    const treeCount = trees.reduce((n, [, items]) => n + items.length, 0);
+    if (lodModel && treeCount > 0) {
+      const shared = this.parts.find((p) => p.id === LOD_TREE)?.mesh.geometry;
+      const mesh = new THREE.InstancedMesh(shared ?? kitGeometry(lodModel, objectTone), this.material, treeCount);
+      mesh.name = 'Decor_lod_trees';
+      mesh.frustumCulled = false;
+      mesh.visible = false;
+      mesh.count = 0;
+      const set = new CulledInstances(treeCount);
+      const keep = new Uint8Array(treeCount);
+      let k = 0;
+      for (const [, items] of trees) {
+        items.forEach((d, n) => {
+          place(d, n, lodModel, m);
+          set.set(k, m);
+          keep[k] = hash3(plan.seed, d.tile, 23, n) < LOD_TREE_KEEP ? 1 : 0;
+          slot(d.tile, set, k);
+          k++;
+        });
+      }
+      set.count = treeCount;
+      this.group.add(mesh);
+      this.lodMesh = mesh;
+      this.lodSet = set;
+      this.lodKeep = keep;
+    }
   }
 
+  /** Triangles of every instance at full detail. */
   get triangles(): number {
     return this._triangles;
   }
@@ -101,8 +172,21 @@ export class TerrainDecor {
     return this._instances;
   }
 
+  /** Draw calls at full detail (one per model). */
   get drawCalls(): number {
     return this.meshes.length;
+  }
+
+  /** Whether the trees are drawn as the LOD band wants them. */
+  get lodActive(): boolean {
+    return this.lod;
+  }
+
+  /** Adds the triangles and instances drawn this frame (nothing while the group is hidden). */
+  drawn(out: { triangles: number; instances: number }): void {
+    if (!this.group.visible) return;
+    for (const m of this.meshes) drawnInstances(m, out);
+    if (this.lodMesh) drawnInstances(this.lodMesh, out);
   }
 
   /** Distance from the body centre to the top of the tallest decor model (the castle). */
@@ -114,25 +198,78 @@ export class TerrainDecor {
     return this.byTile.has(tile);
   }
 
+  /** Instances of a model's mesh (`Decor_<id>`, or `lod` for the LOD trees): written, and drawn now. */
+  instancesOf(id: string): { written: number; drawn: number } {
+    const mesh = id === 'lod' ? this.lodMesh : (this.parts.find((p) => p.id === id)?.mesh ?? null);
+    const set = id === 'lod' ? this.lodSet : (this.parts.find((p) => p.id === id)?.set ?? null);
+    return { written: set?.count ?? 0, drawn: mesh?.visible ? mesh.count : 0 };
+  }
+
+  /**
+   * Where each decor item on a tile is drawn now, by mesh name (its model's, or the LOD trees' in the band) and
+   * slot in that mesh (-1 = hidden, culled or thinned out; tests, harness).
+   */
+  slotsOn(tile: number): Array<{ mesh: string; slot: number }> {
+    const out: Array<{ mesh: string; slot: number }> = [];
+    for (const s of this.byTile.get(tile) ?? []) {
+      if (s.set === this.lodSet) {
+        if (this.lod) out.push({ mesh: this.lodMesh!.name, slot: s.set.slotOf(s.index) });
+        continue;
+      }
+      const p = this.parts.find((x) => x.set === s.set)!;
+      if (!(this.lod && p.tree && this.lodMesh)) out.push({ mesh: p.mesh.name, slot: s.set.slotOf(s.index) });
+    }
+    return out;
+  }
+
   /** Hides decor on exactly these tiles and shows it again everywhere else. Cheap when nothing changed. */
   setHidden(tiles: Iterable<number>): void {
     const next = new Set(tiles);
-    for (const t of this.hidden) if (!next.has(t)) this.set(t, false);
-    for (const t of next) if (!this.hidden.has(t)) this.set(t, true);
+    let changed = false;
+    for (const t of this.hidden) if (!next.has(t)) changed = this.set(t, false) || changed;
+    for (const t of next) if (!this.hidden.has(t)) changed = this.set(t, true) || changed;
+    if (changed) this.recull();
+  }
+
+  /** Trees as in the LOD band (`LOD_TREE`, thinned) or at full detail; re-culls when it changes. */
+  setLod(on: boolean): void {
+    if (on === this.lod || !this.lodMesh) return;
+    this.lod = on;
+    for (const p of this.parts) if (p.tree) p.set.invalidate();
+    this.lodSet!.invalidate();
+    this.recull();
+  }
+
+  /** Re-draws what the culler's cap, the hidden tiles and the LOD band let through (cheap when nothing moved). */
+  recull(): void {
+    for (const p of this.parts) {
+      if (this.lod && p.tree) {
+        p.mesh.count = 0;
+        p.mesh.visible = false;
+        continue;
+      }
+      p.set.cull(p.mesh, this.culler);
+    }
+    if (!this.lodMesh || !this.lodSet) return;
+    if (this.lod) this.lodSet.cull(this.lodMesh, this.culler, this.lodFilter);
+    else {
+      this.lodMesh.count = 0;
+      this.lodMesh.visible = false;
+    }
   }
 
   dispose(): void {
     for (const m of this.meshes) m.geometry.dispose();
+    if (this.lodMesh && !this.meshes.some((m) => m.geometry === this.lodMesh!.geometry)) this.lodMesh.geometry.dispose();
     this.material.dispose();
     this.group.clear();
   }
 
-  private set(tile: number, hide: boolean): void {
+  private set(tile: number, hide: boolean): boolean {
     if (hide) this.hidden.add(tile);
     else this.hidden.delete(tile);
-    for (const s of this.byTile.get(tile) ?? []) {
-      s.mesh.setMatrixAt(s.index, hide ? this.zero : s.matrix);
-      s.mesh.instanceMatrix.needsUpdate = true;
-    }
+    const slots = this.byTile.get(tile);
+    for (const s of slots ?? []) s.set.setHidden(s.index, hide);
+    return !!slots;
   }
 }

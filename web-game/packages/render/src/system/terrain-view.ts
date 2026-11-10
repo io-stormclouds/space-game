@@ -162,7 +162,7 @@ export class TerrainView {
 
       if (model && variant) {
         for (const part of model.parts) {
-          c.setHex(groundTone(part.mat, kind));
+          c.setHex(groundTone(part.mat, kind, plan));
           if (part.mat !== 'Water') c.multiplyScalar(jitter);
           const lowerWater = part.mat === 'Water';
           const isTop = part.mat === 'Green';
@@ -174,7 +174,7 @@ export class TerrainView {
           }
         }
       } else {
-        c.setHex(groundTone('Green', kind)).multiplyScalar(jitter);
+        c.setHex(groundTone('Green', kind, plan)).multiplyScalar(jitter);
         const n = f.m;
         const ctr = [f.center.x, f.center.y, f.center.z];
         if (tile.kind === 'PENT') {

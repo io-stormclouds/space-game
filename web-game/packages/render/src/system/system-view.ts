@@ -7,6 +7,8 @@ export interface SystemViewOptions {
   fetchBytes?: FetchBytes;
   /** false = keep the placeholder boxes, no network (tests, quick previews). */
   loadModels?: boolean;
+  /** false = no hemisphere culling, no decor LOD and no structure/unit proxies (T4/T4b "before" measurements); default true. */
+  cullDetail?: boolean;
 }
 
 const EMPTY: PickResult = { kind: 'EMPTY' };
@@ -49,6 +51,7 @@ export class SystemView implements View {
       height: ctx.height,
       fetchBytes: this.opts.fetchBytes,
       loadModels: this.opts.loadModels,
+      cullDetail: this.opts.cullDetail,
     });
     this.scene.setMode(this.current === 'system' ? 'system' : 'planet');
   }
@@ -79,6 +82,17 @@ export class SystemView implements View {
   /** Both render passes of the last frame (the host's `renderer.info` only sees the last one). */
   stats(): Partial<RenderStats> {
     if (!this.scene) return {};
-    return { drawCalls: this.scene.frameStats.drawCalls, triangles: this.scene.frameStats.triangles };
+    const f = this.scene.frameStats;
+    return {
+      drawCalls: f.drawCalls,
+      triangles: f.triangles,
+      detail: {
+        terrainTriangles: f.terrainTriangles,
+        decorTriangles: f.decorTriangles,
+        structureTriangles: f.structureTriangles,
+        unitTriangles: f.unitTriangles,
+        instances: f.instances,
+      },
+    };
   }
 }
