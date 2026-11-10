@@ -101,6 +101,67 @@ export interface GalaxyPlayer extends SimulatedPlayer {
   npc: boolean;
 }
 
+// ---- corporations (05-SOCIAL §5, S2) ----
+
+export type CorpRole = 'chief' | 'officer' | 'member';
+
+export interface CorpMember {
+  account: string;
+  callsign: string;
+  role: CorpRole;
+  joinedAt: number;
+}
+
+export interface CorpLedgerEntry {
+  at: number;
+  callsign: string;
+  kind: 'deposit' | 'withdrawal';
+  credits: number;
+  goods: Record<string, number>;
+  note: string;
+}
+
+export interface CorpNotice {
+  at: number;
+  callsign: string;
+  text: string;
+}
+
+/** The player's corporation: seat hub, members by role, treasury, ledger and board (newest first). */
+export interface CorpView {
+  id: string;
+  name: string;
+  tag: string;
+  hubId: string;
+  foundedAt: number;
+  /** The player's role. */
+  role: CorpRole;
+  members: CorpMember[];
+  credits: number;
+  stock: Record<string, number>;
+  ledger: CorpLedgerEntry[];
+  board: CorpNotice[];
+  /** Callsigns invited and not answered yet. */
+  invited: string[];
+}
+
+export interface CorpSummary {
+  id: string;
+  name: string;
+  tag: string;
+  hubId: string;
+  members: number;
+}
+
+export interface CorpInvitation {
+  corpId: string;
+  name: string;
+  tag: string;
+  /** Callsign of who invited. */
+  by: string;
+  at: number;
+}
+
 /** What the player sees of the galaxy; pushed after every change of the market. */
 export interface GalaxyView {
   account: string;
@@ -117,6 +178,10 @@ export interface GalaxyView {
   players: GalaxyPlayer[];
   /** Open contracts of every hub and the player's own (taken, delivered, failed), newest first. */
   contracts: Contract[];
+  /** The player's corporation (null: none), the invitations to them, and every corporation. */
+  corporation: CorpView | null;
+  invitations: CorpInvitation[];
+  corporations: CorpSummary[];
   time: number;
 }
 
@@ -126,7 +191,17 @@ export type GalaxyOp =
   | { op: 'cancelOrder'; orderId: string }
   | { op: 'shipHome'; hubId: string; bodyId: string; cargo: Record<string, number> }
   | { op: 'takeContract'; contractId: string }
-  | { op: 'deliverContract'; contractId: string };
+  | { op: 'deliverContract'; contractId: string }
+  | { op: 'foundCorporation'; name: string; tag: string; hubId: string }
+  | { op: 'invite'; callsign: string }
+  | { op: 'acceptInvitation'; corpId: string }
+  | { op: 'declineInvitation'; corpId: string }
+  | { op: 'leaveCorporation' }
+  | { op: 'setRole'; account: string; role: CorpRole }
+  | { op: 'expel'; account: string }
+  | { op: 'deposit'; credits?: number; goods?: Record<string, number>; note?: string }
+  | { op: 'withdraw'; credits?: number; goods?: Record<string, number>; note?: string }
+  | { op: 'postNotice'; text: string };
 
 /** An order after it met the book: what is left of it (remaining 0: filled) and its trades. */
 export interface Placed {
@@ -134,7 +209,7 @@ export interface Placed {
   trades: Trade[];
 }
 
-export type GalaxyReply = GalaxyView | Placed | MarketOrder | Shipment | Contract;
+export type GalaxyReply = GalaxyView | Placed | MarketOrder | Shipment | Contract | CorpView | CorpSummary | CorpInvitation[];
 
 /**
  * The world's command that sends cargo from the colony's storage to a hub (R-21). Only the Rust world

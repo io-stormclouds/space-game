@@ -10,6 +10,7 @@ import { GameService } from '../game/game.service';
 import { isPreset, runPreset } from '../game/presets';
 import { UiState } from '../game/ui-state';
 import { AtanorMachine } from '../hud/atanor-machine';
+import { CorpPanel } from '../hud/corp-panel';
 import { LogPanel, MissionPanel, ScanPanel, StatusBanner } from '../hud/float-panels';
 import { HubPanel } from '../hud/hub-panel';
 import { PerfOverlay } from '../hud/perf-overlay';
@@ -41,6 +42,7 @@ const TEMPOS = TEMPO_PRESETS.filter((t) => t !== 10);
     DesignerPanel,
     AtanorMachine,
     HubPanel,
+    CorpPanel,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { '(window:keydown)': 'onKey($event)' },
@@ -57,6 +59,8 @@ const TEMPOS = TEMPO_PRESETS.filter((t) => t !== 10);
           <wg-designer-panel />
         } @else if (ui.hubOpen()) {
           <wg-hub-panel />
+        } @else if (ui.corpOpen()) {
+          <wg-corp-panel />
         } @else if (ui.view() === 'atanor') {
           <wg-atanor-machine />
         } @else if (showScan()) {
@@ -162,7 +166,11 @@ export class GamePage {
         return;
       case 'F3':
         e.preventDefault();
-        this.ui.hubOpen.update((v) => !v);
+        this.ui.toggleHub();
+        return;
+      case 'F4':
+        e.preventDefault();
+        this.ui.toggleCorp();
         return;
       case 'Escape':
         // The Atanor card always has "Wróć" (Esc): one handler, or Esc would act twice (the

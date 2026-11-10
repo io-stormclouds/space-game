@@ -22,7 +22,7 @@ use tokio::sync::{mpsc, oneshot};
 
 use game_core::economy::{EconomyParams, compute_economy};
 use game_core::models::resource::Qty;
-use game_session::exchange::{Exchange, ExchangeState, Side};
+use game_session::exchange::{Exchange, ExchangeState, Role, Side};
 
 use crate::AppState;
 use crate::accounts::write_atomic;
@@ -74,11 +74,69 @@ pub enum GalaxyMsg {
 #[serde(tag = "op", rename_all = "camelCase", rename_all_fields = "camelCase")]
 pub enum GalaxyOp {
     View,
-    PlaceOrder { hub_id: String, material: String, side: Side, quantity: f64, price: f64 },
-    CancelOrder { order_id: String },
-    ShipHome { hub_id: String, body_id: String, cargo: Qty },
-    TakeContract { contract_id: String },
-    DeliverContract { contract_id: String },
+    PlaceOrder {
+        hub_id: String,
+        material: String,
+        side: Side,
+        quantity: f64,
+        price: f64,
+    },
+    CancelOrder {
+        order_id: String,
+    },
+    ShipHome {
+        hub_id: String,
+        body_id: String,
+        cargo: Qty,
+    },
+    TakeContract {
+        contract_id: String,
+    },
+    DeliverContract {
+        contract_id: String,
+    },
+    // corporations (S2)
+    FoundCorporation {
+        name: String,
+        tag: String,
+        hub_id: String,
+    },
+    Invite {
+        callsign: String,
+    },
+    AcceptInvitation {
+        corp_id: String,
+    },
+    DeclineInvitation {
+        corp_id: String,
+    },
+    LeaveCorporation,
+    SetRole {
+        account: String,
+        role: Role,
+    },
+    Expel {
+        account: String,
+    },
+    Deposit {
+        #[serde(default)]
+        credits: f64,
+        #[serde(default)]
+        goods: Qty,
+        #[serde(default)]
+        note: String,
+    },
+    Withdraw {
+        #[serde(default)]
+        credits: f64,
+        #[serde(default)]
+        goods: Qty,
+        #[serde(default)]
+        note: String,
+    },
+    PostNotice {
+        text: String,
+    },
 }
 
 pub fn galaxy_path(cfg: &Config) -> PathBuf {
@@ -155,6 +213,18 @@ impl GalaxyService {
             GalaxyOp::ShipHome { hub_id, body_id, cargo } => ex.ship_home(account, &hub_id, &body_id, &cargo, now).map(|s| reply_ok(id, s)),
             GalaxyOp::TakeContract { contract_id } => ex.take_contract(account, &contract_id).map(|c| reply_ok(id, c)),
             GalaxyOp::DeliverContract { contract_id } => ex.deliver_contract(account, &contract_id).map(|c| reply_ok(id, c)),
+            GalaxyOp::FoundCorporation { name, tag, hub_id } => {
+                ex.found_corporation(account, &name, &tag, &hub_id, now).map(|c| reply_ok(id, c))
+            }
+            GalaxyOp::Invite { callsign } => ex.invite(account, &callsign, now).map(|c| reply_ok(id, c)),
+            GalaxyOp::AcceptInvitation { corp_id } => ex.accept_invitation(account, &corp_id, now).map(|c| reply_ok(id, c)),
+            GalaxyOp::DeclineInvitation { corp_id } => ex.decline_invitation(account, &corp_id).map(|v| reply_ok(id, v)),
+            GalaxyOp::LeaveCorporation => ex.leave_corporation(account).map(|s| reply_ok(id, s)),
+            GalaxyOp::SetRole { account: member, role } => ex.set_role(account, &member, role).map(|c| reply_ok(id, c)),
+            GalaxyOp::Expel { account: member } => ex.expel(account, &member).map(|c| reply_ok(id, c)),
+            GalaxyOp::Deposit { credits, goods, note } => ex.deposit(account, credits, &goods, &note, now).map(|c| reply_ok(id, c)),
+            GalaxyOp::Withdraw { credits, goods, note } => ex.withdraw(account, credits, &goods, &note, now).map(|c| reply_ok(id, c)),
+            GalaxyOp::PostNotice { text } => ex.post_notice(account, &text, now).map(|c| reply_ok(id, c)),
         };
         match out {
             Ok(r) => {

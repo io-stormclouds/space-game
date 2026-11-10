@@ -221,6 +221,9 @@ describe.skipIf(!existsSync(WASM))('replica of a server world (B4)', () => {
       trades: [],
       players: [{ id: 'npc-1', name: 'Dowódca Ares', corporation: 'Unia Lagrange', homeStar: 'Procyon A', colonies: 2, score: 900, npc: true }],
       contracts: [],
+      corporation: null,
+      invitations: [],
+      corporations: [],
       time: 0,
     };
     server.emit('message', { type: 'galaxy', view });

@@ -198,12 +198,26 @@ Zrobione:
     - e2e `hub.spec.ts`: najtańszy kontrakt przyjęty, kupiony w hubie, dostarczony i opłacony.
   - Po S1 i scaleniu z terenem: `cargo test --workspace`, clippy, fmt; vitest 463/463; e2e `mock-ts` 18 przeszło + 1 pominięty (kontrakt tylko na serwerze), e2e `remote` **19 z 19** (2,4 min), oba przy 2 workerach.
 
-Zmienne: `NPC_FACTIONS` (on), `NPC_SEED`, `NPC_PLAYERS` (6), `NPC_UPDATE_SECONDS` (600; dev 10), `NPC_DEPTH` (50), `HUB_FEE` (0,02), `START_CREDITS` (1000), `ORDER_HOURS` (168), `SHIPPING_SECONDS_PER_LY` (7200; dev 2), `SHIPPING_HANDLING_SECONDS` (1800; dev 2), `CONTRACT_HOURS` (48; dev 1), `CONTRACTS_PER_HUB` (3).
+- **S2: korporacje (R-24, `exchange/corporation.rs`):**
+  - Założenie: nazwa, znacznik, siedziba w hubie; kosztuje kredyty i STA z towaru w siedzibie.
+  - Role: szef, oficerowie (najwyżej 3), członkowie. Zaproszenia po znaku wywoławczym. Szef nadaje role, może przekazać funkcję szefa i usunąć każdego; oficer usuwa członków.
+  - Skarbiec: kredyty i towary w hubie siedziby. Wpłaty od każdego członka, wypłaty od szefa i oficerów, każdy ruch w dzienniku z notatką.
+  - Tablica ogłoszeń. Szef, który zostaje sam, rozwiązuje korporację i odbiera skarbiec.
+  - Widok galaktyki zawiera korporację gracza, zaproszenia i listę wszystkich korporacji. Gracze na liście mają nazwę swojej korporacji.
+  - Klient: panel „Korporacja” (F4 albo „Korp.” w górnym pasku). Panele hubu i korporacji wzajemnie się zamykają. Wpłaty towarów są w API (`deposit {goods}`), w panelu na razie tylko kredyty.
+  - Testy:
+    - `corporation::tests::three_accounts_a_treasury_and_its_ledger`;
+    - przez WebSocket `a_corporation_of_three_accounts_with_a_deposit_and_a_withdrawal_in_its_ledger` (brama S2 „korporacja z 3 kont, wpłata i wypłata w dzienniku”, widziana przez każdego członka);
+    - e2e `corp.spec.ts` na `remote`: założenie, wpłata, wypłata, dziennik, tablica, rozwiązanie.
+  - Po S2: `cargo test --workspace`, clippy (0), fmt; vitest 463/463; e2e `mock-ts` 19 + 1 pominięty, e2e `remote` **20 z 20** (2,4 min), oba przy 2 workerach.
+
+Zmienne: `NPC_FACTIONS` (on), `NPC_SEED`, `NPC_PLAYERS` (6), `NPC_UPDATE_SECONDS` (600; dev 10), `NPC_DEPTH` (50), `HUB_FEE` (0,02), `START_CREDITS` (1000), `ORDER_HOURS` (168), `SHIPPING_SECONDS_PER_LY` (7200; dev 2), `SHIPPING_HANDLING_SECONDS` (1800; dev 2), `CONTRACT_HOURS` (48; dev 1), `CONTRACTS_PER_HUB` (3), `CORP_FOUNDING_CREDITS` (5000; dev 500), `CORP_FOUNDING_STA` (100; dev 0), `CORP_MAX_MEMBERS` (20).
 
 Brakuje względem B6 i 05-SOCIAL (następne kroki):
 - Ekran hubu: księga zleceń poziomami (dane już są w widoku), handel dwóch graczy w e2e (jest w teście WebSocket).
 - Specjalizacje frakcji (które materiały skupują chętniej, jakie kontrakty wystawiają) i receptury za reputację 50.
-- Korporacje (S2), czat, rankingi.
+- Korporacje: wymóg portu L2 przy założeniu (świat musi zgłaszać poziom portu), kontrakty wewnętrzne bez prowizji, czat, flaga i kolor (06), biblioteka projektów Atanora (AT6), megaprojekty i sojusze (S3).
+- Rankingi.
 - PostgreSQL dla rynku (transakcje SQL jak w planie §8) razem z adapterem światów.
 - Zgłoszenie wysyłki po awarii: jeśli serwer padnie między rozkazem `SHIP_TO_HUB` a zapisem `galaxy.json` (≤ 1 s), przesyłka przepada. Do usunięcia przez dziennik wysyłek albo przez transakcję w PostgreSQL.
 

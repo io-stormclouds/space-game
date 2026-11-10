@@ -481,3 +481,64 @@ async fn a_faction_contract_is_taken_delivered_and_paid() {
     assert!(after["contracts"].as_array().unwrap().iter().any(|x| x["id"] == id && x["state"] == "delivered"));
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// 05-SOCIAL S2 gate: a corporation of three accounts; a deposit and a withdrawal in its ledger,
+/// which every member sees. Invitations go by callsign; only the chief and officers withdraw.
+#[tokio::test]
+async fn a_corporation_of_three_accounts_with_a_deposit_and_a_withdrawal_in_its_ledger() {
+    let dir = tmp("corp");
+    let mut cfg = config(&dir, true);
+    cfg.market.corp.founding_credits = 500.0;
+    cfg.market.corp.founding_goods = Default::default();
+    let (url, _state) = start(cfg).await;
+    let mut a = Client::login(&url, "Kestrel", "tajne-haslo").await;
+    let mut b = Client::login(&url, "Wega", "inne-haslo").await;
+    let mut c = Client::login(&url, "Lyra", "trzecie-haslo").await;
+    let account_c = c.wait(|x| x.galaxy.is_some(), "Lyra's view").await.galaxy.as_ref().unwrap()["account"].clone();
+
+    let founded = a.galaxy_op(1, json!({ "op": "foundCorporation", "name": "Konsorcjum Kestrel", "tag": "kst", "hubId": "hub-sol" })).await;
+    assert_eq!(founded["value"]["role"], "chief", "{founded}");
+    assert_eq!(founded["value"]["tag"], "KST");
+    let corp_id = founded["value"]["id"].clone();
+    let stranger = b.galaxy_op(1, json!({ "op": "invite", "callsign": "Lyra" })).await;
+    assert_eq!(stranger["ok"], false, "only members invite");
+    for (n, who) in [(2, "Wega"), (3, "lyra")] {
+        let r = a.galaxy_op(n, json!({ "op": "invite", "callsign": who })).await;
+        assert_eq!(r["ok"], true, "{r}");
+    }
+    let invited = |x: &Client| x.galaxy.as_ref().is_some_and(|v| !v["invitations"].as_array().unwrap().is_empty());
+    for (x, name) in [(&mut b, "Wega"), (&mut c, "Lyra")] {
+        x.wait(invited, name).await;
+        assert_eq!(x.galaxy.as_ref().unwrap()["invitations"][0]["by"], "Kestrel");
+        let joined = x.galaxy_op(10, json!({ "op": "acceptInvitation", "corpId": corp_id })).await;
+        assert_eq!(joined["value"]["role"], "member", "{joined}");
+    }
+
+    let paid = b.galaxy_op(11, json!({ "op": "deposit", "credits": 200, "note": "na start" })).await;
+    assert_eq!(paid["value"]["credits"].as_f64(), Some(200.0), "{paid}");
+    let refused = c.galaxy_op(11, json!({ "op": "withdraw", "credits": 50 })).await;
+    assert!(refused["error"].as_str().unwrap().contains("szef i oficerowie"), "{refused}");
+    let promoted = a.galaxy_op(4, json!({ "op": "setRole", "account": account_c, "role": "officer" })).await;
+    assert_eq!(promoted["ok"], true, "{promoted}");
+    let taken = c.galaxy_op(12, json!({ "op": "withdraw", "credits": 50, "note": "paliwo" })).await;
+    assert_eq!(taken["value"]["credits"].as_f64(), Some(150.0), "{taken}");
+
+    // every member sees the corporation, its three members and the two entries of the ledger
+    let two = |x: &Client| x.galaxy.as_ref().is_some_and(|v| v["corporation"]["ledger"].as_array().is_some_and(|l| l.len() == 2));
+    for x in [&mut a, &mut b, &mut c] {
+        let v = x.wait(two, "the ledger").await.galaxy.clone().unwrap();
+        let corp = &v["corporation"];
+        assert_eq!(corp["members"].as_array().unwrap().len(), 3);
+        let ledger = corp["ledger"].as_array().unwrap();
+        assert_eq!(
+            (ledger[0]["callsign"].as_str(), ledger[0]["kind"].as_str(), ledger[0]["credits"].as_f64()),
+            (Some("Lyra"), Some("withdrawal"), Some(50.0))
+        );
+        assert_eq!(
+            (ledger[1]["callsign"].as_str(), ledger[1]["kind"].as_str(), ledger[1]["note"].as_str()),
+            (Some("Wega"), Some("deposit"), Some("na start"))
+        );
+        assert_eq!(v["corporations"][0]["members"], 3);
+    }
+    let _ = std::fs::remove_dir_all(dir);
+}

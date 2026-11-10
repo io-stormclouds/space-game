@@ -28,6 +28,9 @@ use game_core::models::resource::{Qty, add_stock, amount_of, can_afford, format_
 use crate::contract::{MarketHub, MarketQuote, SimulatedPlayer};
 use crate::galaxy::{GalaxyOptions, GalaxySim, GalaxySimState, HubDef};
 
+mod corporation;
+pub use corporation::*;
+
 /// Hubs of the server's galaxy (05-SOCIAL S-9): the canvas two, Procyon and Epsilon Eridani.
 pub const GALAXY_HUBS: [HubDef; 4] = [
     ("hub-sirius", "Syriusz", "Sirius A"),
@@ -151,6 +154,8 @@ pub struct MarketConfig {
     pub contract_seconds: f64,
     /// Open contracts each faction keeps in its hub.
     pub contracts_per_hub: usize,
+    /// Corporations (S2): founding cost and sizes.
+    pub corp: CorpConfig,
     /// NPC factions (R-7); `None`: a market of players only (no contracts, duties or reputation changes).
     pub npc: Option<NpcConfig>,
 }
@@ -168,6 +173,7 @@ impl Default for MarketConfig {
             max_orders: 50,
             contract_seconds: 48.0 * 3600.0,
             contracts_per_hub: 3,
+            corp: CorpConfig::default(),
             npc: Some(NpcConfig { seed: 20_261_107, players: 6, update_seconds: 600.0, depth: 50.0 }),
         }
     }
@@ -322,6 +328,10 @@ pub struct ExchangeState {
     /// Unix ms reputation last faded.
     #[serde(default)]
     pub reputation_time: f64,
+    #[serde(default)]
+    pub corporations: Vec<Corporation>,
+    #[serde(default)]
+    pub invitations: Vec<Invitation>,
 }
 
 /// One price level of a hub's book.
@@ -380,6 +390,10 @@ pub struct GalaxyView {
     pub players: Vec<GalaxyPlayer>,
     /// Open contracts of every hub and the viewer's taken, delivered and failed ones (newest first).
     pub contracts: Vec<Contract>,
+    /// The viewer's corporation, the invitations to them, and every corporation.
+    pub corporation: Option<CorpView>,
+    pub invitations: Vec<InvitationView>,
+    pub corporations: Vec<CorpSummary>,
     pub time: f64,
 }
 
@@ -1175,7 +1189,7 @@ impl Exchange {
                 player: SimulatedPlayer {
                     id: id.clone(),
                     name: p.callsign.clone(),
-                    corporation: String::new(),
+                    corporation: self.corporation_name(id),
                     home_star: p.star.clone(),
                     colonies: 1.0,
                     score: 0.0,
@@ -1229,8 +1243,30 @@ impl Exchange {
             trades,
             players: self.players(account),
             contracts,
+            corporation: self.corp_view(account),
+            invitations: self.invitations_of(account),
+            corporations: self.corp_summaries(),
             time: self.state.time,
         }
+    }
+}
+
+/// Markets for the tests of this module and its children.
+#[cfg(test)]
+mod tests_support {
+    use super::*;
+    use game_core::economy::{EconomyParams, compute_economy};
+
+    pub fn market_with(f: impl FnOnce(&mut MarketConfig)) -> Exchange {
+        let mut cfg = MarketConfig { seconds_per_ly: 1.0, handling_seconds: 10.0, ..MarketConfig::default() };
+        f(&mut cfg);
+        Exchange::new(&compute_economy(EconomyParams::default()), cfg, None, 1_000_000.0)
+    }
+
+    /// Goods straight into an account's stock in a hub (as an arrived shipment).
+    pub fn put_in_hub(m: &mut Exchange, account: &str, hub: &str, goods: Qty) {
+        let s = m.stock_mut(account, hub);
+        *s = add_stock(s, &goods, 1.0);
     }
 }
 

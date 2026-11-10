@@ -3,7 +3,7 @@
 use std::net::SocketAddr;
 use std::path::PathBuf;
 
-use game_session::exchange::{MarketConfig, NpcConfig};
+use game_session::exchange::{CorpConfig, MarketConfig, NpcConfig};
 
 #[derive(Clone, Debug)]
 pub struct Config {
@@ -35,7 +35,9 @@ pub struct Config {
     /// - `SHIPPING_SECONDS_PER_LY` and `SHIPPING_HANDLING_SECONDS` (production 7200 = 2 h/ly and 1800;
     ///   dev 2 and 2, so a test ship arrives in seconds);
     /// - `CONTRACT_HOURS` (factions' contracts: open and to deliver once taken; production 48, dev 1)
-    ///   and `CONTRACTS_PER_HUB` (default 3, one of them premium).
+    ///   and `CONTRACTS_PER_HUB` (default 3, one of them premium);
+    /// - corporations: `CORP_FOUNDING_CREDITS` and `CORP_FOUNDING_STA` (founding cost, the steel in
+    ///   the seat hub; production 5000 and 100, dev 500 and 0), `CORP_MAX_MEMBERS` (20).
     pub market: MarketConfig,
 }
 
@@ -63,6 +65,18 @@ impl Config {
             max_orders: prod.max_orders,
             contract_seconds: num("CONTRACT_HOURS", if dev_mode { 1.0 } else { prod.contract_seconds / 3600.0 }) * 3600.0,
             contracts_per_hub: var("CONTRACTS_PER_HUB").and_then(|v| v.parse().ok()).unwrap_or(prod.contracts_per_hub),
+            corp: {
+                let sta = non_negative(
+                    "CORP_FOUNDING_STA",
+                    if dev_mode { 0.0 } else { prod.corp.founding_goods.get("STA").copied().unwrap_or(0.0) },
+                );
+                CorpConfig {
+                    founding_credits: non_negative("CORP_FOUNDING_CREDITS", if dev_mode { 500.0 } else { prod.corp.founding_credits }),
+                    founding_goods: if sta > 0.0 { [("STA".to_string(), sta)].into_iter().collect() } else { Default::default() },
+                    max_members: var("CORP_MAX_MEMBERS").and_then(|v| v.parse().ok()).filter(|n| *n >= 2).unwrap_or(prod.corp.max_members),
+                    max_officers: prod.corp.max_officers,
+                }
+            },
             npc: if flag("NPC_FACTIONS").unwrap_or(true) { Some(npc) } else { None },
         };
         Config {
