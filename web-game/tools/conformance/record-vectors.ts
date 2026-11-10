@@ -18,6 +18,7 @@ import {
   TAU_CETI_SCENARIO,
   asteroidShape,
   buildGoldbergGrid,
+  classifyTerrain,
   computeEconomy,
   economyTables,
   footprintTiles,
@@ -25,7 +26,9 @@ import {
   lightYearsBetween,
   maxStarRadius,
   STARS,
+  terrainAim,
   type CelestialBody,
+  type TerrainConfig,
   type Vec3,
 } from '@space-game/domain';
 // not exported from the package index; these files are pure functions without state
@@ -91,6 +94,33 @@ const grids = builtGrids.map((grid, i) => {
       deposit: t.deposit,
     })),
   };
+});
+
+// terrain classes and settlement roads (T8, `classifyTerrain`): every grid body of both scenarios in
+// three styles, the settlement facing the body's sun at t = 0 as `buildWorldGrids` aims it. Classes are
+// compared as exact strings (one ulp in the noise may flip a class).
+const TERRAIN_STYLES: TerrainConfig[] = [
+  { biome: 'medieval', seed: 2 },
+  { biome: 'mixed', seed: 7 },
+  { biome: 'medieval', seed: 11 },
+];
+const terrain = builtGrids.flatMap((grid, i) => {
+  const { scenario, body } = gridBodies[i]!;
+  const aim = terrainAim(body);
+  return TERRAIN_STYLES.map((style) => {
+    const c = classifyTerrain(grid, { biome: style.biome, seed: style.seed, aim });
+    return {
+      grid: i,
+      scenario,
+      bodyId: body.id,
+      biome: style.biome,
+      seed: style.seed,
+      aim: arr(aim),
+      kinds: c.kinds,
+      road: [...c.road].sort((a, b) => a - b),
+      settlementCenter: c.settlementCenter,
+    };
+  });
 });
 
 const solvers = {
@@ -426,6 +456,7 @@ const stars = {
 const vectors = {
   geodesic4,
   grids,
+  terrain,
   orbits,
   leads,
   bezier,
@@ -441,5 +472,5 @@ const vectors = {
 mkdirSync(dirname(out), { recursive: true });
 writeFileSync(out, JSON.stringify(vectors) + '\n', 'utf8');
 console.log(
-  `vectors: ${grids.length} grids, ${orbits.length} orbit samples, ${leads.length} intercepts, ${specs.length} specs → ${out}`,
+  `vectors: ${grids.length} grids, ${terrain.length} terrain classifications, ${orbits.length} orbit samples, ${leads.length} intercepts, ${specs.length} specs → ${out}`,
 );

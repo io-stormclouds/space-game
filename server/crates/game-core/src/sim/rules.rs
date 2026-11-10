@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 
-use crate::economy::{BuildingDef, Economy, EconomyParams, Recipe, StorageClass, StorageClassInfo, compute_economy};
+use crate::economy::{BuildingDef, Economy, EconomyParams, Recipe, StorageClass, StorageClassInfo, TerrainRules, compute_economy};
 use crate::ids::StructureKind;
 use crate::models::resource::Cost;
 
@@ -230,6 +230,11 @@ impl Rules {
 
     pub fn recipe(&self, id: &str) -> &Recipe {
         self.economy.recipe(id)
+    }
+
+    /// What terrain does to building: buildable classes, cost and time in % (catalog data).
+    pub fn terrain(&self) -> &TerrainRules {
+        &self.economy.catalog().terrain
     }
 
     /// Construction rover (ROV) or another vehicle at L1: (cost, build time).

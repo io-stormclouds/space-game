@@ -3,7 +3,7 @@
 
 use std::collections::HashSet;
 
-use super::build;
+use super::build::{self, CheckFail, Fail, SitePrice};
 use crate::ids::{BodyId, TileId, tile_id, tile_index_of};
 use crate::math::footprint::footprint_tiles;
 use crate::math::js;
@@ -54,6 +54,62 @@ pub fn choose_site(world: &WorldState, grids: &Grids, body_id: &str) -> DomainEv
     DomainEvent::ColonySiteChosen { body_id: body_id.to_string() }
 }
 
+/// A passed spaceport check: the footprint (indices and ids, anchor first) and the port's price on
+/// this terrain.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SpaceportCheck {
+    pub indices: Vec<usize>,
+    pub tiles: Vec<TileId>,
+    pub price: SitePrice,
+}
+
+/// Spaceport check of `place_spaceport` (also the placement ghost of the pseudo-kind PORT). Order:
+/// NO_COLONY_SITE → BUSY → NO_MOTHERSHIP → NO_SHIP → NO_SHUTTLE → NO_GRID → NO_FOOTPRINT →
+/// TILE_OCCUPIED → BAD_TERRAIN → NO_RESOURCES (the port cost scaled by the terrain, against the
+/// mothership's hold). Past the terrain stage it carries the price, also on NO_RESOURCES.
+pub fn check_spaceport(
+    world: &WorldState,
+    grids: &Grids,
+    rules: &Rules,
+    params: &ColonizationParams,
+    body_id: &str,
+    anchor: &str,
+    rotation: i64,
+) -> Result<SpaceportCheck, CheckFail> {
+    if world.colony.site_body_id.as_deref() != Some(body_id) {
+        return Err(Fail::new(RejectReason::NoColonySite).into());
+    }
+    if world.structures.iter().any(|s| s.kind == "HQ" && s.body_id == body_id) {
+        return Err(Fail::with(RejectReason::Busy, "port już stoi").into());
+    }
+    let Some(ship) = mothership(world) else { return Err(Fail::new(RejectReason::NoMothership).into()) };
+    if ship.state != ShipState::Docked || ship.current_body_id.as_deref() != Some(body_id) {
+        return Err(Fail::with(RejectReason::NoShip, format!("{} musi być na orbicie", ship.name)).into());
+    }
+    if ship.onboard.map(|o| o.shuttles).unwrap_or(0) < 1 {
+        return Err(Fail::new(RejectReason::NoShuttle).into());
+    }
+    let grid = grids.get(body_id);
+    let tile = grid.and_then(|g| g.tile_by_id(anchor));
+    let (Some(grid), Some(tile)) = (grid, tile) else { return Err(Fail::new(RejectReason::NoGrid).into()) };
+    let spec = rules.spec("HQ", 1);
+    let Some(indices) = footprint_tiles(grid, tile.index, spec.footprint, rotation) else {
+        return Err(Fail::with(RejectReason::NoFootprint, format!("{} pola", spec.footprint)).into());
+    };
+    let tiles: Vec<TileId> = indices.iter().map(|&i| tile_id(body_id, i)).collect();
+    let occupied: HashSet<&str> =
+        world.structures.iter().filter(|s| s.body_id == body_id).flat_map(|s| s.tiles.iter().map(|t| t.as_str())).collect();
+    if tiles.iter().any(|t| occupied.contains(t.as_str())) {
+        return Err(Fail::new(RejectReason::TileOccupied).into());
+    }
+    let price = build::terrain_price(grid, &indices, rules, &params.port_cost)?;
+    if !can_afford(&ship.cargo, &price.cost) {
+        let fail = Fail::with(RejectReason::NoResources, format!("brakuje {}", format_cost(&missing_for(&ship.cargo, &price.cost))));
+        return Err(CheckFail { fail, price: Some(price) });
+    }
+    Ok(SpaceportCheck { indices, tiles, price })
+}
+
 /// Lands the port (HQ L1) from the mothership's hold with the rovers; rovers then build it.
 pub fn place_spaceport(
     world: &WorldState,
@@ -64,38 +120,19 @@ pub fn place_spaceport(
     anchor: &str,
     rotation: i64,
 ) -> DomainEvent {
-    if world.colony.site_body_id.as_deref() != Some(body_id) {
-        return reject(RejectReason::NoColonySite);
-    }
-    if world.structures.iter().any(|s| s.kind == "HQ" && s.body_id == body_id) {
-        return reject_with(RejectReason::Busy, "port już stoi");
-    }
-    let Some(ship) = mothership(world) else { return reject(RejectReason::NoMothership) };
-    if ship.state != ShipState::Docked || ship.current_body_id.as_deref() != Some(body_id) {
-        return reject_with(RejectReason::NoShip, format!("{} musi być na orbicie", ship.name));
-    }
-    if ship.onboard.map(|o| o.shuttles).unwrap_or(0) < 1 {
-        return reject(RejectReason::NoShuttle);
-    }
-    let grid = grids.get(body_id);
-    let tile = grid.and_then(|g| g.tile_by_id(anchor));
-    let (Some(grid), Some(tile)) = (grid, tile) else { return reject(RejectReason::NoGrid) };
-    let spec = rules.spec("HQ", 1);
-    let Some(indices) = footprint_tiles(grid, tile.index, spec.footprint, rotation) else {
-        return reject_with(RejectReason::NoFootprint, format!("{} pola", spec.footprint));
+    let SpaceportCheck { indices, tiles, price } = match check_spaceport(world, grids, rules, params, body_id, anchor, rotation) {
+        Ok(c) => c,
+        Err(f) => return f.fail.event(),
     };
-    let tiles: Vec<TileId> = indices.iter().map(|&i| tile_id(body_id, i)).collect();
+    // the check found them
+    let (Some(ship), Some(tile)) = (mothership(world), grids.get(body_id).and_then(|g| g.tile_by_id(anchor))) else {
+        return reject(RejectReason::NoGrid);
+    };
     let occupied: HashSet<&str> =
         world.structures.iter().filter(|s| s.body_id == body_id).flat_map(|s| s.tiles.iter().map(|t| t.as_str())).collect();
-    if tiles.iter().any(|t| occupied.contains(t.as_str())) {
-        return reject(RejectReason::TileOccupied);
-    }
-    let cost = params.port_cost.clone();
-    if !can_afford(&ship.cargo, &cost) {
-        return reject_with(RejectReason::NoResources, format!("brakuje {}", format_cost(&missing_for(&ship.cargo, &cost))));
-    }
+    let cost = price.cost;
 
-    let structure = build::site(rules, "HQ", body_id, tiles, cost.clone(), world.time);
+    let structure = build::site(rules, "HQ", body_id, tiles, cost.clone(), world.time, price.time_pct);
     let count = params.landed_rovers.min(ship.onboard.map(|o| o.rovers).unwrap_or(0)).max(0) as usize;
     let free: Vec<usize> =
         tile.neighbors.iter().copied().filter(|n| !indices.contains(n) && !occupied.contains(tile_id(body_id, *n).as_str())).collect();

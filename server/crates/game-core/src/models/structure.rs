@@ -45,6 +45,10 @@ pub struct Structure {
     pub paid: Cost,
     /// Game time when it was ordered.
     pub built_at: f64,
+    /// Build time of the first construction in % of the catalog time, from the terrain under the
+    /// footprint (set only when ≠ 100, dropped when the building is finished; upgrades ignore it).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub time_pct: Option<u32>,
     /// Selected production recipe (buildings with several).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub recipe: Option<String>,

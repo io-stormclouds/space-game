@@ -84,7 +84,11 @@ describe('MockServer', () => {
     });
     const grid = s.simulation.grids.get(planet)!;
     const deposit = grid.tiles.find((t) => t.deposit?.resource === 'FER')!;
-    expect(s.previewBuild(planet, deposit.index, 'MIN', 0)).toEqual({ ok: true, tiles: [deposit.index] });
+    // T8: the preview prices the order (a body without terrain: the catalog numbers)
+    const min = cat.buildings.find((b) => b.id === 'MIN')!.levels[0]!;
+    expect(s.previewBuild(planet, deposit.index, 'MIN', 0)).toEqual({ ok: true, tiles: [deposit.index], cost: min.cost, buildTime: min.buildTime });
+    expect(cat.terrain.kinds.water).toEqual({ name: 'woda', buildable: false, costPct: 100, timePct: 100 });
+    expect(cat.terrain.road).toEqual({ name: 'droga', costPct: 85, timePct: 75 });
     expect(s.previewBuild(planet, deposit.index, 'SOL', 0)).toMatchObject({ ok: true });
     const pad = s.snapshot().world.structures.find((x) => x.kind === 'LAND')!;
     expect(s.previewBuild(planet, Number(pad.tileId.split(':')[1]), 'SOL', 0)).toMatchObject({ ok: false, reason: 'TILE_OCCUPIED' });

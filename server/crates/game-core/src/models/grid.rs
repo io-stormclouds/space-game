@@ -2,6 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use super::terrain::{GridTerrain, TerrainKind};
 use crate::ids::{BodyId, MaterialCode, TileId};
 use crate::math::vec3::Vec3;
 
@@ -36,6 +37,12 @@ pub struct Tile {
     /// Indices of the 5 or 6 neighbouring tiles, same angular order as `vertices`.
     pub neighbors: Vec<usize>,
     pub deposit: Option<Deposit>,
+    /// Terrain class (bodies with `surfaceGrid.terrain` only); absent = plain tile, no terrain rules.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub terrain: Option<TerrainKind>,
+    /// Road of the ruined settlement (TS `road?: true`, written only when true): cheaper and faster to build on.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub road: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -48,6 +55,9 @@ pub struct PlanetGrid {
     pub tiles: Vec<Tile>,
     /// Approximate edge length of a hexagonal tile; used to size what is placed on it.
     pub tile_edge: f64,
+    /// Terrain style the tiles were classified with and the settlement centre (castle tile, none without one).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub terrain: Option<GridTerrain>,
 }
 
 impl PlanetGrid {

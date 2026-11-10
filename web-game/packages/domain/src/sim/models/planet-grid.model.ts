@@ -1,5 +1,6 @@
 import { BodyId } from '../../shared/ids';
 import { Vec3 } from '../math/vec3';
+import type { TerrainBiome, TerrainKind } from '../terrain/terrain-types';
 import { MaterialCode } from './resource.model';
 
 export type TileId = string & { readonly __brand: 'TileId' };
@@ -29,6 +30,10 @@ export interface Tile {
   /** Indices of the 5 or 6 neighbouring tiles, same angular order as `vertices`. */
   neighbors: ReadonlyArray<number>;
   deposit: Deposit | null;
+  /** Terrain class (bodies with `surfaceGrid.terrain` only); absent = plain tile, no terrain rules. */
+  terrain?: TerrainKind;
+  /** Road of the ruined settlement (set only when true): cheaper and faster to build on. */
+  road?: true;
 }
 
 export interface PlanetGrid {
@@ -39,4 +44,6 @@ export interface PlanetGrid {
   tiles: ReadonlyArray<Tile>;
   /** Approximate edge length of a hexagonal tile; used to size what is placed on it. */
   tileEdge: number;
+  /** Terrain style the tiles were classified with and the settlement centre (castle tile, null without one). */
+  terrain?: { biome: TerrainBiome; seed: number; settlementCenter: number | null };
 }

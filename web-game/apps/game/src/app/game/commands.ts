@@ -4,9 +4,9 @@ import type { AtanorTool } from '@space-game/render';
 import type { CommandSlot, IconName } from '@space-game/ui';
 import { TEXT } from '../i18n/pl';
 import { AtanorSession } from './atanor-session';
-import { buildingName, costText, reasonText, tileIndexFromId } from './format';
+import { buildingName, costText, reasonText, tileBuildCost, tileIndexFromId } from './format';
 import { GameService } from './game.service';
-import { UiState } from './ui-state';
+import { UiState, placementPreview } from './ui-state';
 
 export interface CardModel {
   title: string;
@@ -308,7 +308,11 @@ export class CommandsService {
     const info = this.tile();
     const fresh = info && info.bodyId === bodyId && info.index === tileIndex ? info : null;
     const hasPort = world.structures.some((s) => s.kind === 'HQ' && s.bodyId === bodyId);
-    const cost = (kind: string) => costText(catalog.buildings.find((b) => b.id === kind)?.levels[0]?.cost ?? {});
+    /** L1 cost on this tile: × the tile's terrain % for 1-tile kinds, catalog cost "(zależy od pól)" for larger ones. */
+    const cost = (kind: string) => {
+      const p = tileBuildCost(catalog.buildings.find((b) => b.id === kind), fresh?.terrain ?? null);
+      return p.perTiles ? c.costPerTiles(costText(p.cost)) : costText(p.cost);
+    };
     /** Builds `kind` on this tile in one press (1-tile kinds), or says why not. */
     const quick = (id: string, kind: string, label: string, hotkey: string, icon: IconName, description: string): CommandSlot => {
       if (!hasPort) return this.locked(id, label, hotkey, t.reject.NO_COLONY, icon);
@@ -366,14 +370,16 @@ export class CommandsService {
     const p = this.ui.placement()!;
     const isPort = kind === 'PORT';
     const name = isPort ? buildingName(catalog, 'HQ') : buildingName(catalog, kind);
-    const cost = isPort ? catalog.colonization.portCost : (catalog.buildings.find((b) => b.id === kind)?.levels[0]?.cost ?? {});
-    const minutes = isPort ? catalog.colonization.portBuildMinutes : (catalog.buildings.find((b) => b.id === kind)?.levels[0]?.buildTime ?? 0);
     const preview = p.preview;
+    // the price on the previewed tiles (after the terrain, T8) once the check got that far; else the catalog's
+    const l1 = catalog.buildings.find((b) => b.id === kind)?.levels[0];
+    const cost = preview?.cost ?? (isPort ? catalog.colonization.portCost : (l1?.cost ?? {}));
+    const minutes = preview?.buildTime ?? (isPort ? catalog.colonization.portBuildMinutes : (l1?.buildTime ?? 0));
     const reason = preview && !preview.valid ? reasonText(t, preview.reason as never, preview.detail) : '';
     const slots: Array<CommandSlot | null> = [
       this.slot('place', isPort ? c.placePort.label : name, 'Enter', 'build', {
         variant: 'primary',
-        description: c.placePort.note(costText(cost), Math.round(minutes)),
+        description: c.placePort.note(costText(cost), t.units.min(minutes)),
         ...(reason ? { disabledReason: reason } : {}),
         run: () => void this.confirmPlacement(world),
       }),
@@ -479,10 +485,22 @@ export class CommandsService {
     });
   }
 
-  /** Build catalog rows (panel next to the card): every buildable kind with its availability. */
+  /** The tile the build catalog aims at (opened from a tile, "Buduj tutaj…"), as the server sees it; else null. */
+  readonly buildTile = computed<TileInfo | null>(() => {
+    const sel = this.ui.selection();
+    const ti = this.tile();
+    return sel.kind === 'TILE' && ti && ti.bodyId === sel.bodyId && ti.index === sel.tileIndex ? ti : null;
+  });
+
+  /**
+   * Build catalog rows (panel next to the card): every buildable kind with its availability. Opened
+   * from a tile with terrain (T8), 1-tile kinds show the cost and time on that tile; 3- and 7-tile
+   * kinds keep the catalog numbers and say the price depends on the tiles (`perTiles`).
+   */
   readonly buildList = computed(() => {
     const catalog = this.game.catalog();
     const avail = this.availability();
+    const terrain = this.buildTile()?.terrain ?? null;
     if (!catalog) return [];
     return catalog.buildings
       .filter((b) => b.buildable)
@@ -490,16 +508,18 @@ export class CommandsService {
       .map((b, i) => {
         const a = avail[b.id];
         const l1 = b.levels[0]!;
+        const here = tileBuildCost(b, terrain);
         return {
           id: b.id,
           name: b.name,
           era: b.era,
           footprint: b.footprint,
           hotkey: BUILD_KEYS[i] ?? '',
-          cost: Object.entries(l1.cost).map(([code, amount]) => ({ code, amount, missing: a?.reason === 'NO_RESOURCES' })),
+          cost: Object.entries(here.cost).map(([code, amount]) => ({ code, amount, missing: a?.reason === 'NO_RESOURCES' })),
+          perTiles: here.perTiles,
           power: l1.power,
           crew: l1.crew,
-          minutes: l1.buildTime,
+          minutes: here.minutes,
           reason: a && !a.ok ? reasonText(this.t, a.reason, a.detail) : '',
         };
       });
@@ -535,7 +555,7 @@ export class CommandsService {
     const r = await this.game.previewBuild(bodyId, tileIndex, p.kind, p.rotation);
     const cur = this.ui.placement();
     if (cur && cur.kind === p.kind && cur.rotation === p.rotation && !cur.preview) {
-      this.ui.placement.set({ ...cur, preview: { kind: p.kind, tiles: r.tiles, valid: r.ok, tileIndex, ...(r.reason ? { reason: r.reason } : {}), ...(r.detail ? { detail: r.detail } : {}) } });
+      this.ui.placement.set({ ...cur, preview: placementPreview(p.kind, tileIndex, r) });
     }
   }
 

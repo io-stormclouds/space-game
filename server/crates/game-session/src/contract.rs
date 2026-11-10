@@ -3,7 +3,7 @@
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 
-use game_core::economy::{EconomyParams, EconomyTables, StorageClass};
+use game_core::economy::{EconomyParams, EconomyTables, StorageClass, TerrainRules};
 use game_core::ids::BodyId;
 use game_core::math::vec3::Vec3;
 use game_core::models::command::Command;
@@ -228,6 +228,8 @@ pub struct CatalogView {
     pub recipes: Vec<CatalogRecipe>,
     pub rover: CatalogVehicle,
     pub colonization: CatalogColonization,
+    /// What terrain does to building (T8): buildable classes, cost and time in % per class and on a road.
+    pub terrain: TerrainRules,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -241,6 +243,7 @@ pub struct Availability {
 
 /// Result of checking a building on a tile (the placement ghost).
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub struct BuildPreview {
     pub ok: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -248,7 +251,17 @@ pub struct BuildPreview {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub detail: Option<String>,
     pub tiles: Vec<usize>,
+    /// Materials the order takes, after the terrain under the footprint (T8). Present once the check
+    /// got past BAD_TERRAIN: when `ok`, and also on a later rejection (for PORT: NO_RESOURCES).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cost: Option<Qty>,
+    /// Minutes one rover needs to build it (catalog time × terrain time %); present together with `cost`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub build_time: Option<f64>,
 }
+
+/// Terrain of a tile (T8); numbers are the tile's own (a road's on a road tile).
+pub type TileTerrainInfo = game_core::sim::terrain_rules::TileTerrain;
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -283,6 +296,8 @@ pub struct TileInfo {
     pub index: usize,
     pub kind: game_core::models::grid::TileKind,
     pub deposit: Option<TileDeposit>,
+    /// Terrain class of the tile; null on bodies without terrain.
+    pub terrain: Option<TileTerrainInfo>,
     pub structure_id: Option<String>,
     pub options: Vec<TileOption>,
 }

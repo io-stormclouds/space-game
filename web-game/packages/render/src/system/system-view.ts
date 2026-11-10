@@ -25,7 +25,10 @@ export class SystemView implements View {
 
   constructor(private readonly opts: SystemViewOptions = {}) {}
 
-  /** Resolves when the KayKit models have loaded (or failed and kept their placeholders). */
+  /**
+   * Resolves when the KayKit models requested so far have loaded (or failed and kept their
+   * placeholders): Space Base Bits at mount, the medieval skin once a medieval body is shown.
+   */
   get ready(): Promise<void> {
     return this.scene?.ready ?? Promise.resolve();
   }

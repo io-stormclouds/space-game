@@ -29,12 +29,15 @@ import {
   nominalFlows,
   type NominalFlows,
   STARS,
+  scaleTime,
   tileId as tileIdOf,
   tileIndexOf,
+  tileTerrain,
   topTile,
   type BodyId,
   type ColonyReadout,
   type Command,
+  type Cost,
   type DomainEvent,
   type EconomyParams,
   type Scenario,
@@ -281,6 +284,7 @@ export class MockServer {
         shuttleCapacity: c.shuttleCapacity,
         shuttleTripMinutes: c.shuttleTripMinutes,
       },
+      terrain: rules.terrain(),
     };
   }
 
@@ -296,26 +300,34 @@ export class MockServer {
     return out;
   }
 
-  /** Placement ghost: BUILD check, or the spaceport check for the pseudo-kind 'PORT'. */
+  /**
+   * Placement ghost: BUILD check, or the spaceport check for the pseudo-kind 'PORT'. Past the terrain
+   * stage it adds the terrain-adjusted `cost` and `buildTime` (also when a later stage rejects).
+   */
   previewBuild(bodyId: BodyId, tileIndex: number, kind: string, rotation: number): BuildPreview {
     const tileId = tileIdOf(bodyId, tileIndex);
     const grid = this.sim.grids.get(bodyId);
+    const rules = this.sim.rules;
+    const priced = (k: string, c: { cost?: Cost; timePct?: number }) =>
+      c.cost && c.timePct !== undefined ? { cost: c.cost, buildTime: scaleTime(rules.spec(k, 1).buildTime, c.timePct) } : {};
     if (kind === 'PORT') {
-      const e = this.sim.colony.placeSpaceport(this.sim.world, bodyId, tileId, rotation);
-      const tiles = grid ? footprintTiles(grid, tileIndex, this.sim.rules.spec('HQ').footprint, rotation) ?? [] : [];
-      return e.type === 'COMMAND_REJECTED' ? { ok: false, reason: e.reason, ...(e.detail ? { detail: e.detail } : {}), tiles } : { ok: true, tiles };
+      const check = this.sim.colony.checkSpaceport(this.sim.world, bodyId, tileId, rotation);
+      const tiles = grid ? footprintTiles(grid, tileIndex, rules.spec('HQ').footprint, rotation) ?? [] : [];
+      return check.ok
+        ? { ok: true, tiles, ...priced('HQ', check) }
+        : { ok: false, reason: check.reason, ...(check.detail ? { detail: check.detail } : {}), tiles, ...priced('HQ', check) };
     }
     const check = this.sim.builder.check(this.sim.world, bodyId, tileId, kind, rotation);
-    if (check.ok) return { ok: true, tiles: check.tiles.map(tileIndexOf) };
-    const size = this.sim.rules.has(kind) ? this.sim.rules.spec(kind).footprint : 1;
+    if (check.ok) return { ok: true, tiles: check.tiles.map(tileIndexOf), ...priced(kind, check) };
+    const size = rules.has(kind) ? rules.spec(kind).footprint : 1;
     const tiles = grid ? footprintTiles(grid, tileIndex, size, rotation) ?? [] : [];
-    return { ok: false, reason: check.reason, ...(check.detail ? { detail: check.detail } : {}), tiles };
+    return { ok: false, reason: check.reason, ...(check.detail ? { detail: check.detail } : {}), tiles, ...priced(kind, check) };
   }
 
   /**
    * One surface tile for the tile panel (3D PoC `tile-panel`): shape, deposit with what is left,
-   * what stands on it, and every buildable kind checked here (rotation 0), extractors with the
-   * material they would take from this tile.
+   * terrain (class, road, cost and time %), what stands on it, and every buildable kind checked here
+   * (rotation 0), extractors with the material they would take from this tile.
    */
   tileInfo(bodyId: BodyId, tileIndex: number): TileInfo | null {
     const tile = this.sim.grids.get(bodyId)?.tiles[tileIndex];
@@ -341,6 +353,7 @@ export class MockServer {
       index: tile.index,
       kind: tile.kind,
       deposit: tile.deposit ? { material: tile.deposit.resource, initial: tile.deposit.amount, remaining: w.deposits[tile.id] ?? tile.deposit.amount } : null,
+      terrain: tileTerrain(tile, rules.terrain()),
       structureId: owner?.id ?? null,
       options,
     };

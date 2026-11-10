@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { PlanetGrid } from '../game/models/planet-grid.model';
 import { RESOURCE_INFO } from '../game/models/resource.model';
+import { SurfaceView } from './surface-view';
 
 const HOVER_GAIN = 1.5;
 const SELECTED = new THREE.Color(0x22d3ee);
@@ -11,7 +12,7 @@ const EDGE_COLOR = 0x0b1220;
  * per-vertex colours) plus one LineSegments for the tile edges. `faceIndex` of a raycast hit maps
  * straight to a tile. Colours change only on hover/selection, never per frame.
  */
-export class PlanetGridView {
+export class PlanetGridView implements SurfaceView {
   readonly mesh: THREE.Mesh;
   readonly edges: THREE.LineSegments;
   readonly tileEdge: number;
@@ -90,6 +91,10 @@ export class PlanetGridView {
     this.edges = new THREE.LineSegments(edgeGeo, new THREE.LineBasicMaterial({ color: EDGE_COLOR, transparent: true, opacity: 0.35 }));
     this.edges.name = `${grid.bodyId}_GridEdges`;
     this.tileEdge = grid.tileEdge;
+  }
+
+  get extras(): ReadonlyArray<THREE.Object3D> {
+    return [this.edges];
   }
 
   get tileCountTotal(): number {

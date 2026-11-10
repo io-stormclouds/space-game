@@ -7,6 +7,7 @@ use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 
 use crate::models::resource::Qty;
+use crate::models::terrain::TerrainKind;
 
 pub type StorageClass = String;
 
@@ -116,6 +117,58 @@ impl BuildingDef {
     }
 }
 
+/// What one terrain class does to building (`terrain-data.ts`, T8).
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct TerrainKindRule {
+    /// Polish name for the UI and the BAD_TERRAIN detail.
+    pub name: String,
+    /// Whether a footprint may cover it (no: BAD_TERRAIN).
+    pub buildable: bool,
+    /// Construction materials in % of the catalog cost (unused when not buildable).
+    pub cost_pct: u32,
+    /// Construction time in % of the catalog time (unused when not buildable).
+    pub time_pct: u32,
+}
+
+/// The rules of every class, in the order of the TS record (it is serialised to the client as is).
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct TerrainKindRules {
+    pub grass: TerrainKindRule,
+    pub forest: TerrainKindRule,
+    pub rock: TerrainKindRule,
+    pub snow: TerrainKindRule,
+    pub water: TerrainKindRule,
+}
+
+impl TerrainKindRules {
+    pub fn get(&self, kind: TerrainKind) -> &TerrainKindRule {
+        match kind {
+            TerrainKind::Grass => &self.grass,
+            TerrainKind::Forest => &self.forest,
+            TerrainKind::Rock => &self.rock,
+            TerrainKind::Snow => &self.snow,
+            TerrainKind::Water => &self.water,
+        }
+    }
+}
+
+/// Road of the ruined settlement: overrides the class of the tile (levelled ground, old foundations).
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct TerrainRoadRule {
+    pub name: String,
+    pub cost_pct: u32,
+    pub time_pct: u32,
+}
+
+/// Terrain building rules (`TERRAIN_RULES`): data of the catalog, read by `Rules::terrain()`.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct TerrainRules {
+    pub kinds: TerrainKindRules,
+    pub road: TerrainRoadRule,
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Catalog {
@@ -129,6 +182,8 @@ pub struct Catalog {
     pub fuel_per_ly: Qty,
     pub starship_modules: IndexMap<String, Qty>,
     pub starship_upgrades: IndexMap<String, Qty>,
+    /// What terrain does to building (T8): buildable classes, cost and time in %.
+    pub terrain: TerrainRules,
 }
 
 static CATALOG_JSON: &str = include_str!("../../data/catalog.json");
@@ -155,5 +210,8 @@ mod tests {
         assert_eq!(hq.id, "HQ");
         assert_eq!(hq.explicit_t.as_ref().unwrap()[2], 120.0);
         assert_eq!(c.buildings.iter().find(|b| b.id == "HAB").unwrap().extra_at(2).unwrap().get("STA"), Some(&10.0));
+        assert!(!c.terrain.kinds.get(TerrainKind::Water).buildable);
+        assert_eq!((c.terrain.kinds.forest.cost_pct, c.terrain.kinds.forest.time_pct), (110, 150));
+        assert_eq!((c.terrain.road.cost_pct, c.terrain.road.time_pct), (85, 75));
     }
 }

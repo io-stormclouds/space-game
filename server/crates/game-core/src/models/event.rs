@@ -53,6 +53,8 @@ pub enum RejectReason {
     // reach a repeating cycle with deliveries)
     MachineInvalid,
     MachineNotProducing,
+    // terrain (T8): a footprint tile cannot be built on (water); `detail` names its class
+    BadTerrain,
 }
 
 /// Simulation faults that are not command rejections (Atanor: two atoms on one hex).

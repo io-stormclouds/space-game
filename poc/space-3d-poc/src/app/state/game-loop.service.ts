@@ -53,6 +53,7 @@ export class GameLoopService {
       structures: this.state.structures(),
       rovers: this.state.rovers(),
       colonies: this.sim.colonies,
+      terrain: this.sim.terrain,
       dockingOffset: (id) => this.sim.dockingOffset(id),
     });
     this.scene = scene;

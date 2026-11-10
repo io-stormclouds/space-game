@@ -1,0 +1,105 @@
+import type { TerrainKind } from '@space-game/domain';
+
+/**
+ * Muted palette of the hex kit (KayKit colours pulled 40 % towards grey and 20 % towards metal, see
+ * docs/planet-terrain-design.md §4.7). Models carry no textures: colour is chosen by material name.
+ */
+export const TONE = {
+  grass: 0x629a88,
+  forest: 0x47767a,
+  sand: 0xad9a87,
+  rock: 0x997c6d,
+  soil: 0x765a54,
+  snow: 0xc4c6c9,
+  water: 0x6aafb8,
+  stone: 0x6e757b,
+  stoneDark: 0x555c60,
+  thatch: 0xc3a562,
+  metal: 0x969fa5,
+  dark: 0x31383d,
+} as const;
+
+const GROUND: Record<TerrainKind, number> = {
+  grass: TONE.grass,
+  forest: TONE.grass,
+  rock: TONE.rock,
+  snow: TONE.snow,
+  water: TONE.water,
+};
+
+/** Colour of a tile material on a tile of the given class (`Green` is the top surface of every class). */
+export function groundTone(mat: string, kind: TerrainKind): number {
+  switch (mat) {
+    case 'Green':
+      return GROUND[kind];
+    case 'Water':
+      return TONE.water;
+    case 'Beige':
+      return TONE.sand; // roads
+    case 'BrownDark':
+      return TONE.soil;
+    case 'Brown':
+      return TONE.rock;
+    case 'White':
+      return TONE.snow;
+    default:
+      return TONE.stone;
+  }
+}
+
+/**
+ * Ruins of the settlement against the player's own buildings (decision T-23): the same kit models,
+ * so the ruins are dimmed (`RUIN_FADE`) and pulled `RUIN_GREY` of the way towards the grey of equal
+ * luminance; the player's medieval skin keeps the full `objectTone`.
+ */
+export const RUIN_FADE = 0.8;
+export const RUIN_GREY = 0.3;
+
+/** Decor models that are buildings of the settlement (faded), not trees, rocks or mountains. */
+export function isRuinBuilding(model: string): boolean {
+  return !model.startsWith('detail_') && model !== 'mountain';
+}
+
+/** `hex` (sRGB) as a ruin: mixed `RUIN_GREY` towards its luminance grey, then times `RUIN_FADE`. */
+export function ruinTone(hex: number): number {
+  const r = (hex >> 16) & 0xff;
+  const g = (hex >> 8) & 0xff;
+  const b = hex & 0xff;
+  const y = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  const ch = (v: number) => Math.max(0, Math.min(255, Math.round((v + (y - v) * RUIN_GREY) * RUIN_FADE)));
+  return (ch(r) << 16) | (ch(g) << 8) | ch(b);
+}
+
+/** Colour of a decor model material (trees, rocks, buildings). */
+export function objectTone(mat: string): number {
+  switch (mat) {
+    case 'Stone':
+      return TONE.stone;
+    case 'StoneDark':
+      return TONE.stoneDark;
+    case 'BrownDark':
+    case 'WoodDark':
+      return TONE.soil;
+    case 'Brown':
+      return TONE.rock;
+    case 'Beige':
+      return TONE.sand;
+    case 'White':
+      return TONE.snow;
+    case 'Yellow':
+    case 'Red':
+      return TONE.thatch; // red stays reserved for alerts
+    case 'GreenDark':
+      return TONE.forest;
+    case 'Green':
+      return TONE.grass;
+    case 'Metal':
+      return TONE.metal;
+    case 'Black':
+      return TONE.dark;
+    case 'Water':
+      return TONE.water;
+    default:
+      return TONE.stone;
+  }
+}

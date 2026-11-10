@@ -1,17 +1,22 @@
 // Visual harness of the planet/system view: `npx vite packages/render/harness/system --port 4431`.
 // Plays the canvas flow on Tau Ceti in the page (MockServer in-thread), renders it through
 // RenderHost and exposes `window.systemHarness` for Playwright (kinds, stats, mount/dispose cycles).
+// `?colony=c`: the colony on Tau Ceti c instead of e (medieval skin, next to the settlement ruins).
 import { MockServer } from '@space-game/mock-server';
 import type { FrameData, GameSnapshot } from '@space-game/api';
 import {
   ARK_ID,
+  TC_C,
   TC_E,
+  dressTerrain,
   footprintTiles,
   standingStructure,
   storageOf,
+  tileBuildable,
   tileIndexOf,
   type BodyId,
   type Command,
+  type PlanetGrid,
   type Structure,
   type WorldState,
 } from '@space-game/domain';
@@ -29,10 +34,31 @@ const server = new MockServer();
 server.start('tau-ceti', undefined, 60);
 const sim = server.simulation;
 
-function ok(cmd: Command): void {
+const query = new URLSearchParams(location.search);
+/** Body of the colony: Tau Ceti e (default) or c (`?colony=c`, terrain with water and ruins). */
+const COLONY: BodyId = query.get('colony') === 'c' ? TC_C : TC_E;
+
+/** Sends a command; false (and a warning unless `quiet`) when the domain rejects it. */
+function ok(cmd: Command, quiet = false): boolean {
   const r = server.command(cmd);
   const rejected = r.events.find((e) => e.type === 'COMMAND_REJECTED');
-  if (rejected) console.warn(`${cmd.type} rejected`, rejected);
+  if (rejected && !quiet) console.warn(`${cmd.type} rejected`, rejected);
+  return !rejected;
+}
+
+/**
+ * Tiles worth building on, nearest to `near` first: buildable terrain (no water), and on a body with
+ * terrain not under a ruined building, so the colony stands next to the ruins rather than on them.
+ */
+function siteOrder(grid: PlanetGrid, near: number): number[] {
+  const plan = grid.terrain ? dressTerrain(grid) : undefined;
+  const ruins = new Set((plan?.decor ?? []).filter((d) => !d.model.startsWith('detail_') && d.model !== 'mountain').map((d) => d.tile));
+  const c = grid.tiles[near]!.normal;
+  const dot = (t: PlanetGrid['tiles'][number]) => t.normal.x * c.x + t.normal.y * c.y + t.normal.z * c.z;
+  return grid.tiles
+    .filter((t) => tileBuildable(t) && !ruins.has(t.index))
+    .sort((a, b) => dot(b) - dot(a))
+    .map((t) => t.index);
 }
 
 function runUntil(pred: () => boolean, maxMinutes: number): void {
@@ -40,53 +66,73 @@ function runUntil(pred: () => boolean, maxMinutes: number): void {
   while (!pred() && sim.time - start < maxMinutes) sim.step(0.25);
 }
 
-function freeTile(world: WorldState, body: BodyId, material?: string): string | null {
+function freeTile(world: WorldState, body: BodyId, material?: string, near?: number): string | null {
   const grid = sim.grids.get(body)!;
   const used = new Set(world.structures.flatMap((s) => s.tiles));
-  const t = grid.tiles.find((x) => !used.has(x.id) && x.neighbors.length === 6 && (material ? x.deposit?.resource === material : !x.deposit));
-  return t?.id ?? null;
+  const order = near === undefined ? grid.tiles.map((t) => t.index) : siteOrder(grid, near);
+  const i = order.find((k) => {
+    const x = grid.tiles[k]!;
+    return !used.has(x.id) && x.neighbors.length === 6 && (material ? x.deposit?.resource === material : !x.deposit);
+  });
+  return i === undefined ? null : grid.tiles[i]!.id;
 }
 
 /** The first session of the canvas (simulation.spec `playFirstSession`), stopped with sites in progress. */
 function playColony(): void {
   ok({ type: 'SCAN_SYSTEM', shipId: ARK_ID });
   runUntil(() => sim.world.scan.state === 'DONE', 30);
-  ok({ type: 'CHOOSE_COLONY_SITE', bodyId: TC_E });
-  ok({ type: 'MOVE_SHIP', shipId: ARK_ID, to: TC_E });
+  ok({ type: 'CHOOSE_COLONY_SITE', bodyId: COLONY });
+  ok({ type: 'MOVE_SHIP', shipId: ARK_ID, to: COLONY });
   runUntil(() => sim.world.ships[0]!.state === 'DOCKED', 60);
-  const grid = sim.grids.get(TC_E)!;
-  const anchor = grid.tiles.find((t) => t.neighbors.length === 6 && [t.index, ...t.neighbors].every((i) => !grid.tiles[i]!.deposit))!;
-  ok({ type: 'PLACE_SPACEPORT', bodyId: TC_E, tileId: anchor.id });
+  const grid = sim.grids.get(COLONY)!;
+  const clear = (i: number) => {
+    const t = grid.tiles[i]!;
+    return t.neighbors.length === 6 && [t.index, ...t.neighbors].every((k) => !grid.tiles[k]!.deposit);
+  };
+  // on c: the port near the castle on dry land, the ruins left standing (the domain rejects water)
+  const centre = grid.terrain?.settlementCenter ?? null;
+  const anchors = (centre === null ? grid.tiles.map((t) => t.index) : siteOrder(grid, centre)).filter(clear);
+  const anchor = anchors.find((i) => ok({ type: 'PLACE_SPACEPORT', bodyId: COLONY, tileId: grid.tiles[i]!.id }, true));
+  if (anchor === undefined) console.warn('no tile accepted the spaceport');
   runUntil(() => sim.world.colony.foundedAt !== null, 60);
-  ok({ type: 'CALL_SHUTTLE', bodyId: TC_E, cargo: { FER: 150, SIL: 80, KRI: 20 } });
-  runUntil(() => (storageOf(sim.world, TC_E)['FER'] ?? 0) >= 150, 30);
+  ok({ type: 'CALL_SHUTTLE', bodyId: COLONY, cargo: { FER: 150, SIL: 80, KRI: 20 } });
+  runUntil(() => (storageOf(sim.world, COLONY)['FER'] ?? 0) >= 150, 30);
   for (const [kind, material] of [['WND'], ['HAB'], ['MIN', 'FER'], ['ICE', 'KRI'], ['SIT', 'SIL'], ['LAND']] as Array<[string, string?]>) {
-    const tile = freeTile(sim.world, TC_E, material);
-    if (tile) ok({ type: 'BUILD', bodyId: TC_E, tileId: tile as never, kind });
+    const tile = freeTile(sim.world, COLONY, material, COLONY === TC_E ? undefined : anchor);
+    if (tile) ok({ type: 'BUILD', bodyId: COLONY, tileId: tile as never, kind });
   }
   sim.step(1); // rovers on their way: some sites PLANNED, one CONSTRUCTING
   runUntil(() => sim.world.structures.some((s) => s.state === 'CONSTRUCTING'), 10);
 }
 // ?arrival: the scenario start (unknown objects before the scan); default: a colony being built
-const arrival = new URLSearchParams(location.search).has('arrival');
+const arrival = query.has('arrival');
 if (!arrival) playColony();
 
-/** Optional extra standing buildings, render-only, to measure a larger colony (M). */
+/**
+ * Optional extra standing buildings, render-only, to measure a larger colony (M) or to show more
+ * kinds and levels in a shot: `levels` cycles per building; `near` = around the colony's port, on
+ * buildable tiles off the ruins (default: grid order).
+ */
 let extra: Structure[] = [];
-function stress(n: number): number {
+function stress(n: number, opts: { kinds?: string[]; levels?: number[]; near?: boolean } = {}): number {
   const world = sim.world;
-  const grid = sim.grids.get(TC_E)!;
+  const grid = sim.grids.get(COLONY)!;
   const used = new Set(world.structures.flatMap((s) => s.tiles.map(tileIndexOf)));
-  const kinds = ['SOL', 'WND', 'HAB', 'DEP', 'MIN', 'TNK', 'SKL', 'SMT', 'CON', 'FARM', 'LAND', 'GAR'];
+  const kinds = opts.kinds ?? ['SOL', 'WND', 'HAB', 'DEP', 'MIN', 'TNK', 'SKL', 'SMT', 'CON', 'FARM', 'LAND', 'GAR'];
+  const levels = opts.levels ?? [1];
+  const port = world.structures.find((s) => s.bodyId === COLONY && s.kind === 'HQ');
+  const order = opts.near && port ? siteOrder(grid, tileIndexOf(port.tiles[0]!)) : grid.tiles.map((t) => t.index);
+  const allowed = new Set(order);
   extra = [];
-  for (const t of grid.tiles) {
+  for (const i of order) {
     if (extra.length >= n) break;
     const kind = kinds[extra.length % kinds.length]!;
-    const size = kind === 'SMT' ? 3 : 1;
-    const tiles = footprintTiles(grid, t.index, size, 0);
-    if (!tiles || tiles.some((i) => used.has(i))) continue;
-    tiles.forEach((i) => used.add(i));
-    extra.push({ ...standingStructure(kind, TC_E, tiles), id: `X${extra.length}:${kind}` });
+    const size = kind === 'SMT' || kind === 'SIR' ? 3 : 1;
+    const tiles = footprintTiles(grid, i, size, 0);
+    if (!tiles || tiles.some((k) => used.has(k) || !allowed.has(k) || (opts.near && grid.tiles[k]!.deposit))) continue;
+    tiles.forEach((k) => used.add(k));
+    const level = levels[extra.length % levels.length]!;
+    extra.push({ ...standingStructure(kind, COLONY, tiles, level), id: `X${extra.length}:${kind}` });
   }
   pushSnapshot();
   return extra.length;
@@ -105,7 +151,7 @@ function pushSnapshot(): void {
 const input: ViewInput = {
   snapshot,
   frame,
-  focusBodyId: arrival ? null : TC_E,
+  focusBodyId: arrival ? null : COLONY,
   selection: { kind: 'NONE' },
   hover: null,
   placement: null,

@@ -2,12 +2,15 @@ import type {
   BodyId,
   ColonyReadout,
   Command,
+  Cost,
   DomainEvent,
   EconomyParams,
   EconomyTables,
   NominalFlows,
   Objective,
   RejectReason,
+  TerrainKind,
+  TerrainRules,
   WorldState,
 } from '@space-game/domain';
 import type { GalaxyOp, GalaxyReply, GalaxyView } from './galaxy';
@@ -197,6 +200,8 @@ export interface CatalogView {
     shuttleCapacity: number;
     shuttleTripMinutes: number;
   };
+  /** What terrain does to building (T8): buildable classes, cost and time in % per class and on a road. */
+  terrain: TerrainRules;
 }
 
 export interface Availability {
@@ -209,6 +214,28 @@ export interface Availability {
 export interface BuildPreview extends Availability {
   /** Tile indices the footprint would cover (empty when it does not fit). */
   tiles: number[];
+  /**
+   * Materials the order takes, after the terrain under the footprint (T8). Present once the check got
+   * past BAD_TERRAIN (footprint fits on free, buildable tiles): when `ok`, and also on a later rejection
+   * (NO_DEPOSIT, NO_ATMOSPHERE, NO_ROVER, NO_RESOURCES, NO_POWER, NO_CREW; for PORT: NO_RESOURCES, with
+   * the port cost checked against the mothership's hold). Absent on earlier rejections.
+   */
+  cost?: Cost;
+  /** Minutes one rover needs to build it (catalog time × terrain time %); present together with `cost`. */
+  buildTime?: number;
+}
+
+/** Terrain of a tile (T8); numbers are the tile's own (a road's on a road tile). */
+export interface TileTerrainInfo {
+  kind: TerrainKind;
+  /** Polish name to show: the road's ("droga") on a road tile, the class's ("las") otherwise. */
+  name: string;
+  road: boolean;
+  /** Whether a footprint may cover it (water: no, BAD_TERRAIN). */
+  buildable: boolean;
+  /** Materials and construction time in % of the catalog. */
+  costPct: number;
+  timePct: number;
 }
 
 /** One surface tile for the tile panel and card (3D PoC `tile-panel`). */
@@ -217,6 +244,8 @@ export interface TileInfo {
   index: number;
   kind: 'HEX' | 'PENT';
   deposit: { material: string; initial: number; remaining: number } | null;
+  /** Terrain class of the tile; null on bodies without terrain. */
+  terrain: TileTerrainInfo | null;
   /** Structure standing on the tile, if any. */
   structureId: string | null;
   /** Every buildable kind checked on this tile (rotation 0); extractors name what they would take here. */

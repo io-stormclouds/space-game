@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { ModelLibrary, type FetchBytes } from './model-library';
-import { ALL_MODEL_IDS, MODELS, type ModelId } from './model-registry';
+import { BASE_MODEL_IDS, MODELS, type ModelId } from './model-registry';
 import { SCENE } from './palette';
 
 /** Adds a constant `color` attribute so placeholders work with the shared vertex-colour material. */
@@ -18,9 +18,10 @@ export function paintGeometry<T extends THREE.BufferGeometry>(geometry: T, hex: 
 }
 
 /**
- * Geometry source for every model: the flattened KayKit geometry once loaded, before that a
- * placeholder box with the registry bounds, so fitting and picking do not change when the model
- * arrives. Owns the placeholders; the library owns the models. One shared flat-shaded material.
+ * Geometry source for every model of either kit (Space Base Bits or Medieval Hexagon: same API):
+ * the flattened KayKit geometry once loaded, before that a placeholder box with the registry
+ * bounds, so fitting and picking do not change when the model arrives. Owns the placeholders; the
+ * library owns the models. One shared flat-shaded material.
  */
 export class ModelKit {
   readonly library: ModelLibrary;
@@ -36,8 +37,11 @@ export class ModelKit {
     this.library = new ModelLibrary(assetsBase, fetchBytes);
   }
 
-  /** Starts loading every model; resolves when all settled (missing ones keep the placeholder). */
-  loadAll(ids: ReadonlyArray<ModelId> = ALL_MODEL_IDS): Promise<void> {
+  /**
+   * Starts loading the given models (default: the Space Base Bits set; a skin's extra models are
+   * loaded when a body uses it); resolves when all settled (missing ones keep the placeholder).
+   */
+  loadAll(ids: ReadonlyArray<ModelId> = BASE_MODEL_IDS): Promise<void> {
     return Promise.all(
       ids.map((id) =>
         this.library.load(id).then((asset) => {

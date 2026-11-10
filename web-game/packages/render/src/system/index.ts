@@ -8,7 +8,25 @@ export { SystemView, type SystemViewOptions } from './system-view';
 export { SystemScene, UNIT_PICK_PX, SMALL_BODY_PX, TILE_PICK_MIN_PX } from './system-scene';
 export { CameraRig, TRANSITION_SECONDS, type CameraMode } from './camera-rig';
 export { DS, SCENE, DEPOSIT_TINTS, depositTint, muteBodyColor } from './palette';
-export { KIND_MODELS, MODELS, partsForKind, modelsForKind, modelUrl, type ModelId, type ModelSpec, type ModelPart } from './model-registry';
+export {
+  KIND_TIERS,
+  KIND_TIERS_MEDIEVAL,
+  MODELS,
+  levelTier,
+  partsFor,
+  partsForKind,
+  modelsForKind,
+  modelUrl,
+  skinFor,
+  skinModels,
+  type LevelTier,
+  type ModelId,
+  type ModelSource,
+  type ModelSpec,
+  type ModelPart,
+  type Skin,
+  type TieredParts,
+} from './model-registry';
 export { ModelLibrary, type FetchBytes } from './model-library';
 export {
   footprintFrame,

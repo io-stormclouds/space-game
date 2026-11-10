@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
-import { COLONY_IDS } from '../game/config/initial-world';
+import { COLONY_IDS, MEDIEVAL_ID } from '../game/config/initial-world';
 import { tileId } from '../game/models/planet-grid.model';
 import { BodyId } from '../shared/ids';
 import { CommandService } from '../state/command.service';
@@ -27,6 +27,15 @@ import { SimulationService } from '../state/simulation.service';
           <span class="text-slate-500">{{ e.hint }}</span>
         </button>
       }
+      <button
+        class="mt-1 px-2 py-1 rounded border border-slate-600 hover:bg-slate-700"
+        [class.bg-sky-700]="loop.surfaceView()"
+        (click)="loop.toggleSurfaceView()">
+        {{ loop.surfaceView() ? 'Widok z orbity' : 'Widok na planecie' }}
+      </button>
+      @if (loop.surfaceView()) {
+        <div class="text-slate-500 px-1">WASD: ruch (Shift szybciej) · przeciągnij: rozglądanie · kółko: zoom</div>
+      }
     </div>
   `,
 })
@@ -34,7 +43,7 @@ export class ColonySwitcher {
   private readonly state = inject(GameStateService);
   private readonly commands = inject(CommandService);
   private readonly sim = inject(SimulationService);
-  private readonly loop = inject(GameLoopService);
+  protected readonly loop = inject(GameLoopService);
 
   private readonly hints = ['A', 'B', 'C'];
 
@@ -47,6 +56,7 @@ export class ColonySwitcher {
         const name = this.state.body(id)?.name ?? id;
         return { id, name: name.replace(/^Kolonia [ABC] · /, ''), hint: this.hints[i], active: focus === id };
       }),
+      { id: MEDIEVAL_ID, name: this.state.body(MEDIEVAL_ID)?.name ?? 'Średniowiecze', hint: 'hex', active: focus === MEDIEVAL_ID },
     ];
   });
 
@@ -54,7 +64,7 @@ export class ColonySwitcher {
     const layout = this.sim.colonies.get(bodyId);
     const grid = this.sim.grids.get(bodyId);
     if (!grid) return;
-    const index = layout?.centerTile ?? grid.tiles.reduce((best, t) => (t.normal.y > best.normal.y ? t : best), grid.tiles[0]).index;
+    const index = layout?.centerTile ?? this.sim.terrain.get(bodyId)?.settlementCenter ?? grid.tiles.reduce((best, t) => (t.normal.y > best.normal.y ? t : best), grid.tiles[0]).index;
     this.commands.select(null);
     this.commands.selectRover(null);
     this.commands.selectTile({ bodyId, tileId: tileId(bodyId, index), tileIndex: index });

@@ -2500,5 +2500,44 @@
       "NAD": 400,
       "PRO": 24
     }
+  },
+  "terrain": {
+    "kinds": {
+      "grass": {
+        "name": "trawa",
+        "buildable": true,
+        "costPct": 100,
+        "timePct": 100
+      },
+      "forest": {
+        "name": "las",
+        "buildable": true,
+        "costPct": 110,
+        "timePct": 150
+      },
+      "rock": {
+        "name": "skała",
+        "buildable": true,
+        "costPct": 140,
+        "timePct": 125
+      },
+      "snow": {
+        "name": "śnieg",
+        "buildable": true,
+        "costPct": 120,
+        "timePct": 140
+      },
+      "water": {
+        "name": "woda",
+        "buildable": false,
+        "costPct": 100,
+        "timePct": 100
+      }
+    },
+    "road": {
+      "name": "droga",
+      "costPct": 85,
+      "timePct": 75
+    }
   }
 }

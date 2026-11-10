@@ -83,7 +83,12 @@ pub fn progress(world: &mut WorldState, rules: &Rules, dt: f64) -> Vec<DomainEve
                 .unwrap_or_default();
             events.push(DomainEvent::ConstructionStarted { structure_id: site.id.clone(), rover_id });
         }
-        let time = rules.spec(&site.kind, site.target_level).build_time;
+        let base = rules.spec(&site.kind, site.target_level).build_time;
+        // terrain under a new building (T8); upgrades take the catalog time
+        let time = match (site.level, site.time_pct) {
+            (0, Some(pct)) => base * pct as f64 / 100.0,
+            _ => base,
+        };
         let progress = if time <= 0.0 { 1.0 } else { (site.progress + (dt * crew as f64) / time).min(1.0) };
         if progress >= 1.0 {
             events.push(finished(site));
@@ -99,6 +104,8 @@ fn finished(site: &Structure) -> DomainEvent {
         return DomainEvent::StructureUpgraded { structure_id: site.id.clone(), level: site.target_level };
     }
     let mut built = site.clone();
+    // the terrain time applies to the first construction only
+    built.time_pct = None;
     built.state = StructureState::Active;
     built.level = site.target_level;
     built.progress = 0.0;

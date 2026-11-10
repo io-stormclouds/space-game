@@ -9,6 +9,7 @@ import { Spacecraft } from '../models/spacecraft.model';
 import { isWorking } from '../models/structure.model';
 import { WorldState, storageOf } from '../reducer';
 import { Rules } from '../rules';
+import { scaleCost, siteTerrain } from '../terrain/terrain-rules';
 import { BuildSystem } from './build-system';
 import { tileIndexOf } from './rover-system';
 
@@ -29,6 +30,11 @@ export interface ColonizationParams {
 
 export type Fail = { ok: false; reason: import('../models/domain-event.model').RejectReason; detail?: string };
 const reject = (f: Fail): DomainEvent => ({ type: 'COMMAND_REJECTED', reason: f.reason, detail: f.detail });
+
+/** Result of the spaceport check; `cost` (port cost after terrain) and `timePct` once past BAD_TERRAIN. */
+export type SpaceportCheck =
+  | { ok: true; indices: number[]; tiles: TileId[]; cost: Cost; timePct: number }
+  | (Fail & { cost?: Cost; timePct?: number });
 
 /** Colonisation commands of the canvas flow and the timers behind them (scan, shuttles, vehicles). */
 export class ColonySystem {
@@ -59,27 +65,48 @@ export class ColonySystem {
     return { type: 'COLONY_SITE_CHOSEN', bodyId };
   }
 
-  /** Lands the port (HQ L1) from the mothership's hold with the rovers; rovers then build it. */
-  placeSpaceport(world: WorldState, bodyId: BodyId, anchor: TileId, rotation = 0): DomainEvent {
-    if (world.colony.siteBodyId !== bodyId) return reject({ ok: false, reason: 'NO_COLONY_SITE' });
-    if (world.structures.some((s) => s.kind === 'HQ' && s.bodyId === bodyId)) return reject({ ok: false, reason: 'BUSY', detail: 'port już stoi' });
+  /**
+   * Spaceport check of `placeSpaceport` (also the placement ghost of the pseudo-kind PORT). Order:
+   * NO_COLONY_SITE → BUSY → NO_MOTHERSHIP → NO_SHIP → NO_SHUTTLE → NO_GRID → NO_FOOTPRINT → TILE_OCCUPIED →
+   * BAD_TERRAIN → NO_RESOURCES (the port cost scaled by the terrain, against the mothership's hold).
+   * Past the terrain stage it carries the scaled `cost` and the `timePct`, also on NO_RESOURCES.
+   */
+  checkSpaceport(world: WorldState, bodyId: BodyId, anchor: TileId, rotation = 0): SpaceportCheck {
+    if (world.colony.siteBodyId !== bodyId) return { ok: false, reason: 'NO_COLONY_SITE' };
+    if (world.structures.some((s) => s.kind === 'HQ' && s.bodyId === bodyId)) return { ok: false, reason: 'BUSY', detail: 'port już stoi' };
     const ship = this.mothership(world);
-    if (!ship) return reject({ ok: false, reason: 'NO_MOTHERSHIP' });
-    if (ship.state !== 'DOCKED' || ship.currentBodyId !== bodyId) return reject({ ok: false, reason: 'NO_SHIP', detail: `${ship.name} musi być na orbicie` });
-    if ((ship.onboard?.shuttles ?? 0) < 1) return reject({ ok: false, reason: 'NO_SHUTTLE' });
+    if (!ship) return { ok: false, reason: 'NO_MOTHERSHIP' };
+    if (ship.state !== 'DOCKED' || ship.currentBodyId !== bodyId) return { ok: false, reason: 'NO_SHIP', detail: `${ship.name} musi być na orbicie` };
+    if ((ship.onboard?.shuttles ?? 0) < 1) return { ok: false, reason: 'NO_SHUTTLE' };
     const grid = this.grids.get(bodyId);
     const tile = grid?.tiles.find((t) => t.id === anchor);
-    if (!grid || !tile) return reject({ ok: false, reason: 'NO_GRID' });
+    if (!grid || !tile) return { ok: false, reason: 'NO_GRID' };
     const spec = this.rules.spec('HQ', 1);
     const indices = footprintTiles(grid, tile.index, spec.footprint, rotation);
-    if (!indices) return reject({ ok: false, reason: 'NO_FOOTPRINT', detail: `${spec.footprint} pola` });
+    if (!indices) return { ok: false, reason: 'NO_FOOTPRINT', detail: `${spec.footprint} pola` };
     const tiles = indices.map((i) => tileId(bodyId, i));
     const occupied = new Set(world.structures.filter((s) => s.bodyId === bodyId).flatMap((s) => s.tiles));
-    if (tiles.some((t) => occupied.has(t))) return reject({ ok: false, reason: 'TILE_OCCUPIED' });
-    const cost = this.params.portCost;
-    if (!canAfford(ship.cargo, cost)) return reject({ ok: false, reason: 'NO_RESOURCES', detail: `brakuje ${formatCost(missingFor(ship.cargo, cost))}` });
+    if (tiles.some((t) => occupied.has(t))) return { ok: false, reason: 'TILE_OCCUPIED' };
+    const rules = this.rules.terrain();
+    const terrain = siteTerrain(grid, indices, rules);
+    if (!terrain.buildable) return { ok: false, reason: 'BAD_TERRAIN', detail: rules.kinds[terrain.badKind!].name };
+    const cost = scaleCost(this.params.portCost, terrain.costPct);
+    const timePct = terrain.timePct;
+    if (!canAfford(ship.cargo, cost)) return { ok: false, reason: 'NO_RESOURCES', detail: `brakuje ${formatCost(missingFor(ship.cargo, cost))}`, cost, timePct };
+    return { ok: true, indices, tiles, cost, timePct };
+  }
 
-    const structure = this.builder.site('HQ', bodyId, tiles, cost, world.time);
+  /** Lands the port (HQ L1) from the mothership's hold with the rovers; rovers then build it. */
+  placeSpaceport(world: WorldState, bodyId: BodyId, anchor: TileId, rotation = 0): DomainEvent {
+    const check = this.checkSpaceport(world, bodyId, anchor, rotation);
+    if (!check.ok) return reject(check);
+    const ship = this.mothership(world)!;
+    const grid = this.grids.get(bodyId)!;
+    const tile = grid.tiles.find((t) => t.id === anchor)!;
+    const { indices, tiles, cost } = check;
+    const occupied = new Set(world.structures.filter((s) => s.bodyId === bodyId).flatMap((s) => s.tiles));
+
+    const structure = this.builder.site('HQ', bodyId, tiles, cost, world.time, check.timePct);
     const count = Math.min(this.params.landedRovers, ship.onboard?.rovers ?? 0);
     const free = grid.tiles[tile.index]!.neighbors.filter((n) => !indices.includes(n) && !occupied.has(tileId(bodyId, n)));
     const rovers: Rover[] = [];

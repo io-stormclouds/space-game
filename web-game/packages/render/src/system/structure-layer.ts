@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { tileIndexOf, type PlanetGrid, type Structure } from '@space-game/domain';
 import { InstancedBatch, LineBuffer, writeTransformed } from './buffers';
 import type { ModelKit } from './model-kit';
-import { DEPOSIT_MODEL, MODELS, baseLift, fitScale, footprintSpan, partsForKind, type ModelId } from './model-registry';
+import { DEPOSIT_MODEL, MODELS, baseLift, fitScale, footprintSpan, levelTier, partsFor, type ModelId, type ModelPart, type Skin } from './model-registry';
 import { createFrame, footprintFrame, structureLook, type StructureLook, type SurfaceFrame } from './placement';
 
 /** One model of one structure, as placed on the body (body-local frame). */
@@ -22,18 +22,51 @@ export interface PlacedPart {
 
 const UP = new THREE.Vector3(0, 1, 0);
 const SCALE_Y = new THREE.Matrix4();
+const SCALE = new THREE.Vector3();
 
-/** Model → body-local matrix for a surface frame (model +Y on the normal, +Z on the forward). */
-export function partMatrix(frame: SurfaceFrame, model: ModelId, out: THREE.Matrix4, tmp: { x: THREE.Vector3; y: THREE.Vector3; z: THREE.Vector3 }): THREE.Matrix4 {
-  const spec = MODELS[model];
-  const s = fitScale(spec, frame.width);
-  const lift = baseLift(spec, s);
+/** Level whose look a structure shows: its working level, L1 for a site before the first construction ends. */
+export function modelLevel(s: Pick<Structure, 'level'>): number {
+  return Math.max(1, s.level);
+}
+
+/** Surface frame of one part: its own tiles (`part.at`) or the whole footprint, sized by their span. */
+export function partFrame(grid: PlanetGrid, tiles: ReadonlyArray<number>, part: ModelPart, out: SurfaceFrame): SurfaceFrame {
+  const own = part.at && part.at.every((k) => k < tiles.length) ? part.at.map((k) => tiles[k]!) : tiles;
+  return footprintFrame(grid, own, out, footprintSpan(own.length));
+}
+
+/**
+ * Model → body-local matrix of a part in its frame: model +Y on the normal, +Z on the forward turned
+ * by `part.yaw`, scaled to `part.fill` (default: the model's) of the frame width, lowest point on the
+ * surface, then shifted by `part.offset` (frame widths).
+ */
+export function partMatrix(frame: SurfaceFrame, part: ModelPart, out: THREE.Matrix4, tmp: { x: THREE.Vector3; y: THREE.Vector3; z: THREE.Vector3 }): THREE.Matrix4 {
+  const spec = MODELS[part.model];
+  const s = fitScale(spec, frame.width, part.fill);
+  let lift = baseLift(spec, s);
   tmp.y.set(frame.normal.x, frame.normal.y, frame.normal.z);
   tmp.z.set(frame.forward.x, frame.forward.y, frame.forward.z);
   tmp.x.crossVectors(tmp.y, tmp.z);
+  let px = frame.position.x;
+  let py = frame.position.y;
+  let pz = frame.position.z;
+  const o = part.offset;
+  if (o) {
+    const ox = (o.x ?? 0) * frame.width;
+    const oz = (o.z ?? 0) * frame.width;
+    px += tmp.x.x * ox + tmp.z.x * oz;
+    py += tmp.x.y * ox + tmp.z.y * oz;
+    pz += tmp.x.z * ox + tmp.z.z * oz;
+    lift += (o.y ?? 0) * frame.width;
+  }
+  if (part.yaw) {
+    // z' = z cos + x sin, x' = y × z'
+    tmp.z.multiplyScalar(Math.cos(part.yaw)).addScaledVector(tmp.x, Math.sin(part.yaw));
+    tmp.x.crossVectors(tmp.y, tmp.z);
+  }
   out.makeBasis(tmp.x, tmp.y, tmp.z);
-  out.scale(new THREE.Vector3(s, s, s));
-  out.setPosition(frame.position.x + frame.normal.x * lift, frame.position.y + frame.normal.y * lift, frame.position.z + frame.normal.z * lift);
+  out.scale(SCALE.set(s, s, s));
+  out.setPosition(px + frame.normal.x * lift, py + frame.normal.y * lift, pz + frame.normal.z * lift);
   return out;
 }
 
@@ -46,8 +79,10 @@ interface Batch {
  * Structures of one body (PoC `StructureView`, generalised): one InstancedMesh per model on the
  * body for solid parts, one merged LineSegments per model for outlines of sites (planned:
  * ghost; constructing: target silhouette; upgrading: scaffold), and deposit rocks (instanced)
- * on free deposit tiles. Rebuilt only when the layout signature of the body's structures changes;
- * progress-only changes rewrite the solid matrices.
+ * on free deposit tiles. Each structure shows the parts of its kind at its level tier in the body's
+ * skin (`partsFor(kind, level, skin)`: Space Base Bits, or Medieval Hexagon on a medieval body), so
+ * an upgrade across a tier moves it to other batches. Rebuilt only when the layout signature
+ * (ids, kinds, states, tiles, tiers) changes; progress-only changes rewrite the solid matrices.
  */
 export class StructureLayer {
   readonly group = new THREE.Group();
@@ -73,19 +108,21 @@ export class StructureLayer {
     private readonly kit: ModelKit,
     private readonly outlineMaterial: THREE.LineBasicMaterial,
     private readonly showDecor: boolean,
+    /** Look of the structures (`skinFor(body)`); fixed for the life of the layer. */
+    readonly skin: Skin = 'spacebits',
   ) {
     this.group.name = `${grid.bodyId}_Structures`;
   }
 
   /**
    * Updates from the body's structures; `exhausted` = deposit tiles with nothing left.
-   * Returns whether the layout (ids, kinds, states, tiles) changed.
+   * Returns whether the layout (ids, kinds, states, tiles, level tiers) changed.
    */
   sync(structures: Structure[], exhausted: ReadonlySet<number>): boolean {
     let layout = '';
     let progress = '';
     for (const s of structures) {
-      layout += `${s.id}|${s.kind}|${s.state}|${s.tiles.join(',')};`;
+      layout += `${s.id}|${s.kind}|${s.state}|${levelTier(modelLevel(s))}|${s.tiles.join(',')};`;
       if (s.state === 'CONSTRUCTING') progress += `${s.id}:${Math.round(s.progress * 100)};`;
     }
     let dsig = '';
@@ -163,31 +200,20 @@ export class StructureLayer {
   private rebuild(): void {
     this.parts.length = 0;
     this.tileOwner.clear();
+    this.centroid.set(0, 0, 0);
     for (const s of this.structures) {
       const tiles = s.tiles.map(tileIndexOf);
       for (const t of tiles) this.tileOwner.set(t, s);
       const look = structureLook(s);
-      for (const part of partsForKind(s.kind)) {
-        const own = part.at && part.at.every((k) => k < tiles.length) ? part.at.map((k) => tiles[k]!) : tiles;
-        footprintFrame(this.grid, own, this.frame, footprintSpan(own.length));
-        const local = partMatrix(this.frame, part.model, new THREE.Matrix4(), this.basis);
-        footprintFrame(this.grid, tiles, this.frame);
-        this.parts.push({
-          structureId: s.id,
-          model: part.model,
-          tiles,
-          look,
-          local,
-          inverse: local.clone().invert(),
-          center: new THREE.Vector3(this.frame.position.x, this.frame.position.y, this.frame.position.z),
-          width: this.frame.width,
-        });
+      footprintFrame(this.grid, tiles, this.frame);
+      const center = new THREE.Vector3(this.frame.position.x, this.frame.position.y, this.frame.position.z);
+      const width = this.frame.width;
+      this.centroid.add(center); // once per structure, however many parts it has
+      for (const part of partsFor(s.kind, modelLevel(s), this.skin)) {
+        const local = partMatrix(partFrame(this.grid, tiles, part, this.frame), part, new THREE.Matrix4(), this.basis);
+        this.parts.push({ structureId: s.id, model: part.model, tiles, look, local, inverse: local.clone().invert(), center, width });
+        this.batch(part.model);
       }
-    }
-    this.centroid.set(0, 0, 0);
-    for (const part of this.parts) {
-      this.batch(part.model);
-      this.centroid.add(part.center);
     }
     if (this.centroid.lengthSq() > 1e-12) this.centroid.normalize();
     else this.centroid.set(0, 1, 0);
@@ -205,7 +231,9 @@ export class StructureLayer {
 
   private writeSolids(): void {
     const counts = new Map<ModelId, number>();
-    for (const b of this.batches.values()) b.solid.ensure(this.parts.length);
+    for (const p of this.parts) if (p.look.solid) counts.set(p.model, (counts.get(p.model) ?? 0) + 1);
+    for (const [id, n] of counts) this.batches.get(id)!.solid.ensure(n);
+    counts.clear();
     for (const p of this.parts) {
       if (!p.look.solid) continue;
       const b = this.batches.get(p.model)!;

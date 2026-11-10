@@ -1,4 +1,5 @@
 import { BodyId } from '../shared/ids';
+import { TERRAIN_RULES, type TerrainRules } from '../economy/terrain-data';
 import { GAME_CONSTANTS, GameConstants } from './config/game-constants';
 import { buildGoldbergGrid } from './math/goldberg-grid';
 import { footprintTiles } from './math/footprint';
@@ -12,6 +13,8 @@ import { Structure, StructureKind } from './models/structure.model';
 import { WorldState } from './reducer';
 import { RuleOverrides, Rules } from './rules';
 import { ColonizationParams } from './systems/colony-system';
+import { terrainAim, withTerrain } from './terrain/terrain-classify';
+import { tileBuildable } from './terrain/terrain-rules';
 
 /** A starting world as data (W06: the world is data, scenarios are presets). */
 export interface Scenario {
@@ -45,13 +48,19 @@ export function scenarioConstants(s: Scenario): GameConstants {
   return { ...GAME_CONSTANTS, ...s.constants };
 }
 
-/** Surface grids of every body that has one (deterministic). */
+/**
+ * Surface grids of every body that has one (deterministic). A body with `surfaceGrid.terrain` gets its
+ * terrain on the grid (`Tile.terrain`, `Tile.road`, `PlanetGrid.terrain`); the settlement faces the sun as
+ * seen from the body at t = 0 (`terrainAim`).
+ */
 export function buildWorldGrids(bodies: ReadonlyArray<CelestialBody>): Map<BodyId, PlanetGrid> {
-  return new Map(
-    bodies
-      .filter((b) => b.surfaceGrid)
-      .map((b) => [b.id, buildGoldbergGrid(b.id, b.radius, b.surfaceGrid!.frequency, b.surfaceGrid!.depositSeed, b.surfaceGrid!.depositWeights)]),
-  );
+  return new Map(bodies.filter((b) => b.surfaceGrid).map((b) => [b.id, bodyGrid(b)]));
+}
+
+function bodyGrid(b: CelestialBody): PlanetGrid {
+  const sg = b.surfaceGrid!;
+  const grid = buildGoldbergGrid(b.id, b.radius, sg.frequency, sg.depositSeed, sg.depositWeights);
+  return sg.terrain ? withTerrain(grid, sg.terrain, terrainAim(b)) : grid;
 }
 
 export function createWorld(s: Scenario, grids: ReadonlyMap<BodyId, PlanetGrid>, rules: Rules): WorldState {
@@ -99,9 +108,9 @@ export function topTile(grid: PlanetGrid): Tile {
 
 /**
  * First place near the top of the grid, at least `minRing` steps from the top tile, where a
- * footprint of `size` fits on free tiles without deposits. Deterministic.
+ * footprint of `size` fits on free, buildable tiles (terrain) without deposits. Deterministic.
  */
-export function findFreeFootprint(grid: PlanetGrid, size: number, taken: ReadonlySet<number>, minRing = 0): number[] | null {
+export function findFreeFootprint(grid: PlanetGrid, size: number, taken: ReadonlySet<number>, minRing = 0, terrain: TerrainRules = TERRAIN_RULES): number[] | null {
   const top = topTile(grid).index;
   const ring = new Map<number, number>([[top, 0]]);
   const queue = [top];
@@ -118,7 +127,7 @@ export function findFreeFootprint(grid: PlanetGrid, size: number, taken: Readonl
     if (ring.get(t.index)! < minRing) continue;
     for (let r = 0; r < t.neighbors.length; r++) {
       const tiles = footprintTiles(grid, t.index, size, r);
-      if (tiles && tiles.every((i) => !taken.has(i) && !grid.tiles[i]!.deposit)) return tiles;
+      if (tiles && tiles.every((i) => !taken.has(i) && !grid.tiles[i]!.deposit && tileBuildable(grid.tiles[i]!, terrain))) return tiles;
     }
   }
   return null;

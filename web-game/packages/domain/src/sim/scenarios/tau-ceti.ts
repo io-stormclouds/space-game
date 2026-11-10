@@ -2,6 +2,7 @@ import { bodyId, shipId } from '../../shared/ids';
 import { CelestialBody } from '../models/celestial-body.model';
 import { Spacecraft } from '../models/spacecraft.model';
 import { DEFAULT_COLONIZATION, Scenario } from '../scenario';
+import { TerrainConfig } from '../terrain/terrain-types';
 
 // Default scenario (W06 A): Arka-1 arrives at Tau Ceti — the canvas flow "Przybycie → Skanowanie →
 // Port kosmiczny → Kolonia".
@@ -41,6 +42,8 @@ interface PlanetData {
   phase: number;
   color: number;
   profile: NonNullable<CelestialBody['profile']>;
+  /** Hex-kit terrain (T8: changes building cost and time); absent = plain tiles. */
+  terrain?: TerrainConfig;
 }
 
 const PLANETS: PlanetData[] = [
@@ -55,6 +58,8 @@ const PLANETS: PlanetData[] = [
     profile: { type: 'skalista, śladowa atmosfera', temperature: 'umiarkowana', water: 'brak', rating: 'średni', shuttleLaunchFuel: 5,
       note: 'Dobre metale i słońce, brak lodu. Lepsza jako druga kolonia przemysłowa.',
       deposits: { TYT: 70, FER: 50, KUP: 35 } },
+    // ruined medieval settlement facing the sun (docs/planet-terrain-poc-wnioski-i-plan.md §9.1)
+    terrain: { biome: 'medieval', seed: 2 },
   },
   {
     id: TC_D, name: 'Tau Ceti d', unknown: 'Obiekt 3', n: 6, seed: 103, insolation: 0.9, atmosphere: 'none', phase: 4.1, color: 0x8b8f96,
@@ -132,7 +137,13 @@ export const TAU_CETI_BODIES: ReadonlyArray<CelestialBody> = [
       orbitalAltitudeFactor: 1.25,
       isHomeBase: false,
       color: p.color,
-      surfaceGrid: { frequency: p.n, depositSeed: p.seed, depositWeights: weightsOf(p.profile.deposits) },
+      surfaceGrid: {
+        frequency: p.n,
+        depositSeed: p.seed,
+        depositWeights: weightsOf(p.profile.deposits),
+        // only bodies with terrain get the key, so the others keep their world JSON
+        ...(p.terrain ? { terrain: p.terrain } : {}),
+      },
       atmosphere: p.atmosphere,
       insolation: p.insolation,
       revealed: false,

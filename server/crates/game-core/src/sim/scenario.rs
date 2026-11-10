@@ -8,11 +8,14 @@ use serde::{Deserialize, Serialize};
 use super::constants::{GAME_CONSTANTS, GameConstants};
 use super::reducer::{ColonyState, ScanState, WorldState};
 use super::rules::{RuleOverrides, Rules};
+use super::terrain_rules::tile_buildable;
+use crate::economy::catalog;
 use crate::ids::{BodyId, tile_id};
 use crate::math::footprint::footprint_tiles;
 use crate::math::goldberg::build_goldberg_grid;
+use crate::math::terrain::{terrain_aim, with_terrain};
 use crate::math::vec3::Vec3;
-use crate::models::body::CelestialBody;
+use crate::models::body::{CelestialBody, SurfaceGrid};
 use crate::models::grid::{PlanetGrid, Tile};
 use crate::models::resource::{Cost, Stockpile, empty_stockpile};
 use crate::models::rover::Rover;
@@ -90,16 +93,19 @@ pub fn no_rovers(_: &Grids, _: &[Structure]) -> Vec<Rover> {
     Vec::new()
 }
 
-/// Surface grids of every body that has one (deterministic).
+/// Surface grids of every body that has one (deterministic). A body with `surfaceGrid.terrain` gets its
+/// terrain on the grid (`Tile.terrain`, `Tile.road`, `PlanetGrid.terrain`); the settlement faces the sun
+/// as seen from the body at t = 0 (`terrain_aim`).
 pub fn build_world_grids(bodies: &[CelestialBody]) -> Grids {
-    bodies
-        .iter()
-        .filter_map(|b| {
-            b.surface_grid
-                .as_ref()
-                .map(|g| (b.id.clone(), build_goldberg_grid(&b.id, b.radius, g.frequency, g.deposit_seed, g.deposit_weights.as_ref())))
-        })
-        .collect()
+    bodies.iter().filter_map(|b| b.surface_grid.as_ref().map(|g| (b.id.clone(), body_grid(b, g)))).collect()
+}
+
+fn body_grid(b: &CelestialBody, sg: &SurfaceGrid) -> PlanetGrid {
+    let grid = build_goldberg_grid(&b.id, b.radius, sg.frequency, sg.deposit_seed, sg.deposit_weights.as_ref());
+    match sg.terrain {
+        Some(config) => with_terrain(grid, config, terrain_aim(b)),
+        None => grid,
+    }
 }
 
 pub fn create_world(s: &Scenario, grids: &Grids, rules: &Rules) -> WorldState {
@@ -145,6 +151,7 @@ pub fn standing_structure(kind: &str, body_id: &str, tiles: &[usize], level: u32
         progress: 0.0,
         paid: empty_stockpile(),
         built_at: 0.0,
+        time_pct: None,
         recipe: None,
         batch: None,
     }
@@ -156,8 +163,10 @@ pub fn top_tile(grid: &PlanetGrid) -> &Tile {
 }
 
 /// First place near the top of the grid, at least `min_ring` steps from the top tile, where a
-/// footprint of `size` fits on free tiles without deposits. Deterministic.
+/// footprint of `size` fits on free, buildable tiles (terrain, catalog rules) without deposits.
+/// Deterministic.
 pub fn find_free_footprint(grid: &PlanetGrid, size: usize, taken: &HashSet<usize>, min_ring: usize) -> Option<Vec<usize>> {
+    let terrain = &catalog().terrain;
     let top = top_tile(grid).index;
     let mut ring: HashMap<usize, usize> = HashMap::from([(top, 0)]);
     let mut queue = vec![top];
@@ -183,7 +192,7 @@ pub fn find_free_footprint(grid: &PlanetGrid, size: usize, taken: &HashSet<usize
         }
         for r in 0..t.neighbors.len() {
             if let Some(tiles) = footprint_tiles(grid, t.index, size, r as i64)
-                && tiles.iter().all(|&i| !taken.contains(&i) && grid.tiles[i].deposit.is_none())
+                && tiles.iter().all(|&i| !taken.contains(&i) && grid.tiles[i].deposit.is_none() && tile_buildable(&grid.tiles[i], terrain))
             {
                 return Some(tiles);
             }

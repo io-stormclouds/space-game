@@ -9,13 +9,14 @@ use crate::math::footprint::footprint_tiles;
 use crate::math::js;
 use crate::models::body::Atmosphere;
 use crate::models::event::{DomainEvent, RejectReason};
-use crate::models::grid::Tile;
+use crate::models::grid::{PlanetGrid, Tile};
 use crate::models::resource::{Cost, add_stock, can_afford, empty_stockpile, format_cost, missing_for, scale_stock};
 use crate::models::structure::{Structure, StructureState};
 use crate::sim::colony::{crew_shortfall, level_ceiling, power_shortfall};
 use crate::sim::reducer::WorldState;
 use crate::sim::rules::Rules;
 use crate::sim::scenario::Grids;
+use crate::sim::terrain_rules::{scale_cost, site_terrain};
 
 /// Share of the paid materials returned (doc 5.1): cancelled construction 75%, demolition 50%.
 pub const CANCEL_REFUND: f64 = 0.75;
@@ -46,8 +47,57 @@ fn fmt(n: f64) -> String {
     js::number_to_string(js::round(n * 10.0) / 10.0).replace('.', ",")
 }
 
+/// Terrain-adjusted price of a site (T8): the materials the order takes and the construction time in
+/// % of the catalog time.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SitePrice {
+    pub cost: Cost,
+    pub time_pct: u32,
+}
+
+/// A passed BUILD check: the footprint tiles (anchor first) and the price on this terrain.
+#[derive(Clone, Debug, PartialEq)]
+pub struct BuildCheck {
+    pub tiles: Vec<TileId>,
+    pub price: SitePrice,
+}
+
+/// A failed check. Past the terrain stage (the footprint fits on free, buildable tiles) it carries the
+/// price, also when a later stage rejects (NO_DEPOSIT, NO_ATMOSPHERE, NO_RESOURCES, NO_POWER…), so the
+/// placement ghost can show it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct CheckFail {
+    pub fail: Fail,
+    pub price: Option<SitePrice>,
+}
+
+impl From<Fail> for CheckFail {
+    fn from(fail: Fail) -> CheckFail {
+        CheckFail { fail, price: None }
+    }
+}
+
+impl CheckFail {
+    fn priced(fail: Fail, price: &SitePrice) -> CheckFail {
+        CheckFail { fail, price: Some(price.clone()) }
+    }
+}
+
 /// Checks that do not depend on the tile: era, level cap, materials, power, crew, rover. Drives menu cards.
 pub fn availability(world: &WorldState, rules: &Rules, body_id: &str, kind: &str, level: u32) -> Result<(), Fail> {
+    availability_with(world, rules, body_id, kind, level, None)
+}
+
+/// `availability` with `cost` in place of the catalog cost in the materials check (the
+/// terrain-adjusted cost of a site), so NO_RESOURCES stays ahead of NO_POWER and NO_CREW.
+pub fn availability_with(
+    world: &WorldState,
+    rules: &Rules,
+    body_id: &str,
+    kind: &str,
+    level: u32,
+    cost: Option<&Cost>,
+) -> Result<(), Fail> {
     if !rules.has(kind) {
         return Err(Fail::new(RejectReason::NotBuildable));
     }
@@ -66,8 +116,9 @@ pub fn availability(world: &WorldState, rules: &Rules, body_id: &str, kind: &str
         return Err(Fail::new(RejectReason::NoRover));
     }
     let store = world.storage_of(body_id);
-    if !can_afford(&store, &spec.cost) {
-        return Err(Fail::with(RejectReason::NoResources, format!("brakuje {}", format_cost(&missing_for(&store, &spec.cost)))));
+    let need = cost.unwrap_or(&spec.cost);
+    if !can_afford(&store, need) {
+        return Err(Fail::with(RejectReason::NoResources, format!("brakuje {}", format_cost(&missing_for(&store, need)))));
     }
     let power = power_shortfall(world, rules, body_id, kind, level);
     if power > 0.0 {
@@ -80,7 +131,21 @@ pub fn availability(world: &WorldState, rules: &Rules, body_id: &str, kind: &str
     Ok(())
 }
 
-/// Full check for one anchor tile: the footprint tiles when the building can go there.
+/// Terrain stage of a check: BAD_TERRAIN (detail = the class name) when a footprint tile cannot be
+/// built on, else the price of the site on this terrain (`base` scaled by the footprint's cost %).
+pub fn terrain_price(grid: &PlanetGrid, indices: &[usize], rules: &Rules, base: &Cost) -> Result<SitePrice, Fail> {
+    let terrain = rules.terrain();
+    let site = site_terrain(grid, indices, terrain);
+    if !site.buildable {
+        let name = site.bad_kind.map(|k| terrain.kinds.get(k).name.clone()).unwrap_or_default();
+        return Err(Fail::with(RejectReason::BadTerrain, name));
+    }
+    Ok(SitePrice { cost: scale_cost(base, site.cost_pct), time_pct: site.time_pct })
+}
+
+/// Full check for one anchor tile: the footprint tiles and the price when the building can go there.
+/// Order (the same in TS): NO_GRID → NOT_BUILDABLE → NO_FOOTPRINT → TILE_OCCUPIED → BAD_TERRAIN →
+/// NO_DEPOSIT → NO_ATMOSPHERE → availability with the terrain cost.
 pub fn check(
     world: &WorldState,
     grids: &Grids,
@@ -89,37 +154,40 @@ pub fn check(
     anchor: &str,
     kind: &str,
     rotation: i64,
-) -> Result<Vec<TileId>, Fail> {
+) -> Result<BuildCheck, CheckFail> {
     let grid = grids.get(body_id);
     let tile = grid.and_then(|g| g.tile_by_id(anchor));
-    let (Some(grid), Some(tile)) = (grid, tile) else { return Err(Fail::new(RejectReason::NoGrid)) };
+    let (Some(grid), Some(tile)) = (grid, tile) else { return Err(Fail::new(RejectReason::NoGrid).into()) };
     if !rules.has(kind) || !rules.is_buildable(kind) {
-        return Err(Fail::new(RejectReason::NotBuildable));
+        return Err(Fail::new(RejectReason::NotBuildable).into());
     }
     let spec = rules.spec(kind, 1);
     let Some(indices) = footprint_tiles(grid, tile.index, spec.footprint, rotation) else {
-        return Err(Fail::with(RejectReason::NoFootprint, format!("{} pól", spec.footprint)));
+        return Err(Fail::with(RejectReason::NoFootprint, format!("{} pól", spec.footprint)).into());
     };
     let tiles: Vec<TileId> = indices.iter().map(|&i| tile_id(body_id, i)).collect();
     let occupied: HashSet<&str> =
         world.structures.iter().filter(|s| s.body_id == body_id).flat_map(|s| s.tiles.iter().map(|t| t.as_str())).collect();
     if tiles.iter().any(|t| occupied.contains(t.as_str())) {
-        return Err(Fail::new(RejectReason::TileOccupied));
+        return Err(Fail::new(RejectReason::TileOccupied).into());
     }
+    let price = terrain_price(grid, &indices, rules, &spec.cost)?;
     if let Some(fail) = deposit_check(world, rules, tile, kind) {
-        return Err(fail);
+        return Err(CheckFail::priced(fail, &price));
     }
     if spec.needs_atmosphere {
         let body = world.body(body_id);
         if body.and_then(|b| b.atmosphere) != Some(Atmosphere::Dense) {
-            return Err(Fail::new(RejectReason::NoAtmosphere));
+            return Err(CheckFail::priced(Fail::new(RejectReason::NoAtmosphere), &price));
         }
     }
-    availability(world, rules, body_id, kind, 1)?;
-    Ok(tiles)
+    if let Err(fail) = availability_with(world, rules, body_id, kind, 1, Some(&price.cost)) {
+        return Err(CheckFail::priced(fail, &price));
+    }
+    Ok(BuildCheck { tiles, price })
 }
 
-/// Returns CONSTRUCTION_ORDERED (materials taken from the body's storage) or COMMAND_REJECTED.
+/// Returns CONSTRUCTION_ORDERED (terrain-adjusted materials taken from the body's storage) or COMMAND_REJECTED.
 #[allow(clippy::too_many_arguments)] // mirrors `BuildSystem.build` of the TS domain
 pub fn build(
     world: &WorldState,
@@ -132,16 +200,17 @@ pub fn build(
     rotation: i64,
 ) -> DomainEvent {
     match check(world, grids, rules, body_id, anchor, kind, rotation) {
-        Err(fail) => fail.event(),
-        Ok(tiles) => {
-            let cost = rules.spec(kind, 1).cost.clone();
-            DomainEvent::ConstructionOrdered { structure: site(rules, kind, body_id, tiles, cost.clone(), time), cost, from_ship_id: None }
-        }
+        Err(f) => f.fail.event(),
+        Ok(BuildCheck { tiles, price }) => DomainEvent::ConstructionOrdered {
+            structure: site(rules, kind, body_id, tiles, price.cost.clone(), time, price.time_pct),
+            cost: price.cost,
+            from_ship_id: None,
+        },
     }
 }
 
-/// A new construction site at level 0.
-pub fn site(rules: &Rules, kind: &str, body_id: &str, tiles: Vec<TileId>, cost: Cost, time: f64) -> Structure {
+/// A new construction site at level 0; `time_pct` (terrain, % of the catalog time) is stored only when ≠ 100.
+pub fn site(rules: &Rules, kind: &str, body_id: &str, tiles: Vec<TileId>, cost: Cost, time: f64, time_pct: u32) -> Structure {
     let recipe = rules.processes(kind).first().map(|r| r.id.clone());
     Structure {
         id: format!("{kind}@{}", tiles[0]),
@@ -155,6 +224,7 @@ pub fn site(rules: &Rules, kind: &str, body_id: &str, tiles: Vec<TileId>, cost: 
         progress: 0.0,
         paid: cost,
         built_at: time,
+        time_pct: if time_pct != 100 { Some(time_pct) } else { None },
         batch: if recipe.is_some() { Some(None) } else { None },
         recipe,
     }

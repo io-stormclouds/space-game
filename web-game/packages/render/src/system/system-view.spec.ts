@@ -12,12 +12,16 @@ import {
   SHIP_ID,
   Simulation,
   TAU_CETI_SCENARIO,
+  TC_C,
   TC_E,
   footprintTiles,
+  standingStructure,
   tileIndexOf,
+  type Structure,
   type WorldState,
 } from '@space-game/domain';
 import type { PickResult, Placement, Selection, ViewInput } from '../view';
+import type { FetchBytes } from './model-library';
 import { MODELS } from './model-registry';
 import { DS } from './palette';
 import { TRANSITION_SECONDS } from './camera-rig';
@@ -69,7 +73,7 @@ interface Harness {
 }
 
 /** The host's part: one renderer (stubbed: jsdom has no WebGL), a container, the frame loop. */
-function mount(snapshot: GameSnapshot, opts: { loadModels?: boolean } = {}): Harness {
+function mount(snapshot: GameSnapshot, opts: { loadModels?: boolean; fetchBytes?: FetchBytes } = {}): Harness {
   const container = document.createElement('div');
   document.body.appendChild(container);
   const canvas = document.createElement('canvas');
@@ -92,7 +96,7 @@ function mount(snapshot: GameSnapshot, opts: { loadModels?: boolean } = {}): Har
     render: vi.fn(),
     clearDepth: vi.fn(),
   } as unknown as Harness['renderer'];
-  const view = new SystemView({ loadModels: opts.loadModels ?? false, fetchBytes: fromDisk });
+  const view = new SystemView({ loadModels: opts.loadModels ?? false, fetchBytes: opts.fetchBytes ?? fromDisk });
   view.mount({ container, three: renderer, assetsBase: 'assets/', width: W, height: H });
   const input: ViewInput = { snapshot, frame: null, focusBodyId: null, selection: { kind: 'NONE' }, hover: null, placement: null };
   const h: Harness = {
@@ -328,6 +332,60 @@ describe('SystemView (planet + system kinds, one scene)', () => {
     expect(sites().visible).toBe(false);
   });
 
+  it('an upgrade across a level tier moves the structure to that tier\'s model batch (L2 → L3 → L5), and it all disposes', async () => {
+    const world = structuredClone(sim.world);
+    h = mount(snapshotOf(world), { loadModels: true });
+    await h.view.ready;
+    h.frames(2);
+    const s = scene(h);
+    const tile = facingTile(h, PLANET_ID, world);
+    const hab = standingStructure('HAB', PLANET_ID, [tile.index], 2);
+    const show = (x: Structure) => {
+      h.input = { ...h.input, snapshot: snapshotOf({ ...world, structures: [...world.structures, x] }) };
+      h.frames(1);
+    };
+    const layer = () => s.bodyParts(PLANET_ID)!.structures!;
+    const batch = (model: string) => layer().group.children.find((o) => o.name === `${PLANET_ID}_${model}`) as THREE.InstancedMesh | undefined;
+    const drawn = (model: string) => (batch(model)?.visible ? batch(model)!.count : 0);
+    const models = () => layer().partsOf(hab.id).map((p) => p.model);
+
+    show(hab);
+    expect(models()).toEqual(['basemodule_A']);
+    expect(drawn('basemodule_A')).toBe(1);
+    // upgrading to L3: still the L2 look, with the scaffold outline
+    show({ ...hab, state: 'UPGRADING', targetLevel: 3, progress: 0.5 });
+    expect(models()).toEqual(['basemodule_A']);
+    expect(drawn('basemodule_A')).toBe(1);
+    expect(drawn('basemodule_B')).toBe(0);
+    expect((layer().group.children.find((o) => o.name === `${PLANET_ID}_basemodule_A_Sites`) as THREE.LineSegments).visible).toBe(true);
+    // done: the instance moved to the L3 batch, the L2 batch is empty (no draw call)
+    show({ ...hab, level: 3, targetLevel: 3 });
+    expect(models()).toEqual(['basemodule_B']);
+    expect(drawn('basemodule_A')).toBe(0);
+    expect(batch('basemodule_A')!.visible).toBe(false);
+    expect(drawn('basemodule_B')).toBe(1);
+    expect(batch('basemodule_B')!.geometry.index!.count / 3).toBe(MODELS.basemodule_B.triangles);
+    // a level change alone (no state change, e.g. a loaded world) re-renders too
+    show({ ...hab, level: 5, targetLevel: 5 });
+    expect(models()).toEqual(['basemodule_E']);
+    expect(drawn('basemodule_B')).toBe(0);
+    expect(drawn('basemodule_E')).toBe(1);
+    // within a tier nothing is rebuilt: the same part objects
+    const parts = layer().partsOf(hab.id);
+    show({ ...hab, level: 6, targetLevel: 6 });
+    expect(layer().partsOf(hab.id)).toEqual(parts);
+    expect(layer().partsOf(hab.id)[0]).toBe(parts[0]);
+    // picking and tile ownership follow
+    expect(layer().tileOwner.get(tile.index)?.id).toBe(hab.id);
+    expect(h.pickAt(s.screenOfLocal(PLANET_ID, parts[0]!.center))).toMatchObject({ kind: 'STRUCTURE', bodyId: PLANET_ID, structureId: hab.id });
+
+    const owned = new Set([...resources(s.scene), ...resources(s.overlay.scene)]);
+    const disposed = new Set<unknown>();
+    for (const r of owned) r.addEventListener('dispose', () => disposed.add(r));
+    h.view.dispose();
+    expect([...owned].filter((r) => !disposed.has(r)).map((r) => r.type)).toEqual([]);
+  });
+
   it('a ship in transit flies the plan curve with its flight path drawn; the selected one in signal', () => {
     const own = new Simulation(POC_SCENARIO);
     own.dispatch({ type: 'MOVE_SHIP', shipId: SHIP_ID, to: MOON_ID });
@@ -380,6 +438,126 @@ describe('SystemView (planet + system kinds, one scene)', () => {
     h.input = { ...h.input, placement: null };
     h.frames(1);
     expect(s.ghostObjects.every((g) => !g.visible)).toBe(true);
+  });
+
+  it('Tau Ceti c: hex-kit terrain replaces the fan grid near the camera, the fan stays the pick proxy, and it all disposes', async () => {
+    const tc = new Simulation(TAU_CETI_SCENARIO);
+    tc.dispatch({ type: 'SCAN_SYSTEM', shipId: ARK_ID });
+    while (tc.world.scan.state !== 'DONE') tc.step(0.5);
+    h = mount(snapshotOf(tc.world, 'tau-ceti'), { loadModels: true });
+    h.input = { ...h.input, focusBodyId: TC_C };
+    h.view.setKind('planet');
+    h.frames(Math.ceil(TRANSITION_SECONDS * 60) + 5);
+    const s = scene(h);
+    await vi.waitFor(() => expect(s.bodyParts(TC_C)!.terrain?.ready).toBe(true), { timeout: 10000 });
+    h.frames(3);
+    const c = s.bodyParts(TC_C)!;
+    expect(c.terrainDecor!.instances).toBeGreaterThan(50);
+    // near: terrain and decor drawn, the fan mesh hidden but still the raycast surface
+    expect(c.terrain!.visual.visible).toBe(true);
+    expect(c.terrainDecor!.group.visible).toBe(true);
+    expect(c.grid!.mesh.visible).toBe(false);
+    expect(c.grid!.edges.visible).toBe(false);
+    expect(c.surface).toBe(c.grid!.mesh);
+    expect(h.pickAt(s.screenOf(TC_C))).toMatchObject({ kind: 'TILE', bodyId: TC_C });
+    // other gridded bodies keep the plain grid
+    expect(s.bodyParts(TC_E)!.terrain).toBeNull();
+    // far (system overview): the cheap fan grid again
+    h.view.setKind('system');
+    h.frames(Math.ceil(TRANSITION_SECONDS * 60) + 5);
+    expect(c.terrain!.visual.visible).toBe(false);
+    expect(c.grid!.mesh.visible).toBe(true);
+
+    const owned = resources(s.scene);
+    const disposed = new Set<unknown>();
+    for (const r of owned) r.addEventListener('dispose', () => disposed.add(r));
+    h.view.dispose();
+    expect([...owned].filter((r) => !disposed.has(r)).map((r) => r.type)).toEqual([]);
+  });
+
+  it('Tau Ceti c (medieval biome): structures use the medieval models, loaded only for that skin; tc-e keeps Space Base Bits; ghost and picking use the kit', async () => {
+    const tc = new Simulation(TAU_CETI_SCENARIO);
+    const urls: string[] = [];
+    h = mount(snapshotOf(tc.world, 'tau-ceti'), {
+      loadModels: true,
+      fetchBytes: (url) => {
+        urls.push(url);
+        return fromDisk(url);
+      },
+    });
+    await h.view.ready;
+    const s = scene(h);
+    // before the scan no body shows a grid: only Space Base Bits are loaded, nothing from the hex kit
+    expect(s.kit.isLoaded('basemodule_A')).toBe(true);
+    expect(s.kit.isLoaded('house')).toBe(false);
+    expect(urls.filter((u) => u.includes('kaykit-hex/'))).toEqual([]);
+
+    tc.dispatch({ type: 'SCAN_SYSTEM', shipId: ARK_ID });
+    while (tc.world.scan.state !== 'DONE') tc.step(0.5);
+    const world = structuredClone(tc.world);
+    h.input = { ...h.input, snapshot: snapshotOf(world, 'tau-ceti'), focusBodyId: TC_C };
+    h.view.setKind('planet');
+    h.frames(Math.ceil(TRANSITION_SECONDS * 60) + 5);
+    await h.view.ready; // now includes the medieval models (tc-c got its structure layer)
+    expect(s.kit.isLoaded('house')).toBe(true);
+    expect(s.kit.isLoaded('castle')).toBe(true);
+
+    const tileC = facingTile(h, TC_C, world);
+    const tileE = s.gridOf(TC_E)!.tiles.find((t) => !t.deposit && t.neighbors.length === 6)!;
+    const habC = standingStructure('HAB', TC_C, [tileC.index]);
+    const habE = standingStructure('HAB', TC_E, [tileE.index]);
+    h.input = { ...h.input, snapshot: snapshotOf({ ...world, structures: [...world.structures, habC, habE] }, 'tau-ceti') };
+    h.frames(Math.ceil(TRANSITION_SECONDS * 60) + 5);
+
+    const c = s.bodyParts(TC_C)!.structures!;
+    const e = s.bodyParts(TC_E)!.structures!;
+    expect(c.skin).toBe('medieval');
+    expect(e.skin).toBe('spacebits');
+    expect(c.partsOf(habC.id).map((p) => p.model)).toEqual(['house']);
+    expect(e.partsOf(habE.id).map((p) => p.model)).toEqual(['basemodule_A']);
+    const batch = (layer: typeof c, body: string, model: string) => layer.group.children.find((o) => o.name === `${body}_${model}`) as THREE.InstancedMesh | undefined;
+    const house = batch(c, TC_C, 'house')!;
+    expect(house.visible).toBe(true);
+    expect(house.count).toBe(1);
+    // the flattened Medieval Hexagon geometry (non-indexed), the same shared material as every model
+    expect(house.geometry).toBe(s.kit.library.get('house')!.geometry);
+    expect(house.geometry.getAttribute('position').count / 3).toBe(MODELS.house.triangles);
+    expect(house.material).toBe(s.kit.material);
+    expect(batch(c, TC_C, 'basemodule_A')).toBeUndefined();
+    expect(batch(e, TC_E, 'house')).toBeUndefined();
+    expect(batch(e, TC_E, 'basemodule_A')!.count).toBe(1);
+
+    // picking: a ray through the top of the house hits its box (the loaded model's, from the kit)
+    const part = c.partsOf(habC.id)[0]!;
+    const box = s.kit.box('house');
+    expect(box).toBe(s.kit.library.get('house')!.box);
+    const top = new THREE.Vector3(0, box.max.y * 0.8, 0).applyMatrix4(part.local);
+    expect(h.pickAt(s.screenOfLocal(TC_C, top))).toMatchObject({ kind: 'STRUCTURE', bodyId: TC_C, structureId: habC.id });
+    expect(h.pickAt(s.screenOfLocal(TC_C, part.center))).toMatchObject({ kind: 'STRUCTURE', bodyId: TC_C, structureId: habC.id });
+
+    // placement ghost on tc-c: the port as castle + pad, edges of the loaded models
+    const grid = s.gridOf(TC_C)!;
+    const free = grid.tiles.find((t) => t.neighbors.length === 6 && t.index !== tileC.index && !t.neighbors.includes(tileC.index) && footprintTiles(grid, t.index, 3, 0))!;
+    const tiles = footprintTiles(grid, free.index, 3, 0)!;
+    h.input = { ...h.input, placement: { kind: 'HQ', tiles, valid: true } };
+    h.frames(1);
+    const visible = () => s.ghostObjects.filter((g) => g.visible).map((g) => g.geometry);
+    expect(visible()).toEqual([s.kit.edges('castle'), s.kit.edges('landingpad_small')]);
+    expect(s.kit.edges('castle')).toBe(s.kit.library.edgesOf('castle'));
+    // a half-sunk water mill keeps its outline (only pits are left out)
+    h.input = { ...h.input, placement: { kind: 'SIR', tiles, valid: true } };
+    h.frames(1);
+    expect(visible()).toEqual([s.kit.edges('well'), s.kit.edges('watermill')]);
+    // the same kind placed on tc-e: Space Base Bits
+    h.input = { ...h.input, focusBodyId: TC_E, placement: { kind: 'HAB', tiles: [tileE.neighbors[0]!], valid: true } };
+    h.frames(1);
+    expect(visible()).toEqual([s.kit.edges('basemodule_A')]);
+
+    const owned = new Set([...resources(s.scene), ...resources(s.overlay.scene)]);
+    const disposed = new Set<unknown>();
+    for (const r of owned) r.addEventListener('dispose', () => disposed.add(r));
+    h.view.dispose();
+    expect([...owned].filter((r) => !disposed.has(r)).map((r) => r.type)).toEqual([]);
   });
 
   it('dispose frees every geometry and material it created and removes its DOM and listeners', async () => {

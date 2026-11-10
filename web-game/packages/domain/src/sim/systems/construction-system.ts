@@ -71,7 +71,9 @@ export class ConstructionSystem {
         const roverId = world.rovers.find((r) => r.job === site.id && r.state === 'BUILDING')!.id;
         events.push({ type: 'CONSTRUCTION_STARTED', structureId: site.id, roverId });
       }
-      const time = this.rules.spec(site.kind, site.targetLevel).buildTime;
+      const base = this.rules.spec(site.kind, site.targetLevel).buildTime;
+      // terrain under a new building (T8); upgrades take the catalog time
+      const time = site.level === 0 && site.timePct !== undefined ? (base * site.timePct) / 100 : base;
       const progress = time <= 0 ? 1 : Math.min(1, site.progress + (dt * crew) / time);
       if (progress >= 1) {
         events.push(this.finished(site));
@@ -84,9 +86,11 @@ export class ConstructionSystem {
 
   private finished(site: Structure): DomainEvent {
     if (site.level > 0) return { type: 'STRUCTURE_UPGRADED', structureId: site.id, level: site.targetLevel };
+    // the terrain time applies to the first construction only
+    const { timePct: _, ...built } = site;
     return {
       type: 'STRUCTURE_BUILT',
-      structure: { ...site, state: 'ACTIVE', level: site.targetLevel, progress: 0, paid: {} },
+      structure: { ...built, state: 'ACTIVE', level: site.targetLevel, progress: 0, paid: {} },
       cost: site.paid,
     };
   }
