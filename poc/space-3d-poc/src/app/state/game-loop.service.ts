@@ -29,6 +29,9 @@ export class GameLoopService {
   /** Screen-space body labels for the HUD, refreshed at UI_REFRESH_HZ. */
   readonly labels = signal<ReadonlyArray<BodyLabel>>([]);
   readonly fps = signal(0);
+  /** True while the camera stands on a planet surface (first-person view). */
+  readonly surfaceView = signal(false);
+  private surfaceBody: BodyId | null = null;
 
   private scene: SceneManager | null = null;
   private readonly picking = new PickingService();
@@ -104,6 +107,27 @@ export class GameLoopService {
     this.cameraCtl.viewFrom(n.addScaledVector(side.normalize(), 0.3).setLength(distance));
   }
 
+  /** Toggles the on-planet POV at the selected tile (or the home planet's top tile). */
+  toggleSurfaceView(): void {
+    if (this.surfaceView()) {
+      this.cameraCtl.exitSurface();
+      this.surfaceBody = null;
+      this.surfaceView.set(false);
+      return;
+    }
+    const sel = this.state.selectedTile();
+    const bodyId = sel && this.sim.grids.has(sel.bodyId) ? sel.bodyId : this.state.homeBase().id;
+    const grid = this.sim.grids.get(bodyId);
+    if (!grid) return;
+    const tile =
+      sel && sel.bodyId === bodyId
+        ? grid.tiles[sel.tileIndex]
+        : grid.tiles.reduce((best, t) => (t.normal.y > best.normal.y ? t : best), grid.tiles[0]);
+    this.cameraCtl.enterSurface(new THREE.Vector3(tile.normal.x, tile.normal.y, tile.normal.z), grid.radius);
+    this.surfaceBody = bodyId;
+    this.surfaceView.set(true);
+  }
+
   setSelectedTile(ref: TileRef | null): void {
     this.scene?.setSelectedTile(ref);
   }
@@ -159,6 +183,7 @@ export class GameLoopService {
 
   private focusPoint(): THREE.Vector3 {
     const scene = this.scene!;
+    if (this.surfaceBody) return scene.worldPositionOfBody(this.surfaceBody, this.focus);
     const selected = this.state.selectedShipId();
     if (selected && scene.registry.ships.has(selected)) return scene.worldPositionOfShip(selected, this.focus);
     const rover = this.state.selectedRoverId();

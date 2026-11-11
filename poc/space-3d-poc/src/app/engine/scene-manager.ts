@@ -65,7 +65,7 @@ export interface WorldViews {
 /** Owns the renderer and the scene graph. Draws a FrameSnapshot; holds no game state. */
 export class SceneManager {
   readonly registry = new EntityViewRegistry();
-  readonly camera = new THREE.PerspectiveCamera(50, 1, 0.5, 20000);
+  readonly camera = new THREE.PerspectiveCamera(50, 1, 0.5, 100000);
 
   private renderer!: THREE.WebGLRenderer;
   private canvas!: HTMLCanvasElement;
