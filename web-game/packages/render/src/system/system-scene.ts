@@ -29,13 +29,14 @@ import { ModelKit } from './model-kit';
 import type { FetchBytes } from './model-library';
 import { BASE_MODEL_IDS, partTop, partsFor, skinFor, skinModels, type ModelId, type Skin } from './model-registry';
 import { SCENE, muteBodyColor, muteStarColor } from './palette';
-import { createFrame, defaultFocus, dockingOffsetOf, fitDistance, nearestTile, rootBody, systemExtent } from './placement';
+import { createFrame, defaultFocus, dockingOffsetOf, fitDistance, nearestTile, rootBody } from './placement';
 import { PlanetGridView } from './planet-grid-view';
 import { ScreenOverlay, pixelRadius, projectPoint, ringHit, type ScreenPoint } from './screen-overlay';
 import { StructureLayer, partFrame, partMatrix } from './structure-layer';
 import { TerrainDecor } from './terrain-decor';
 import { TerrainView } from './terrain-view';
 import { UnitsLayer, type UnitContext } from './units-layer';
+import { SceneMap, VIEW_SCALE, beltRockScale, childScale, sceneExtent, sizeScale, type ViewScale } from './view-scale';
 
 export interface SystemSceneOptions {
   container: HTMLElement;
@@ -53,13 +54,23 @@ export interface SystemSceneOptions {
    * of `npm run perf` with PERF_DETAIL=full, `?detail=full`).
    */
   cullDetail?: boolean;
+  /** Presentation scale (view-scale.ts); default VIEW_SCALE, WORLD_SCALE draws world units. */
+  viewScale?: ViewScale;
 }
 
 interface BodyView {
   id: BodyId;
   body: CelestialBody;
-  /** Positioned in the parent's frame (spheres of influence = scene graph, PoC). */
+  /**
+   * Positioned in the parent's frame (spheres of influence = scene graph, PoC), not scaled: holds `group`, the
+   * children's frames and their orbit lines and belts.
+   */
+  frame: THREE.Group;
+  /** The body's own frame, scaled by `size`: surface, grid, terrain, structures, outline, ghosts (world units inside). */
   group: THREE.Group;
+  /** Scene units per world unit of the body's size, and of its offset from the parent (view-scale.ts). */
+  size: number;
+  offset: number;
   /** World position this frame. */
   world: THREE.Vector3;
   /** The pickable surface: grid, rock or sphere; null for a belt. */
@@ -94,7 +105,8 @@ interface BodyView {
 const EMPTY: PickResult = { kind: 'EMPTY' };
 const NONE: Selection = { kind: 'NONE' };
 const STAR_COUNT = 1400;
-const STAR_RADIUS = 40000;
+/** Sky sphere of the starfield: beyond the spread-out system (the overview camera stays within ~1.5e5 of the centre), inside the camera's far plane. */
+const STAR_RADIUS = 500000;
 /** Screen-space pick radius for ships and rovers [px] (they are tiny at system scale). */
 export const UNIT_PICK_PX = 12;
 /** Bodies smaller than this on screen are picked within this radius [px]. */
@@ -120,6 +132,9 @@ export const STRUCTURE_LOD_PX = 80;
 export const STRUCTURE_FULL_PX = 88;
 /** Ships drawn smaller than this get a vector diamond marker [px]. */
 const MARKER_BELOW_PX = 6;
+/** Bodies drawn smaller than this get a ring marker of BODY_RING_PX [px]. */
+export const BODY_RING_BELOW_PX = 3;
+const BODY_RING_PX = 4;
 const FOV = 50;
 /** Parts whose top is lower than this above the surface [frame widths] are pits: no ghost outline. */
 const GHOST_MIN_TOP = 0.05;
@@ -161,6 +176,8 @@ export class SystemScene {
   private readonly baseLoad: Promise<void>;
   private readonly skinLoads = new Map<Skin, Promise<void>>();
   private solver: OrbitSolver | null = null;
+  private map: SceneMap | null = null;
+  private readonly scale: ViewScale;
   private extent = 1;
   private root: BodyView | null = null;
   private snapshot: GameSnapshot | null = null;
@@ -197,6 +214,7 @@ export class SystemScene {
   // per-frame scratch
   private readonly v: Vec3 = vec3();
   private readonly orbitTmp: Vec3 = vec3();
+  private readonly dockTmp: Vec3 = vec3();
   private readonly tmp = new THREE.Vector3();
   private readonly tmp2 = new THREE.Vector3();
   private readonly color = new THREE.Color();
@@ -231,7 +249,9 @@ export class SystemScene {
     this.hexKit = new HexKit(opts.assetsBase, opts.fetchBytes);
     this.loadModels = opts.loadModels !== false;
     this.cullDetail = opts.cullDetail !== false;
-    this.units = new UnitsLayer(this.kit);
+    this.scale = opts.viewScale ?? VIEW_SCALE;
+    // flight dashes: about the old size on screen in the overview, not much longer than a planet up close
+    this.units = new UnitsLayer(this.kit, Math.max(1, this.scale.orbit / 2));
     this.scene.add(this.units.group);
     for (let i = 0; i < 2; i++) this.ghost(i);
 
@@ -246,14 +266,26 @@ export class SystemScene {
       time: 0,
       grids: this.grids,
       bodyWorld: (id) => this.bodies.get(id)?.world,
-      docking: (id) => this.bodies.get(id)?.docking ?? this.v,
+      // docking point and parking orbit in scene units: they scale with the body
+      docking: (id) => {
+        const bv = this.bodies.get(id);
+        const k = bv?.size ?? 1;
+        const d = bv?.docking ?? this.v;
+        this.dockTmp.x = d.x * k;
+        this.dockTmp.y = d.y * k;
+        this.dockTmp.z = d.z * k;
+        return this.dockTmp;
+      },
       orbit: (id) => {
-        const b = this.bodies.get(id)?.body;
+        const bv = this.bodies.get(id);
         this.orbitTmp.x = 0;
-        this.orbitTmp.y = b ? b.radius * b.orbitalAltitudeFactor : 0;
+        this.orbitTmp.y = bv ? bv.body.radius * bv.body.orbitalAltitudeFactor * bv.size : 0;
         this.orbitTmp.z = 0;
         return this.orbitTmp;
       },
+      scaleOf: (id) => this.bodies.get(id)?.size ?? 1,
+      unitScale: this.scale.body,
+      mapFlight: (plan) => this.map?.flight(plan) ?? null,
       selectedShip: null,
       // T4b unit LOD and rover culling; off with cullDetail = false (the "before" draws every unit as its model)
       detail: this.cullDetail
@@ -304,14 +336,14 @@ export class SystemScene {
     }
     const t = input.frame?.time ?? world.time;
 
-    // bodies at their analytic positions; the scene graph composes parent chains
+    // bodies at their analytic positions, offsets in the view scale; the scene graph composes parent chains
     for (const bv of this.order) {
       this.solver.localPosition(bv.id, t, this.v);
-      bv.group.position.set(this.v.x, this.v.y, this.v.z);
+      bv.frame.position.set(this.v.x * bv.offset, this.v.y * bv.offset, this.v.z * bv.offset);
       bv.belt?.update(t);
     }
     this.scene.updateMatrixWorld();
-    for (const bv of this.order) bv.world.setFromMatrixPosition(bv.group.matrixWorld);
+    for (const bv of this.order) bv.world.setFromMatrixPosition(bv.frame.matrixWorld);
 
     const focus = this.focusOf(input);
     this.focusId = focus?.id ?? null;
@@ -373,13 +405,14 @@ export class SystemScene {
     for (const bv of this.order) {
       const layer = bv.structures;
       if (!layer || layer.parts.length === 0 || this.apparentRadius(bv) < TILE_PICK_MIN_PX) continue;
-      const reach = bv.body.radius * 1.6;
+      const reach = this.radiusOf(bv) * 1.6;
       if (ray.distanceSqToPoint(bv.world) > reach * reach) continue;
       this.inv.copy(bv.group.matrixWorld).invert();
       this.localRay.copy(ray).applyMatrix4(this.inv);
       const hit = layer.pick(this.localRay, this.tmpRay, this.tmp);
-      if (hit && hit.distance < bestD) {
-        bestD = hit.distance;
+      // the local ray runs in the body's world units: its distances × the body's scale are scene distances
+      if (hit && hit.distance * bv.size < bestD) {
+        bestD = hit.distance * bv.size;
         this.localRay.at(hit.distance, this.tmp);
         const tile = nearestTile(layer.grid, hit.part.tiles, this.tmp);
         result = { kind: 'STRUCTURE', bodyId: bv.id, structureId: hit.part.structureId, tileIndex: tile };
@@ -409,7 +442,7 @@ export class SystemScene {
     for (const bv of this.order) {
       projectPoint(bv.world, cam, this.width, this.height, this.tmp, this.sp);
       if (!this.sp.visible) continue;
-      if (pixelRadius(bv.body.radius, this.sp.depth, cam, this.height) >= SMALL_BODY_PX) continue;
+      if (pixelRadius(this.radiusOf(bv), this.sp.depth, cam, this.height) >= SMALL_BODY_PX) continue;
       const d = Math.hypot(this.sp.x - x, this.sp.y - y);
       if (d <= bestPx) {
         bestPx = d;
@@ -448,8 +481,8 @@ export class SystemScene {
   bodyParts(id: BodyId) {
     const bv = this.bodies.get(id);
     if (!bv) return null;
-    const { group, surface, grid, terrain, terrainDecor, structures, outline, belt, orbit, revealed, world, docking } = bv;
-    return { group, surface, grid, terrain, terrainDecor, structures, outline, belt, orbit, revealed, world, docking } as const;
+    const { frame, group, size, surface, grid, terrain, terrainDecor, structures, outline, belt, orbit, revealed, world, docking } = bv;
+    return { frame, group, size, surface, grid, terrain, terrainDecor, structures, outline, belt, orbit, revealed, world, docking } as const;
   }
 
   /** Placement ghost objects (tests). */
@@ -548,7 +581,8 @@ export class SystemScene {
     this.terrainPlans = new Map([...this.grids].filter(([, g]) => g.terrain).map(([id, g]) => [id, dressTerrain(g)]));
     this.hexModels = null;
     this.solver = new OrbitSolver(bodies);
-    this.extent = systemExtent(bodies);
+    this.map = new SceneMap(bodies, this.solver, this.scale);
+    this.extent = sceneExtent(bodies, this.scale);
     const pending = [...bodies];
     // parents first (PoC buildWorld)
     while (pending.length) {
@@ -564,14 +598,24 @@ export class SystemScene {
   }
 
   private addBody(body: CelestialBody): void {
+    const parentView = body.parentId ? this.bodies.get(body.parentId) : undefined;
+    const parent = parentView?.frame ?? this.scene;
+    const frame = new THREE.Group();
+    frame.name = `${body.name}_Frame`;
+    parent.add(frame);
+    const size = sizeScale(body, this.scale);
     const group = new THREE.Group();
     group.name = `${body.name}_Group`;
-    const parent = body.parentId ? this.bodies.get(body.parentId)?.group ?? this.scene : this.scene;
-    parent.add(group);
+    group.scale.setScalar(size);
+    frame.add(group);
+    const offset = parentView ? childScale(parentView.body, this.scale) : 1;
     const bv: BodyView = {
       id: body.id,
       body,
+      frame,
       group,
+      size,
+      offset,
       world: new THREE.Vector3(),
       surface: null,
       ownMaterial: null,
@@ -592,7 +636,7 @@ export class SystemScene {
       planetKey: `planet:${body.id}`,
     };
     if (body.orbitRadius > 0 && body.kind !== 'BELT') {
-      bv.orbit = new THREE.LineLoop(this.ring(body.orbitRadius), this.orbitMat);
+      bv.orbit = new THREE.LineLoop(this.ring(body.orbitRadius * offset), this.orbitMat);
       bv.orbit.name = `${body.name}_Orbit`;
       parent.add(bv.orbit);
     }
@@ -607,8 +651,9 @@ export class SystemScene {
     const body = bv.body;
     const grid = this.grids.get(body.id);
     if (body.kind === 'BELT') {
-      bv.belt = new BeltView(body, this.kit);
-      const parent = body.parentId ? this.bodies.get(body.parentId)?.group ?? this.scene : this.scene;
+      // in the parent's frame: the annulus at the orbit scale, the rocks a little smaller (beltRockScale)
+      bv.belt = new BeltView(body, this.kit, bv.offset, Math.min(bv.offset, beltRockScale(this.scale)));
+      const parent = body.parentId ? this.bodies.get(body.parentId)?.frame ?? this.scene : this.scene;
       parent.add(bv.belt.group);
       return;
     }
@@ -717,7 +762,7 @@ export class SystemScene {
     for (const bv of this.order) {
       this.disposeSurface(bv);
       bv.orbit?.removeFromParent();
-      bv.group.removeFromParent();
+      bv.frame.removeFromParent();
       this.labels.remove(bv.id);
     }
     for (const g of this.sphereGeos.values()) g.dispose();
@@ -847,6 +892,16 @@ export class SystemScene {
     const o = this.overlay;
     o.begin();
     const cam = this.rig.camera;
+    // bodies smaller than a few pixels (the spread-out overview, a far neighbour): a ring in the body's colour,
+    // so they can be found and clicked (SMALL_BODY_PX)
+    for (const bv of this.order) {
+      if (bv.body.kind === 'BELT') continue;
+      projectPoint(bv.world, cam, this.width, this.height, this.tmp, this.sp);
+      if (!this.sp.visible) continue;
+      if (pixelRadius(this.radiusOf(bv), this.sp.depth, cam, this.height) >= BODY_RING_BELOW_PX) continue;
+      const tone = bv.body.kind === 'STAR' ? muteStarColor(bv.body.color) : bv.revealed ? muteBodyColor(bv.body.color) : SCENE.unknownBody;
+      o.ring(this.sp.x, this.sp.y, BODY_RING_PX, tone);
+    }
     // unit markers for ships too small to see
     for (const [id, pos] of this.units.shipPos) {
       projectPoint(pos, cam, this.width, this.height, this.tmp, this.sp);
@@ -868,7 +923,7 @@ export class SystemScene {
         const bv = this.bodies.get(target.bodyId);
         if (!bv) return;
         this.tmp2.copy(bv.world);
-        radius = bv.body.kind === 'BELT' ? bv.body.radius * 1.5 : bv.body.radius;
+        radius = this.radiusOf(bv) * (bv.body.kind === 'BELT' ? 1.5 : 1);
         break;
       }
       case 'SHIP': {
@@ -893,7 +948,7 @@ export class SystemScene {
         const part = bv?.structures?.partsOf(target.structureId)[0];
         if (!bv || !part) return;
         this.tmp2.copy(part.center).applyMatrix4(bv.group.matrixWorld);
-        radius = part.width * 0.6;
+        radius = part.width * 0.6 * bv.size;
         break;
       }
       default:
@@ -907,9 +962,14 @@ export class SystemScene {
     this.overlay.bracket(this.sp.x, this.sp.y, half, hex);
   }
 
+  /** Radius of a body in the scene (its world radius × its size scale). */
+  private radiusOf(bv: BodyView): number {
+    return bv.body.radius * bv.size;
+  }
+
   /** Apparent radius of a body on screen [px]. */
   private apparentRadius(bv: BodyView): number {
-    return pixelRadius(bv.body.radius, this.rig.camera.position.distanceTo(bv.world), this.rig.camera, this.height);
+    return pixelRadius(this.radiusOf(bv), this.rig.camera.position.distanceTo(bv.world), this.rig.camera, this.height);
   }
 
   /**
@@ -972,7 +1032,7 @@ export class SystemScene {
     const cam = this.rig.camera;
     for (const bv of this.order) {
       projectPoint(bv.world, cam, this.width, this.height, this.tmp, this.sp);
-      const pr = Math.min(pixelRadius(bv.body.kind === 'BELT' ? 0 : bv.body.radius, this.sp.depth, cam, this.height), this.height);
+      const pr = Math.min(pixelRadius(bv.body.kind === 'BELT' ? 0 : this.radiusOf(bv), this.sp.depth, cam, this.height), this.height);
       const y = this.sp.y - pr - 4;
       const on = this.sp.visible && this.sp.x > -40 && this.sp.x < this.width + 40 && y > 8 && y < this.height + 20;
       this.labels.place(bv.id, on ? this.sp.x : null, y, bv.id === this.focusId);
@@ -1010,7 +1070,7 @@ export class SystemScene {
       g.minDistance = this.extent * 0.05;
       g.maxDistance = d * 3;
     } else {
-      const r = focus.body.kind === 'BELT' ? focus.body.radius * 3 : focus.body.radius;
+      const r = this.radiusOf(focus) * (focus.body.kind === 'BELT' ? 3 : 1);
       g.target.copy(focus.world);
       g.key = focus.planetKey;
       g.distance = r * (focus.body.kind === 'STAR' ? 6 : 3.4);
@@ -1026,7 +1086,7 @@ export class SystemScene {
         g.theta = centre && focus !== this.root ? Math.atan2(centre.x - focus.world.x, centre.z - focus.world.z) + 0.6 : 0.4;
       }
       // never inside the tallest decor (the castle reaches ~1.31 R on Tau Ceti c): the near view would cut it open
-      g.minDistance = Math.max(r * 1.3, (focus.terrainDecor?.topRadius ?? 0) + r * 0.1);
+      g.minDistance = Math.max(r * 1.3, (focus.terrainDecor?.topRadius ?? 0) * focus.size + r * 0.1);
       g.maxDistance = r * 18;
     }
     this.rig.update(dt, g);

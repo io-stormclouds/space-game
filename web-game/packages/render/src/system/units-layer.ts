@@ -1,12 +1,13 @@
 import * as THREE from 'three';
 import type { FrameData } from '@space-game/api';
-import { TRAJECTORY_SAMPLES, tileWidth, type BezierPath, type BodyId, type PlanetGrid, type Spacecraft, type Vec3, type WorldState } from '@space-game/domain';
+import { TRAJECTORY_SAMPLES, tileWidth, type BezierPath, type BodyId, type PlanetGrid, type Spacecraft, type TransferPlan, type Vec3, type WorldState } from '@space-game/domain';
 import { InstancedBatch, drawnInstances } from './buffers';
 import { OCCLUDER } from './hemisphere-culler';
 import { boxMatrix, paintGeometry, type ModelKit } from './model-kit';
 import { MODELS, ROVER_MODEL, SHIP_MODEL, fitScale, type ModelId } from './model-registry';
 import { SCENE } from './palette';
 import { flightKey, flightPath, flightProgress, roverRestPosition } from './placement';
+import type { FlightMap } from './view-scale';
 
 /** World length of a ship (PoC SHIP_LENGTH); the mothership is larger. */
 export const SHIP_LENGTH = 8;
@@ -91,6 +92,14 @@ export interface UnitContext {
   selectedShip: string | null;
   /** Unit LOD and rover culling (T4b); null = every unit as its full model, nothing culled (`cullDetail: false`). */
   detail: UnitDetail | null;
+  /**
+   * Presentation scale (`view-scale.ts`): scene units per world unit of a body's frame (rover positions and
+   * sizes on it, and `docking` / `orbit` are already in scene units), of ships, and the scene curve of a flight.
+   * Absent = world units.
+   */
+  scaleOf?(id: BodyId): number;
+  unitScale?: number;
+  mapFlight?(plan: TransferPlan): FlightMap | null;
 }
 
 /** What the unit level of detail needs from the view (T4b). */
@@ -108,11 +117,14 @@ export interface UnitDetail {
 interface Flight {
   key: string;
   path: BezierPath;
+  /** The curve in the scene; null = world units. */
+  map: FlightMap | null;
   line: THREE.Line<THREE.BufferGeometry, THREE.LineDashedMaterial>;
 }
 
 /**
- * Ships and rovers as two InstancedMeshes in world space (one draw call each), plus the dashed
+ * Ships and rovers as two InstancedMeshes in scene space (the view scale, `UnitContext.scaleOf` / `unitScale` /
+ * `mapFlight`; one draw call each), plus the dashed
  * flight path of every ship in transit (remaining part only). Positions are recomputed every frame
  * from the snapshot, the frame data and the analytic orbits; nothing is allocated per frame once a
  * unit exists. With `ctx.detail` (T4b) units shorter than UNIT_LOD_PX on screen or at a far body go to
@@ -145,8 +157,8 @@ export class UnitsLayer {
   private readonly flights = new Map<string, Flight>();
   private readonly roverLocal = new Map<string, THREE.Vector3>();
   private readonly roverFwd = new Map<string, THREE.Vector3>();
-  private readonly flightMaterial = new THREE.LineDashedMaterial({ color: SCENE.flightPath, dashSize: 12, gapSize: 8 });
-  private readonly flightSelectedMaterial = new THREE.LineDashedMaterial({ color: SCENE.flightPathSelected, dashSize: 12, gapSize: 8 });
+  private readonly flightMaterial: THREE.LineDashedMaterial;
+  private readonly flightSelectedMaterial: THREE.LineDashedMaterial;
   private readonly docked = new Map<BodyId, number>();
   private readonly seen = new Set<string>();
   private readonly m = new THREE.Matrix4();
@@ -158,8 +170,15 @@ export class UnitsLayer {
   private readonly v: Vec3 = { x: 0, y: 0, z: 0 };
   private readonly samples: Vec3[] = Array.from({ length: TRAJECTORY_SAMPLES }, () => ({ x: 0, y: 0, z: 0 }));
 
-  constructor(private readonly kit: ModelKit) {
+  /** `dashScale`: scene units per world unit of the flight lines' dashes (the flights' scale between planets). */
+  constructor(
+    private readonly kit: ModelKit,
+    dashScale = 1,
+  ) {
     this.group.name = 'Units';
+    const dash = { dashSize: 12 * dashScale, gapSize: 8 * dashScale };
+    this.flightMaterial = new THREE.LineDashedMaterial({ color: SCENE.flightPath, ...dash });
+    this.flightSelectedMaterial = new THREE.LineDashedMaterial({ color: SCENE.flightPathSelected, ...dash });
     this.ships = new InstancedBatch(this.group, kit.geometry(SHIP_MODEL), kit.material, 'Ships', 4);
     this.rovers = new InstancedBatch(this.group, kit.geometry(ROVER_MODEL), kit.material, 'Rovers', 8);
     this.shipProxies = new InstancedBatch(this.group, this.shipProxyGeometry, kit.material, 'ShipProxies', 4);
@@ -219,19 +238,22 @@ export class UnitsLayer {
     this.docked.clear();
     this.seen.clear();
     const spec = MODELS[SHIP_MODEL];
+    const unit = ctx.unitScale ?? 1;
     let n = 0;
     let np = 0;
     for (const ship of ships) {
       const pos = this.vec(this.shipPos, ship.id);
-      const len = shipLength(ship);
+      const len = shipLength(ship) * unit;
       const sc = fitScale(spec, len);
       if (ship.state === 'IN_TRANSIT' && ship.transfer) {
-        const f = this.flight(ship.id, ship.transfer, ctx.selectedShip === ship.id);
+        const f = this.flight(ship.id, ship.transfer, ctx);
         const u = ctx.frame?.transit[ship.id] ?? flightProgress(ship.transfer, ctx.time);
-        f.path.pointAt(u, this.v);
+        if (f.map) f.map.at(f.path, u, this.v);
+        else f.path.pointAt(u, this.v);
         pos.set(this.v.x, this.v.y, this.v.z);
-        f.path.tangentAt(u, this.v);
-        this.a.set(this.v.x, this.v.y, this.v.z);
+        if (f.map) f.map.tangent(f.path, u, this.v);
+        else f.path.tangentAt(u, this.v);
+        this.a.set(this.v.x, this.v.y, this.v.z).normalize();
         this.q.setFromUnitVectors(FORWARD, this.a);
         const from = Math.min(TRAJECTORY_SAMPLES - 2, Math.floor(u * (TRAJECTORY_SAMPLES - 1)));
         f.line.geometry.setDrawRange(from, TRAJECTORY_SAMPLES - from);
@@ -255,7 +277,7 @@ export class UnitsLayer {
           this.b.set(0, 0, 1);
           if (Math.abs(this.a.z) > 0.9) this.b.set(1, 0, 0);
           this.c.crossVectors(this.a, this.b).normalize();
-          pos.addScaledVector(this.c, k * SHIP_LENGTH * 1.6);
+          pos.addScaledVector(this.c, k * SHIP_LENGTH * unit * 1.6);
         }
         this.q.setFromUnitVectors(UP, this.a);
       } else {
@@ -341,13 +363,15 @@ export class UnitsLayer {
       const grid = ctx.grids.get(r.bodyId);
       const centre = ctx.bodyWorld(r.bodyId);
       if (!grid || !centre) continue;
+      const k = ctx.scaleOf?.(r.bodyId) ?? 1;
+      // local = scene offset from the body centre (the simulation's body frame, scaled with the body)
       const local = this.vec(this.roverLocal, r.id);
       const fwd = this.vec(this.roverFwd, r.id, 0, 0, 1);
       const p = ctx.frame?.rovers[r.id];
-      if (p) this.a.set(p[0], p[1], p[2]);
+      if (p) this.a.set(p[0] * k, p[1] * k, p[2] * k);
       else {
         roverRestPosition(grid, r.tileIndex, this.v);
-        this.a.set(this.v.x, this.v.y, this.v.z);
+        this.a.set(this.v.x * k, this.v.y * k, this.v.z * k);
       }
       // forward = direction of travel since the last frame, projected on the tangent plane
       this.b.subVectors(this.a, local);
@@ -360,7 +384,7 @@ export class UnitsLayer {
       fwd.normalize();
       this.b.crossVectors(this.c, fwd); // right = up × forward
       this.m.makeBasis(this.b, this.c, fwd);
-      const width = tileWidth(grid);
+      const width = tileWidth(grid) * k;
       const sc = fitScale(spec, width);
       this.m.scale(this.s.set(sc, sc, sc));
       const world = this.vec(this.roverPos, r.id).copy(centre).add(local);
@@ -370,7 +394,7 @@ export class UnitsLayer {
       this.roverBody.set(r.id, r.bodyId);
       // off screen or behind its body: not drawn (position and size stay for picking, which the surface in front
       // of a hidden one wins anyway)
-      if (ctx.detail && (!ctx.detail.inView(world, size) || this.behind(ctx.detail.camera, centre, world, grid.radius, size))) continue;
+      if (ctx.detail && (!ctx.detail.inView(world, size) || this.behind(ctx.detail.camera, centre, world, grid.radius * k, size))) continue;
       if (this.asProxy(ctx, this.proxyRovers, r.id, world, size, r.bodyId)) this.roverProxies.setMatrixAt(np++, this.m.multiply(this.roverFit));
       else this.rovers.setMatrixAt(n++, this.m);
     }
@@ -383,20 +407,23 @@ export class UnitsLayer {
     }
   }
 
-  private flight(shipId: string, plan: NonNullable<Spacecraft['transfer']>, selected: boolean): Flight {
+  private flight(shipId: string, plan: NonNullable<Spacecraft['transfer']>, ctx: UnitContext): Flight {
     const key = flightKey(plan);
     let f = this.flights.get(key);
     if (!f) {
       const path = flightPath(plan);
-      path.sample(this.samples);
+      const map = ctx.mapFlight?.(plan) ?? null;
+      const n = this.samples.length;
+      if (map) this.samples.forEach((p, i) => map.at(path, n === 1 ? 0 : i / (n - 1), p));
+      else path.sample(this.samples);
       const g = new THREE.BufferGeometry().setFromPoints(this.samples.map((p) => new THREE.Vector3(p.x, p.y, p.z)));
-      const line = new THREE.Line(g, selected ? this.flightSelectedMaterial : this.flightMaterial);
+      const line = new THREE.Line(g, ctx.selectedShip === shipId ? this.flightSelectedMaterial : this.flightMaterial);
       line.computeLineDistances();
       line.name = `Flight_${shipId}`;
       line.frustumCulled = false;
       line.renderOrder = 5;
       this.group.add(line);
-      f = { key, path, line };
+      f = { key, path, map, line };
       this.flights.set(key, f);
     }
     return f;

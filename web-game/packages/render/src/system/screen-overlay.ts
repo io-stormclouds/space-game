@@ -35,6 +35,17 @@ export function writeDiamond(out: Out, o: number, x: number, y: number, r: numbe
   return o;
 }
 
+/** Ring marker (8 segments, an octagon) of radius r around (x, y); returns o + 32. */
+export function writeRing(out: Out, o: number, x: number, y: number, r: number): number {
+  for (let k = 0; k < 8; k++) {
+    const a = (k * Math.PI) / 4;
+    const b = ((k + 1) * Math.PI) / 4;
+    out[o++] = x + Math.cos(a) * r; out[o++] = y + Math.sin(a) * r;
+    out[o++] = x + Math.cos(b) * r; out[o++] = y + Math.sin(b) * r;
+  }
+  return o;
+}
+
 /** Screen position of a world point. `visible` is false behind the camera. */
 export interface ScreenPoint {
   x: number;
@@ -76,7 +87,7 @@ export function ringHit(ray: THREE.Ray, centre: THREE.Vector3, inner: number, ou
 
 /**
  * Pixel-space vector layer drawn after the scene with an orthographic camera (y down, origin
- * top-left): selection brackets, hover brackets and unit markers. One LineSegments, one draw call.
+ * top-left): selection brackets, hover brackets, unit markers and body rings. One LineSegments, one draw call.
  */
 export class ScreenOverlay {
   readonly scene = new THREE.Scene();
@@ -109,6 +120,10 @@ export class ScreenOverlay {
 
   diamond(x: number, y: number, r: number, hex: number): void {
     this.segments(this.scratch, writeDiamond(this.scratch, 0, x, y, r), hex);
+  }
+
+  ring(x: number, y: number, r: number, hex: number): void {
+    this.segments(this.scratch, writeRing(this.scratch, 0, x, y, r), hex);
   }
 
   /** The first `length` numbers of `xy` as x0,y0,x1,y1 segment quadruples in pixels. */

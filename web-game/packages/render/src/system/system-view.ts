@@ -1,6 +1,7 @@
 import type { PickResult, RenderStats, View, ViewContext, ViewInput, ViewKind } from '../view';
 import type { FetchBytes } from './model-library';
 import { SystemScene } from './system-scene';
+import type { ViewScale } from './view-scale';
 
 export interface SystemViewOptions {
   /** Reads model files; default `fetch` (tests read them from disk). */
@@ -9,6 +10,8 @@ export interface SystemViewOptions {
   loadModels?: boolean;
   /** false = no hemisphere culling, no decor LOD and no structure/unit proxies (T4/T4b "before" measurements); default true. */
   cullDetail?: boolean;
+  /** Presentation scale of the scene (view-scale.ts); default VIEW_SCALE. */
+  viewScale?: ViewScale;
 }
 
 const EMPTY: PickResult = { kind: 'EMPTY' };
@@ -52,6 +55,7 @@ export class SystemView implements View {
       fetchBytes: this.opts.fetchBytes,
       loadModels: this.opts.loadModels,
       cullDetail: this.opts.cullDetail,
+      viewScale: this.opts.viewScale,
     });
     this.scene.setMode(this.current === 'system' ? 'system' : 'planet');
   }

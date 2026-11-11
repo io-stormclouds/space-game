@@ -2,7 +2,7 @@
 // game state. Atanor is exported as a loader so PixiJS stays out of the initial bundle.
 export * from './view';
 export { RenderHost, type RenderHostOptions } from './render-host';
-export { createSystemView, CLICK_THRESHOLD_PX, HOVER_INTERVAL_MS, type SystemViewOptions } from './system/index';
+export { createSystemView, CLICK_THRESHOLD_PX, HOVER_INTERVAL_MS, VIEW_SCALE, WORLD_SCALE, type SystemViewOptions, type ViewScale } from './system/index';
 export { createGalaxyView, GALAXY_TEXT_PL, type GalaxyText, type GalaxyViewOptions } from './galaxy/index';
 export { loadAtanorView, isAtanorControls, type AtanorControls, type AtanorReadout, type AtanorViewOptions } from './atanor/index';
 // Machine editor (AT2): framework-free state over the domain's edit operations; the app imports it

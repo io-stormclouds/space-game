@@ -40,6 +40,7 @@ export {
   type StructureLook,
   type SurfaceFrame,
 } from './placement';
+export { VIEW_SCALE, WORLD_SCALE, SceneMap, FlightMap, sceneExtent, sizeScale, childScale, type ViewScale } from './view-scale';
 
 /** A pointer move above this many pixels between down and up is a camera drag, not a click (PoC). */
 export const CLICK_THRESHOLD_PX = 5;

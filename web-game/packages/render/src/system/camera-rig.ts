@@ -18,6 +18,15 @@ export interface CameraGoal {
 
 export const TRANSITION_SECONDS = 0.7;
 
+/**
+ * Clip planes: the far plane holds the spread-out system and the starfield (view-scale.ts), the near plane
+ * follows the distance to the target (a fixed fraction of it, never under NEAR_MIN), so the depth buffer
+ * keeps its precision both on a planet's surface and in the overview.
+ */
+export const FAR = 2e6;
+export const NEAR_MIN = 0.5;
+const NEAR_PER_DISTANCE = 0.002;
+
 const smooth = (t: number) => t * t * (3 - 2 * t);
 
 /**
@@ -29,7 +38,7 @@ const smooth = (t: number) => t * t * (3 - 2 * t);
  * - each mode remembers the player's last angle and zoom, so going back restores it.
  */
 export class CameraRig {
-  readonly camera = new THREE.PerspectiveCamera(50, 1, 0.5, 100000);
+  readonly camera = new THREE.PerspectiveCamera(50, 1, NEAR_MIN, FAR);
   readonly controls: OrbitControls | null;
   private mode: CameraMode = 'planet';
   /** The player's last view per mode, and of which target. */
@@ -79,6 +88,19 @@ export class CameraRig {
   }
 
   update(dt: number, goal: CameraGoal): void {
+    this.step(dt, goal);
+    this.fitNear();
+  }
+
+  /** Near plane at a fixed fraction of the distance to the target (re-projected only when it moves by more than 5 %). */
+  private fitNear(): void {
+    const near = Math.max(NEAR_MIN, this.camera.position.distanceTo(this.lastTarget) * NEAR_PER_DISTANCE);
+    if (Math.abs(near - this.camera.near) <= this.camera.near * 0.05) return;
+    this.camera.near = near;
+    this.camera.updateProjectionMatrix();
+  }
+
+  private step(dt: number, goal: CameraGoal): void {
     if (!this.started) {
       this.started = true;
       this.key = goal.key;

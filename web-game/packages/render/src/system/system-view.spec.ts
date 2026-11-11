@@ -30,6 +30,7 @@ import { TRANSITION_SECONDS } from './camera-rig';
 import { STRUCTURE_FULL_PX, STRUCTURE_LOD_PX } from './system-scene';
 import { SystemView } from './system-view';
 import { SHIP_LENGTH } from './units-layer';
+import { VIEW_SCALE, WORLD_SCALE, type ViewScale } from './view-scale';
 import { createSystemView } from './index';
 
 const PUBLIC = join(process.cwd(), 'apps', 'game', 'public');
@@ -77,7 +78,7 @@ interface Harness {
 }
 
 /** The host's part: one renderer (stubbed: jsdom has no WebGL), a container, the frame loop. */
-function mount(snapshot: GameSnapshot, opts: { loadModels?: boolean; fetchBytes?: FetchBytes; cullDetail?: boolean } = {}): Harness {
+function mount(snapshot: GameSnapshot, opts: { loadModels?: boolean; fetchBytes?: FetchBytes; cullDetail?: boolean; viewScale?: ViewScale } = {}): Harness {
   const container = document.createElement('div');
   document.body.appendChild(container);
   const canvas = document.createElement('canvas');
@@ -100,7 +101,7 @@ function mount(snapshot: GameSnapshot, opts: { loadModels?: boolean; fetchBytes?
     render: vi.fn(),
     clearDepth: vi.fn(),
   } as unknown as Harness['renderer'];
-  const view = new SystemView({ loadModels: opts.loadModels ?? false, fetchBytes: opts.fetchBytes ?? fromDisk, cullDetail: opts.cullDetail });
+  const view = new SystemView({ loadModels: opts.loadModels ?? false, fetchBytes: opts.fetchBytes ?? fromDisk, cullDetail: opts.cullDetail, viewScale: opts.viewScale });
   view.mount({ container, three: renderer, assetsBase: 'assets/', width: W, height: H });
   const input: ViewInput = { snapshot, frame: null, focusBodyId: null, selection: { kind: 'NONE' }, hover: null, placement: null };
   const h: Harness = {
@@ -157,7 +158,7 @@ function facingTile(h: Harness, bodyId: typeof PLANET_ID, world: WorldState) {
 /** Moves the camera along its direction from the target until the body shows this apparent radius [px] (OrbitControls keep it). */
 function zoomTo(h: Harness, bodyId: typeof PLANET_ID, px: number): void {
   const s = scene(h);
-  const R = s.gridOf(bodyId)!.radius;
+  const R = s.gridOf(bodyId)!.radius * s.bodyParts(bodyId)!.size;
   const target = s.rig.target.clone();
   const dir = s.rig.camera.position.clone().sub(target).normalize();
   s.rig.camera.position.copy(target).addScaledVector(dir, (R * H) / (2 * Math.tan((25 * Math.PI) / 180) * px));
@@ -186,8 +187,10 @@ describe('SystemView (planet + system kinds, one scene)', () => {
     for (const id of [PLANET_ID, MOON_ID, ASTEROID_ID]) {
       expect(s.bodyParts(id)!.orbit).not.toBeNull();
     }
-    // the moon's group is a child of the planet's group (sphere of influence)
-    expect(s.bodyParts(MOON_ID)!.group.parent).toBe(s.bodyParts(PLANET_ID)!.group);
+    // the moon's frame is a child of the planet's frame (sphere of influence), not of its scaled surface group
+    expect(s.bodyParts(MOON_ID)!.frame.parent).toBe(s.bodyParts(PLANET_ID)!.frame);
+    expect(s.bodyParts(PLANET_ID)!.group.parent).toBe(s.bodyParts(PLANET_ID)!.frame);
+    expect(s.bodyParts(PLANET_ID)!.group.scale.x).toBe(VIEW_SCALE.body);
     expect(s.bodyParts(PLANET_ID)!.grid).not.toBeNull();
     expect(s.bodyParts(ASTEROID_ID)!.grid).toBeNull();
     expect([...s.labels.ids()].map((id) => s.labels.textOf(id)).sort()).toEqual(['Asteroida', 'Księżyc', 'Planeta Matka', 'Słońce']);
@@ -197,14 +200,26 @@ describe('SystemView (planet + system kinds, one scene)', () => {
     expect(h.view.stats().drawCalls).toBeGreaterThan(0);
   });
 
-  it('bodies sit at their analytic positions at the frame time', () => {
+  it('bodies sit at their analytic positions at the frame time, spread out by the view scale', () => {
     h = mount(snapshotOf(sim.world));
     h.input = { ...h.input, frame: { time: 37.5, rovers: {}, transit: {} } };
     h.frames(1);
-    const at = sim.solver.worldPosition(MOON_ID, 37.5, { x: 0, y: 0, z: 0 });
+    // the planet's orbit around the star × orbit, the moon's around the planet × body
+    const planet = sim.solver.localPosition(PLANET_ID, 37.5, { x: 0, y: 0, z: 0 });
+    const local = sim.solver.localPosition(MOON_ID, 37.5, { x: 0, y: 0, z: 0 });
     const moon = scene(h).bodyParts(MOON_ID)!.world;
-    expect(moon.x).toBeCloseTo(at.x, 6);
-    expect(moon.z).toBeCloseTo(at.z, 6);
+    expect(moon.x).toBeCloseTo(planet.x * VIEW_SCALE.orbit + local.x * VIEW_SCALE.body, 6);
+    expect(moon.z).toBeCloseTo(planet.z * VIEW_SCALE.orbit + local.z * VIEW_SCALE.body, 6);
+
+    // in world units the scene matches the simulation exactly
+    const plain = mount(snapshotOf(sim.world), { viewScale: WORLD_SCALE });
+    plain.input = { ...plain.input, frame: { time: 37.5, rovers: {}, transit: {} } };
+    plain.frames(1);
+    const at = sim.solver.worldPosition(MOON_ID, 37.5, { x: 0, y: 0, z: 0 });
+    expect(scene(plain).bodyParts(MOON_ID)!.world.x).toBeCloseTo(at.x, 6);
+    expect(scene(plain).bodyParts(MOON_ID)!.world.z).toBeCloseTo(at.z, 6);
+    plain.view.dispose();
+    plain.container.remove();
   });
 
   it('picks the tile under the cursor, a structure, the docked ship and EMPTY space', () => {
@@ -245,7 +260,7 @@ describe('SystemView (planet + system kinds, one scene)', () => {
     h.frames(1);
     const p = scene(h).units.roverPos.get(rover.id)!;
     const body = scene(h).bodyParts(PLANET_ID)!.world;
-    expect(p.x - body.x).toBeCloseTo(c.x * 1.005, 4);
+    expect(p.x - body.x).toBeCloseTo(c.x * 1.005 * VIEW_SCALE.body, 4); // the body frame scales with the body
   });
 
   it('switching to the system kind moves only the camera: same GPU objects, overview of the whole system', () => {
@@ -611,12 +626,19 @@ describe('SystemView (planet + system kinds, one scene)', () => {
     const own = new Simulation(POC_SCENARIO);
     own.dispatch({ type: 'MOVE_SHIP', shipId: SHIP_ID, to: MOON_ID });
     own.step(0.3);
+    // in world units the scene flies exactly the simulation's curve
+    const plain = mount(snapshotOf(own.world), { viewScale: WORLD_SCALE });
+    plain.input = { ...plain.input, frame: frameOf(own) };
+    plain.frames(1);
+    const p = scene(plain).units.shipPos.get(SHIP_ID)!;
+    const q = own.snapshot.shipWorldPos.get(SHIP_ID)!;
+    expect(p.distanceTo(new THREE.Vector3(q.x, q.y, q.z))).toBeLessThan(1e-6);
+    plain.view.dispose();
+    plain.container.remove();
+
     h = mount(snapshotOf(own.world));
     h.input = { ...h.input, frame: frameOf(own), selection: { kind: 'SHIP', shipId: SHIP_ID } };
     h.frames(1);
-    const p = scene(h).units.shipPos.get(SHIP_ID)!;
-    const q = own.snapshot.shipWorldPos.get(SHIP_ID)!;
-    expect(p.distanceTo(new THREE.Vector3(q.x, q.y, q.z))).toBeLessThan(1e-6);
     const path = scene(h).units.group.children.find((o) => o.name === `Flight_${SHIP_ID}`) as THREE.Line<THREE.BufferGeometry, THREE.LineDashedMaterial>;
     expect(path.visible).toBe(true);
     expect(path.material.color.getHex()).toBe(new THREE.Color(DS.signal).getHex());
@@ -627,6 +649,39 @@ describe('SystemView (planet + system kinds, one scene)', () => {
     h.input = { ...h.input, snapshot: snapshotOf(own.world), frame: frameOf(own) };
     h.frames(1);
     expect(scene(h).units.group.children.find((o) => o.name === `Flight_${SHIP_ID}`)).toBeUndefined();
+  });
+
+  it('in the view scale a flight leaves from where the ship was docked and arrives where it docks (to the moon and to the asteroid)', () => {
+    for (const to of [MOON_ID, ASTEROID_ID]) {
+      const own = new Simulation(POC_SCENARIO);
+      const docked = mount(snapshotOf(own.world));
+      docked.input = { ...docked.input, frame: { time: own.time, rovers: {}, transit: {} } };
+      docked.frames(1);
+      const before = scene(docked).units.shipPos.get(SHIP_ID)!.clone();
+      own.dispatch({ type: 'MOVE_SHIP', shipId: SHIP_ID, to });
+      if (own.world.ships[0]!.state !== 'IN_TRANSIT') own.step(1e-6);
+      const plan = own.world.ships[0]!.transfer!;
+      expect(plan.startTime).toBeCloseTo(own.time, 5);
+      const flying = snapshotOf(own.world);
+      const at = (u: number, time: number) => {
+        docked.input = { ...docked.input, snapshot: flying, frame: { time, rovers: {}, transit: { [SHIP_ID]: u } } };
+        docked.frames(1);
+        return scene(docked).units.shipPos.get(SHIP_ID)!.clone();
+      };
+      const tol = 1e-6 * before.length();
+      expect(at(0, plan.startTime).distanceTo(before), `${to}: departure`).toBeLessThan(tol);
+      const arrival = plan.startTime + plan.estimatedDuration;
+      const end = at(1, arrival);
+      // mid-flight: away from both ends, between the bodies
+      const mid = at(0.5, plan.startTime + plan.estimatedDuration / 2);
+      expect(mid.distanceTo(end)).toBeGreaterThan(0);
+      while (own.world.ships[0]!.state === 'IN_TRANSIT') own.step(0.5);
+      docked.input = { ...docked.input, snapshot: snapshotOf(own.world), frame: { time: arrival, rovers: {}, transit: {} } };
+      docked.frames(1);
+      expect(scene(docked).units.shipPos.get(SHIP_ID)!.distanceTo(end), `${to}: arrival`).toBeLessThan(tol);
+      docked.view.dispose();
+      docked.container.remove();
+    }
   });
 
   it('highlights selection, hover and the placement ghost with vector outlines (signal / alert)', () => {
@@ -719,8 +774,8 @@ describe('SystemView (planet + system kinds, one scene)', () => {
     expect(s.frameStats.decorTriangles).toBe(drawn().triangles);
     expect(decor.lodActive).toBe(false); // the default 3.4 R: about 250 px
 
-    // zoom to an apparent radius: the camera along its direction from the body
-    const R = s.gridOf(TC_C)!.radius;
+    // zoom to an apparent radius: the camera along its direction from the body (scene radius)
+    const R = s.gridOf(TC_C)!.radius * s.bodyParts(TC_C)!.size;
     const zoomTo = (px: number) => {
       const target = s.rig.target.clone();
       const dir = s.rig.camera.position.clone().sub(target).normalize();

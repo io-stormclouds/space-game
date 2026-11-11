@@ -60,7 +60,8 @@ const ROCKS = 420;
 
 /**
  * The belt as two InstancedMeshes (rock_A, rock_B) in the parent's frame, rotating with the belt's
- * angular velocity. No grid; picking is a ring test in the view.
+ * angular velocity. No grid; picking is a ring test in the view. `place` = scene units per world unit of
+ * the annulus (the orbit scale), `size` = of a rock (`beltRockScale`, view-scale.ts).
  */
 export class BeltView {
   readonly group = new THREE.Group();
@@ -75,6 +76,8 @@ export class BeltView {
   constructor(
     readonly body: CelestialBody,
     private readonly kit: ModelKit,
+    private readonly place = 1,
+    private readonly size = place,
   ) {
     this.group.name = `${body.name}_Belt`;
     this.rocks = beltRocks(body, ROCKS);
@@ -89,13 +92,13 @@ export class BeltView {
     });
   }
 
-  /** Inner and outer radius of the ring in the parent's frame. */
+  /** Inner and outer radius of the ring in the parent's frame (scene units). */
   get innerRadius(): number {
-    return this.body.orbitRadius - BELT_HALF_WIDTH * this.body.radius;
+    return (this.body.orbitRadius - BELT_HALF_WIDTH * this.body.radius) * this.place;
   }
 
   get outerRadius(): number {
-    return this.body.orbitRadius + BELT_HALF_WIDTH * this.body.radius;
+    return (this.body.orbitRadius + BELT_HALF_WIDTH * this.body.radius) * this.place;
   }
 
   /** Swaps in a loaded rock model. */
@@ -122,8 +125,8 @@ export class BeltView {
     let i = 0;
     for (const r of this.rocks) {
       if (r.model !== k) continue;
-      const sc = r.size / spec.footprint;
-      this.p.set(r.x, r.y, r.z);
+      const sc = (r.size * this.size) / spec.footprint;
+      this.p.set(r.x * this.place, r.y * this.place, r.z * this.place);
       this.q.setFromEuler(this.e.set(r.tilt, r.yaw, 0));
       this.s.set(sc, sc, sc);
       mesh.setMatrixAt(i++, this.m.compose(this.p, this.q, this.s));
