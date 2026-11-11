@@ -1,10 +1,30 @@
 # Single-box (plan 02 §9): Caddy serves the built client (web-game/dist/game/browser) and proxies
-# /ws and /health to the game server; worlds and accounts live in the `data` volume.
-# PostgreSQL joins when the repository adapter for it exists (R-15).
-# Usage: (cd web-game && npm run wasm:build && npm run build) && docker compose -f deploy/docker-compose.yml up -d --build
-# (the client's replica of the world runs on the WebAssembly module, which the build copies from public/wasm)
-# NOT RUN YET on the development machine (Docker Desktop off, 2026-11-09).
+# /ws, /api and /health to the game server; accounts, sessions, worlds and the market live in
+# PostgreSQL 17 (R-26), the `data` volume keeps only copies of unreadable state.
+#
+# Usage (from the repository root):
+#   (cd web-game && npm run wasm:build && npm run build)
+#   POSTGRES_PASSWORD=<url-safe secret> docker compose -f deploy/docker-compose.yml up -d --build
+# (the client's replica of the world runs on the WebAssembly module, which the build copies from
+# public/wasm). SITE_ADDRESS=game.example.com gives HTTPS (Caddy's certificates); the default :80
+# is plain http, fine on localhost in Chrome (the session cookie is Secure). HTTP_PORT/HTTPS_PORT
+# move the published ports. Backups: `docker compose exec postgres pg_dump -U game game > dump.sql`.
 services:
+  postgres:
+    image: ${POSTGRES_IMAGE:-postgres:17-alpine}
+    environment:
+      POSTGRES_USER: game
+      POSTGRES_DB: game
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U game -d game"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+
   game-server:
     build:
       context: ..
@@ -12,17 +32,27 @@ services:
     environment:
       ADDR: 0.0.0.0:8080
       DATA_DIR: /data
+      DATABASE_URL: postgres://game:${POSTGRES_PASSWORD}@postgres:5432/game
       DEV_MODE: ${DEV_MODE:-false}
       WORLD_STEP_SECONDS: ${WORLD_STEP_SECONDS:-1}
+      # accounts and sessions (R-25): the cookie wants HTTPS (a real SITE_ADDRESS); plain http on
+      # localhost works in Chrome, elsewhere set COOKIE_SECURE=false for a test without TLS
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}
+      GUEST_ACCOUNTS: ${GUEST_ACCOUNTS:-false}
+      METRICS_TOKEN: ${METRICS_TOKEN:-}
     volumes:
       - data:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # a lost database connection stops the server; it comes back with the database
     restart: unless-stopped
 
   caddy:
     image: caddy:2
     ports:
-      - "80:80"
-      - "443:443"
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
     environment:
       SITE_ADDRESS: ${SITE_ADDRESS:-:80}
     volumes:
@@ -34,5 +64,6 @@ services:
     restart: unless-stopped
 
 volumes:
+  pg-data:
   data:
   caddy-data:

@@ -13,6 +13,7 @@ import type {
   TerrainRules,
   WorldState,
 } from '@space-game/domain';
+import type { GalaxyOp, GalaxyReply, GalaxyView } from './galaxy';
 
 // GameApi: the only way the UI talks to the game (F2). Today the mock server implements it in a
 // Web Worker (W03 A); later a real, authoritative server can implement the same contract.
@@ -299,5 +300,9 @@ export interface GameApi {
   onSnapshot(listener: (s: GameSnapshot) => void): Unsubscribe;
   onEvents(listener: (events: DomainEvent[]) => void): Unsubscribe;
   onFrame(listener: (f: FrameData) => void): Unsubscribe;
+  /** The galaxy's market (B6, `galaxy.ts`): only with the game server; elsewhere it fails with NO_TRADE. */
+  galaxy<T extends GalaxyReply = GalaxyReply>(op: GalaxyOp): Promise<T>;
+  /** The player's view of the galaxy after every change (the last one at once, when there is one). */
+  onGalaxy(listener: (v: GalaxyView) => void): Unsubscribe;
   dispose(): void;
 }

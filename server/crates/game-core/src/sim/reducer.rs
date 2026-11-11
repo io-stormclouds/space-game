@@ -403,6 +403,14 @@ pub fn reduce(w: &mut WorldState, e: &DomainEvent) {
             w.patch_machine(structure_id, &recipe, |x| x.delivered += count);
         }
 
+        DomainEvent::ShipmentDeparted { body_id, cargo, .. } => {
+            w.take_from_storage(body_id, cargo);
+            w.next_id += 1;
+        }
+
+        // a delivery may go over the capacity: the galaxy already gave the goods away
+        DomainEvent::HubDelivered { body_id, cargo, .. } => w.add_to_storage(body_id, cargo),
+
         DomainEvent::DepositDepleted { .. } | DomainEvent::CommandRejected { .. } => {}
     }
 }

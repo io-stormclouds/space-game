@@ -1,8 +1,18 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { connectOnFirstRequest, createWorkerGameApi, type ConnectMessage, type RequestMessage, type SaveFile, type WorkerMessage } from '@space-game/api';
-import { createReplica, type SocketLike } from './replica';
+import {
+  AccountError,
+  connectOnFirstRequest,
+  createWorkerGameApi,
+  NO_TRADE,
+  type ConnectMessage,
+  type GalaxyView,
+  type RequestMessage,
+  type SaveFile,
+  type WorkerMessage,
+} from '@space-game/api';
+import { createReplica, type ReplicaOptions, type SocketLike } from './replica';
 import { createWasmHost } from './wasm-host';
 
 // Plan 02 B4: the replica of a server world. A fake socket plays the server: welcome, the checkpoint,
@@ -46,7 +56,7 @@ describe.skipIf(!existsSync(WASM))('replica of a server world (B4)', () => {
     start = (saved as { value: SaveFile }).value;
   });
 
-  async function setup() {
+  async function setup(over: Partial<ReplicaOptions> = {}) {
     const servers: FakeServer[] = [];
     const server = new FakeServer();
     const listeners = new Set<(e: MessageEvent<WorkerMessage>) => void>();
@@ -65,6 +75,7 @@ describe.skipIf(!existsSync(WASM))('replica of a server world (B4)', () => {
         listeners.forEach((l) => l({ data: m } as MessageEvent<WorkerMessage>));
       },
       now: () => 0,
+      ...over,
     });
     const connects: ConnectMessage[] = [];
     const worker = connectOnFirstRequest(
@@ -82,14 +93,50 @@ describe.skipIf(!existsSync(WASM))('replica of a server world (B4)', () => {
 
   const checkpoint = (save: SaveFile) => ({ save, sim: { drives: [], mining: [], extraction: 0 } });
 
+  it('logs in with a new ticket of the session on every connection; a refused session ends it (R-25)', async () => {
+    const tickets: Array<[string, boolean]> = [];
+    let refuse: AccountError | null = new AccountError('serwer gry niedostępny', 0);
+    const { servers, api } = await setup({
+      credentials: { session: '/api', guest: true },
+      ticket: async (session, guest) => {
+        tickets.push([session, guest]);
+        if (refuse) throw refuse;
+        return `t-${tickets.length}`;
+      },
+    });
+    const snapshot = api.snapshot();
+    // no server behind the proxy: the connection is tried again
+    servers[0]!.emit('open');
+    await flush();
+    expect(servers[0]!.sent).toEqual([]);
+    await new Promise((r) => setTimeout(r, 10));
+    expect(servers.length).toBe(2);
+    refuse = null;
+    servers[1]!.emit('open');
+    await flush();
+    expect(servers[1]!.sent[0]).toEqual({ type: 'hello', protocolVersion: 3, ticket: 't-2' });
+    expect(tickets).toEqual([
+      ['/api', true],
+      ['/api', true],
+    ]);
+    // the next connection gets its own ticket; a refusal (no guests, nobody logged in) is the end
+    refuse = new AccountError('gra bez konta jest wyłączona: załóż konto', 403);
+    servers[1]!.emit('close');
+    await new Promise((r) => setTimeout(r, 10));
+    servers[2]!.emit('open');
+    await expect(snapshot).rejects.toThrow('gra bez konta jest wyłączona');
+    await new Promise((r) => setTimeout(r, 10));
+    expect(servers.length).toBe(3);
+  });
+
   it('logs in, waits for the checkpoint, answers queries itself and forwards commands', async () => {
     const { server, replica, api, pushed, connects } = await setup();
     server.emit('open');
-    expect(server.sent[0]).toEqual({ type: 'hello', protocolVersion: 2, callsign: 'Kestrel', password: 'tajne-haslo' });
+    expect(server.sent[0]).toEqual({ type: 'hello', protocolVersion: 3, callsign: 'Kestrel', password: 'tajne-haslo' });
 
     const catalog = api.catalog();
     expect(connects).toHaveLength(1);
-    server.emit('message', { type: 'welcome', protocolVersion: 2, accountId: 'acc-1', callsign: 'Kestrel', worldId: 'acc-1', devMode: true, stepSeconds: 1 / 60, serverTime: 0 });
+    server.emit('message', { type: 'welcome', protocolVersion: 3, accountId: 'acc-1', callsign: 'Kestrel', worldId: 'acc-1', devMode: true, stepSeconds: 1 / 60, serverTime: 0 });
     await flush(); // the module loads
     server.emit('message', { type: 'reset', checkpoint: checkpoint(start), paused: false });
     expect((await catalog).buildings.length).toBeGreaterThan(5);
@@ -174,5 +221,72 @@ describe.skipIf(!existsSync(WASM))('replica of a server world (B4)', () => {
     again.emit('message', { type: 'reply', id: sent!.id, ok: true, value: { ok: true, events: [] } });
     await expect(later).resolves.toMatchObject({ ok: true });
     expect((await api.save()).commands).toHaveLength(1);
+  });
+
+  it("goes to the galaxy service for the market and shows the service's hubs and players (protocol 3)", async () => {
+    const { server, api, pushed } = await setup();
+    server.emit('open');
+    const first = api.snapshot();
+    await flush();
+    // a server world keeps no galaxy of its own (`meta.galaxy: null`): the replica neither
+    server.emit('message', { type: 'reset', checkpoint: checkpoint({ ...start, meta: { galaxy: null } }), paused: true });
+    expect((await first).hubs).toEqual([]);
+
+    const views: GalaxyView[] = [];
+    api.onGalaxy((v) => views.push(v));
+    const view: GalaxyView = {
+      account: 'acc-1',
+      credits: 1000,
+      fee: 0.02,
+      npc: true,
+      hubs: [
+        {
+          id: 'hub-sirius',
+          name: 'Syriusz',
+          star: 'Sirius A',
+          quotes: [],
+          faction: 'Konsorcjum Orion',
+          distanceLy: 17.4,
+          travelSeconds: 100,
+          stock: {},
+          book: [],
+          reputation: 0,
+          tariff: 0.05,
+          fee: 0.02,
+        },
+      ],
+      orders: [],
+      shipments: [],
+      trades: [],
+      players: [{ id: 'npc-1', name: 'Dowódca Ares', corporation: 'Unia Lagrange', homeStar: 'Procyon A', colonies: 2, score: 900, npc: true }],
+      contracts: [],
+      corporation: null,
+      invitations: [],
+      corporations: [],
+      alliance: null,
+      allianceInvitations: [],
+      alliances: [],
+      megaprojects: [],
+      season: { number: 1, startedAt: 0, endsAt: null },
+      time: 0,
+    };
+    server.emit('message', { type: 'galaxy', view });
+    expect(views).toEqual([view]);
+    const snap = pushed.filter((m) => m.type === 'snapshot').at(-1);
+    expect(snap?.type === 'snapshot' && snap.snapshot.hubs.map((h) => h.id)).toEqual(['hub-sirius']);
+    expect((await api.snapshot()).players.map((p) => p.name)).toEqual(['Dowódca Ares']);
+
+    const order = api.galaxy({ op: 'placeOrder', hubId: 'hub-sirius', material: 'FER', side: 'sell', quantity: 5, price: 9 });
+    const wire = server.sent.at(-1)!;
+    expect(wire).toEqual({ id: expect.any(Number), galaxy: { op: 'placeOrder', hubId: 'hub-sirius', material: 'FER', side: 'sell', quantity: 5, price: 9 } });
+    const before = pushed.length;
+    server.emit('message', { type: 'reply', id: wire['id'], ok: true, value: { order: { id: 'order-1', remaining: 5 }, trades: [] } });
+    await expect(order).resolves.toMatchObject({ trades: [] });
+    expect(pushed.slice(before).map((m) => m.type)).toEqual(['reply']); // the market's changes come as a view
+
+    // a world alone (mock, offline WASM) has no market
+    const alone = await createWasmHost(module, () => 0);
+    const reply = alone.handle({ id: 9, request: { kind: 'galaxy', op: { op: 'view' } } }, 0).find((m) => m.type === 'reply');
+    expect(reply).toEqual({ type: 'reply', id: 9, ok: false, error: NO_TRADE });
   });
 });

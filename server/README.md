@@ -1,6 +1,6 @@
 # server — backend gry w Rust
 
-Workspace Cargo z portem domeny gry i narzędziami zgodności (plan `docs/plan/02-BACKEND-RUST.md`). Stan: **B0, B1 i B2 wykonane 2026-11-08** (port całej domeny z silnikiem Atanora i rejestrem gwiazd, złote powtórki, scenariusze `fabryka` i obciążenia S/M/L, pomiar kroku i WASM). **B3 wykonane 2026-11-09**: `GameApi` na WebAssembly w workerze klienta, przełącznik `mock-ts` / `wasm`, zgodność z mockiem. **B4 w toku**: `game-server` (konta, świat na gracza, WebSocket, harmonogram światów, zapis i odtworzenie z punktu kontrolnego i końcówki dziennika, limity) oraz tryb `remote`, w którym klient trzyma kopię świata w WASM i dostaje od serwera tylko rozkazy, kroki i skrót stanu (R-18). Szczegóły i braki: sekcje B3 i B4 niżej. **T8 (teren) 2026-11-09**: klasy pól i drogi osady (`math/terrain.rs`, bit w bit z `classifyTerrain`), reguły budowy na terenie (`sim/terrain_rules.rs`: `BAD_TERRAIN`, koszt `ceil(q·%/100)`, czas pierwszej budowy × %, port i `load-m` omijają wodę), pola terenu w karcie pola, duchu i katalogu `game-session`. **T5 etap 2 (biomy) 2026-11-10**: tabela biomów `mixed`, `medieval`, `winter`, `dry` i nadpisania z `TerrainConfig` (`ground`, `basin`, `basinLevel`, `landingCap`: strefa lądowania jest zwykłym gruntem) w `math/terrain.rs`, rodzaje `sand`, `dune` (niebudowalna), `ice`, `regolith` w katalogu, teren na wszystkich planetach Tau Ceti i na planecie oraz Księżycu PoC, `load-l` 1400 budowli; preset `load-m-teren` zostaje tylko w mocku TS.
+Workspace Cargo z portem domeny gry i narzędziami zgodności (plan `docs/plan/02-BACKEND-RUST.md`). Stan: **B0, B1 i B2 wykonane 2026-11-08** (port całej domeny z silnikiem Atanora i rejestrem gwiazd, złote powtórki, scenariusze `fabryka` i obciążenia S/M/L, pomiar kroku i WASM). **B3 wykonane 2026-11-09**: `GameApi` na WebAssembly w workerze klienta, przełącznik `mock-ts` / `wasm`, zgodność z mockiem. **B4 w toku**: `game-server` (konta, świat na gracza, WebSocket, harmonogram światów, zapis i odtworzenie z punktu kontrolnego i końcówki dziennika, limity) oraz tryb `remote`, w którym klient trzyma kopię świata w WASM i dostaje od serwera tylko rozkazy, kroki i skrót stanu (R-18). **T8 (teren) 2026-11-09**: klasy pól i drogi osady (`math/terrain.rs`, bit w bit z `classifyTerrain`), reguły budowy na terenie (`sim/terrain_rules.rs`: `BAD_TERRAIN`, koszt `ceil(q·%/100)`, czas pierwszej budowy × %, port i `load-m` omijają wodę), pola terenu w karcie pola, duchu i katalogu `game-session`. **T5 etap 2 (biomy) 2026-11-10**: tabela biomów `mixed`, `medieval`, `winter`, `dry` i nadpisania z `TerrainConfig` (`ground`, `basin`, `basinLevel`, `landingCap`: strefa lądowania jest zwykłym gruntem) w `math/terrain.rs`, rodzaje `sand`, `dune` (niebudowalna), `ice`, `regolith` w katalogu, teren na wszystkich planetach Tau Ceti i na planecie oraz Księżycu PoC, `load-l` 1400 budowli; preset `load-m-teren` zostaje tylko w mocku TS. **B6 w toku**: usługa galaktyki (huby z księgą zleceń, kredyty, przesyłki między kolonią a hubem, frakcje NPC z wyłącznikiem, R-7); brama „dwóch graczy handluje przez hub” przechodzi w teście WebSocket; w kliencie ekran hubu (F3), kontrakty frakcji i reputacja (S1), korporacje (S2, F4), sojusze, megaprojekty, rankingi (F7) i sezony (S3). **B4 2026-11-10:** konta i sesje w cookie z biletem WS, strona logowania, metryki Prometheus, PostgreSQL (`DATABASE_URL`) i uruchomiony `deploy/`. Szczegóły i braki: sekcje B3, B4 i B6 niżej.
 
 ```bash
 cargo test --workspace                 # testy jednostkowe + zgodność z TS (wektory, powtórki)
@@ -26,9 +26,9 @@ W `web-game/`: `npm run wasm:build` (moduł do `apps/game/public/wasm/`), `npm r
 | `crates/game-core/src/sim/scenarios/{factory,load}.rs` | światy `fabryka` i `load-s/m/l` z generatorem Mulberry32; w TS leżą obok mocka, serwer Rust musi je startować sam (R-11) | `mock-server/src/{factory,load,rng}.ts` |
 | `crates/game-core/data/catalog.json` | katalog ekonomii wyeksportowany z `catalog-data.ts` (`npm run conformance:catalog` w `web-game/`). Liczby zmienia się w TS i eksportuje ponownie | `economy/catalog-data.ts` |
 | `crates/game-core/data/stars.json` | 41 gwiazd PoC galaktyki (`npm run conformance:stars`) | `galaxy/stars.data.ts` |
-| `crates/game-session` | gra jednego gracza za kontraktem `GameApi`. `GameSession`: stały krok, tempa, dziennik rozkazów, zapis, wczytanie, powtórka i zapytania UI (katalog, dostępność, duch budowy, karta i sugestia pola, tabele ekonomii, przepływy). `GalaxySim`: symulowani gracze i rynek. `Host`: protokół wiadomości (żądanie → odpowiedź i pushe snapshot / events / frame). `sync`: punkt kontrolny (`Checkpoint`), dalszy bieg według cudzych zmian (`follow`), skrót stanu, komunikaty kopii i `SyncCursor` serwera (R-18). Bez I/O i bez zegara | `mock-server` (`server.ts`, `host.ts`, `galaxy-sim.ts`), `api` (`contract.ts`, `protocol.ts`); `sync` nowe |
+| `crates/game-session` | gra jednego gracza za kontraktem `GameApi`. `GameSession`: stały krok, tempa, dziennik rozkazów, zapis, wczytanie, powtórka i zapytania UI (katalog, dostępność, duch budowy, karta i sugestia pola, tabele ekonomii, przepływy). `GalaxySim`: symulowani gracze i rynek. `Host`: protokół wiadomości (żądanie → odpowiedź i pushe snapshot / events / frame). `sync`: punkt kontrolny (`Checkpoint`), dalszy bieg według cudzych zmian (`follow`), skrót stanu, komunikaty kopii i `SyncCursor` serwera (R-18). `exchange`: wspólny rynek galaktyki (B6, R-20, R-22): księgi zleceń w hubach, kredyty i towary kont, przesyłki, frakcje NPC. Bez I/O i bez zegara | `mock-server` (`server.ts`, `host.ts`, `galaxy-sim.ts`), `api` (`contract.ts`, `protocol.ts`, `galaxy.ts`); `sync` i `exchange` nowe |
 | `crates/game-wasm` | `game-session` dla przeglądarki: zwykłe ABI C (`sg_input`, `sg_handle`, `sg_tick`, `sg_snapshot`, `sg_sync`, `sg_view`, `sg_output_ptr`) z wiadomościami JSON w pamięci liniowej, importy `env.sg_now` i `env.sg_panic`. Bez `wasm-bindgen` i bez generatora kleju (R-13) | `mock-server/src/worker.ts`; loader, worker i kopia świata w `web-game/packages/wasm-host` |
-| `crates/game-server` | serwer sieciowy (B4): Axum + Tokio, WebSocket `/ws`, `/health`, konta (argon2id), świat na konto, harmonogram (aktywny / uśpiony / nadrabianie), zapis punktu kontrolnego i dziennika przez wątek I/O, odtworzenie z punktu kontrolnego i końcówki dziennika, komunikaty dla kopii klientów, limit żądań | `mock-server` + nowe |
+| `crates/game-server` | serwer sieciowy (B4): Axum + Tokio, WebSocket `/ws`, `/health`, konta (argon2id), świat na konto, harmonogram (aktywny / uśpiony / nadrabianie), zapis punktu kontrolnego i dziennika przez wątek I/O, odtworzenie z punktu kontrolnego i końcówki dziennika, komunikaty dla kopii klientów, limit żądań; usługa galaktyki (`galaxy.rs`, B6): rynek na zegarze serwera, most do światów, `galaxy.json` | `mock-server` + nowe |
 | `conformance` | biblioteka i narzędzie: powtórka `SaveFile` z mocka i porównanie świata, zdarzeń i odrzuceń; sprawdzenie wektorów liczbowych; `bench` | `tools/conformance/*.ts` nagrywa wzorce |
 | `conformance/vectors`, `conformance/replays` | nagrane wzorce (rewizja w `expected.json` → `source.revision`) | — |
 
@@ -80,7 +80,7 @@ Bezpośredni port liczył krok L w 2,7 ms; tabela specyfikacji budynków w `Rule
 ## B4: serwer sieciowy (MVP 2026-11-09, protokół kopii tego samego dnia)
 
 Zrobione:
-- **Połączenie:** WebSocket `/ws`, ramki tekstowe JSON (R-3). Pierwsza ramka to `{"type":"hello","protocolVersion":2,"callsign","password","register"?}`, a odpowiedź to `welcome` (konto, świat, `devMode`, `stepSeconds`, czas serwera) albo `error` i zamknięcie.
+- **Połączenie:** WebSocket `/ws`, ramki tekstowe JSON (R-3). Pierwsza ramka to `{"type":"hello","protocolVersion":3,"ticket"}`: jednorazowy bilet sesji z `POST /api/ticket`, R-25. W `DEV_MODE` (i przy `PASSWORD_HELLO`) może to być też `"callsign","password","register"?`, dla narzędzi i testów. Wersja 3 obowiązuje od B6; klient wersji 2 dostaje `error`. Odpowiedź to `welcome` (konto, świat, `devMode`, `stepSeconds`, czas serwera) albo `error` i zamknięcie.
 - **Kopia świata u klienta (R-18):**
   - Zaraz po `welcome` serwer wysyła `reset`: punkt kontrolny świata, czyli zapis plus stan kroków spoza świata.
   - Potem wysyła tylko zmiany. `sync` zawiera rozkazy i zmiany tempa przypięte do kroków oraz krok, do którego doszedł świat; w `DEV_MODE` przychodzi co tick (16 ms), w produkcji co krok (1 s). Co 5 s przychodzi `hash`, czyli FNV-1a stanu.
@@ -93,7 +93,39 @@ Zrobione:
   - `world::tests::replica_follows_the_world`;
   - `tests/ws.rs` przez prawdziwy WebSocket: skrót się zgadza, a zapis z kopii jest identyczny z zapisem serwera;
   - `replica.spec.ts` w TS.
-- **Konta:** znak wywoławczy + hasło (argon2id) w `DATA_DIR/accounts.json`. W `DEV_MODE` pierwsze logowanie zakłada konto; w produkcji konto powstaje tylko z `register: true`.
+- **Konta i sesje (R-25, 2026-11-10):**
+  - Konto to znak wywoławczy i hasło (argon2id) w `DATA_DIR/accounts.json`. Znak jest bez rozróżniania wielkości liter.
+  - HTTP JSON pod `/api` (`src/http.rs`):
+    - `POST /register` i `POST /login` przyjmują `{callsign, password}`;
+    - `POST /guest` zakłada konto gościa `gosc-xxxxxx` z losowym hasłem, którego nikt nie zna;
+    - `POST /logout`;
+    - `GET /session` zwraca `{accountId, callsign, guest}` albo 401;
+    - `POST /ticket` zwraca `{ticket}`.
+  - Udane logowanie, rejestracja lub gość ustawia ciasteczko `sg_session`: losowy token 32 B, `HttpOnly; SameSite=Strict; Path=/`, w produkcji `Secure`, ważne `SESSION_DAYS` (30).
+  - Serwer trzyma tylko skrót BLAKE2s tokenu, razem z kontem i datą ważności, w `DATA_DIR/sessions.json` (`src/sessions.rs`). Kopia pliku nikogo więc nie loguje. Wylogowanie kończy tylko swoją sesję.
+  - WebSocket loguje się biletem: jednorazowym, ważnym 30 s, wydanym za ciasteczko. Hasło nie płynie przez gniazdo, a strona innej witryny nie otworzy gry w imieniu gracza, bo nie odczyta biletu.
+  - Żądanie z nagłówkiem `Origin` innego hosta dostaje 403.
+  - Limity:
+    - 5 nieudanych logowań jednego znaku w 15 min blokuje go do końca okna (429, także dla poprawnego hasła);
+    - nowe konta na cały serwer: `SIGNUPS_PER_MINUTE` (produkcja 30, dev bez limitu).
+  - Produkcja: rejestracja włączona (`REGISTRATION`), goście wyłączeni (`GUEST_ACCOUNTS`), hasło w hello wyłączone (`PASSWORD_HELLO`). W `DEV_MODE` wszystko włączone, a pierwsze logowanie hasłem w hello zakłada konto, jak dotąd.
+  - Testy: `sessions::tests`, `accounts::tests` i `tests/ws.rs::sessions_tickets_logout_and_failed_logins`, który sprawdza:
+    - rejestrację i zajęty znak;
+    - że bilet działa raz;
+    - drugą sesję i jej wylogowanie;
+    - blokadę po 5 próbach;
+    - konto gościa;
+    - odmowę dla obcego `Origin`.
+  - Test produkcji rejestruje konto przez HTTP i łączy WebSocket biletem.
+- **Metryki:** `GET /metrics` w formacie Prometheus (`src/metrics.rs`, liczniki atomowe, bez nowych zależności):
+  - światy działające, konta, sesje, połączenia;
+  - logowania udane i odrzucone;
+  - żądania, w tym odcięte limitem;
+  - rozkazy przyjęte i odrzucone, `resync`;
+  - operacje galaktyki, przesyłki, zlecenia i korporacje;
+  - histogram czasu ticku świata.
+
+  Z `METRICS_TOKEN` endpoint wymaga `Authorization: Bearer …`. Bez tokenu jest otwarty w `DEV_MODE` i wyłączony (404) w produkcji. Caddy nie wystawia go na zewnątrz.
 - **Świat na gracza** (Model C): zadanie Tokio z `Host`. W produkcji krok trwa 1 s w tempie ×1 (R-4); w `DEV_MODE` 1/60 s i dostępne są wszystkie tempa jak w mocku. W produkcji klient nie zmienia tempa, nie pauzuje, nie wczytuje i nie restartuje świata (`start` zwraca bieżącą migawkę).
 - **Harmonogram:** świat bez połączenia zapisuje się i usypia po `IDLE_SECONDS`. Przy wybudzeniu nadrabia przespany czas krokami po 1 min modelu, z limitem `OFFLINE_LIMIT_HOURS` (R-5: 12 h). Zmiana tempa trafia do harmonogramu, więc powtórka zostaje dokładna.
 - **Zapis:**
@@ -105,32 +137,57 @@ Zrobione:
   - Sprawdzają to:
     - test `restored_world_is_the_replay_of_its_log`: świat odtworzony obiema drogami równa się żywemu światu;
     - test WebSocket z restartem serwera (`tests/ws.rs`).
+- **PostgreSQL (R-26, 2026-11-10):**
+  - `DATABASE_URL` przenosi do bazy konta, sesje, światy (migawka i dziennik) i stan rynku (`src/storage.rs`, `tokio-postgres`); bez tej zmiennej zostają pliki w `DATA_DIR`.
+  - Migracje leżą w `migrations/` i stosują się przy starcie, każda raz (`schema_migrations`).
+  - Dane to JSON w kolumnach `json`, bez zmian tekstu, więc liczby wracają bit w bit. Tabele: `accounts`, `sessions`, `world_snapshots`, `world_log`, `galaxy_state`.
+  - Nowa migawka czyści dziennik świata w tym samym poleceniu.
+  - Wątki I/O światów i rynku wykonują zapytania na runtime serwera (`Handle::block_on`). Nic, co czeka na zapis, nie blokuje wątku runtime: zamknięcie czeka na rynek asynchronicznie.
+  - Utrata połączenia kończy proces, a nadzorca (`restart: unless-stopped`) go wznawia.
+  - Test `the_server_on_postgres_survives_a_restart` (`tests/ws.rs`) działa przy `TEST_DATABASE_URL`, każdy przebieg we własnym schemacie; bez tej zmiennej jest pomijany. Po restarcie serwera na tej samej bazie wracają:
+    - konto i sesja z ciasteczka;
+    - świat z rozkazami;
+    - rynek z przesyłką w hubie;
+    - a w plikach nie ma nic.
+
+    Na tym komputerze: kontener `postgres:16-alpine` na `127.0.0.1:55432`, przebieg 1,9 s.
 - **Limity i awarie:**
   - Każde połączenie ma wiadro żetonów: `MAX_REQUESTS_PER_SECOND` (20/s, chwilowo do 40). Nadmiar dostaje odpowiedź z błędem „za dużo żądań”, a połączenie zostaje; `resync` kosztuje 10 żetonów.
   - Profil `release` ma `panic = unwind` (R-19). Panika kończy tylko zadanie świata; jego klienci są rozłączani, a następne połączenie odtwarza świat z dysku.
 - **Klient:**
-  - Tryb `?api=remote` uruchamia worker kopii (`game-replica.worker.ts`). Potrzebuje modułu WASM (`npm run wasm:build`). Adres serwera: `?server=ws://…/ws`, domyślnie port 8080 tego hosta.
-  - Dane logowania idą do workera przy pierwszym żądaniu (`connectOnFirstRequest` w `packages/api`).
+  - Tryb `?api=remote` uruchamia worker kopii (`game-replica.worker.ts`). Potrzebuje modułu WASM (`npm run wasm:build`).
+  - Serwer działa pod adresem strony: `/ws` i `/api` wystawia Caddy w `deploy/`, a w rozwoju proxy `ng serve` (`web-game/proxy.conf.mjs`, adres serwera w `GAME_SERVER`, domyślnie `http://127.0.0.1:8080`). Dzięki temu ciasteczko sesji jest własne strony. Przełącznik `?server=` zniknął.
+  - Worker dostaje przy pierwszym żądaniu (`connectOnFirstRequest`) adres API sesji. Przy każdym połączeniu pobiera nowy bilet (`wsTicket` w `packages/api/src/account.ts`). Gdy nikt nie jest zalogowany, najpierw zakłada konto gościa, o ile serwer na to pozwala.
   - Zerwane połączenie kopia ponawia z rosnącym odstępem: 1, 2, 4 s i dalej, najwyżej 10 s, maksymalnie 8 prób bez nowego punktu kontrolnego.
     - Żądania w drodze dostają błąd, bo nie wiadomo, czy dotarły do świata.
     - Zapytania UI kopia dalej odpowiada z ostatniego stanu.
     - Nowe rozkazy czekają na następny `reset`.
-    - Odmowa logowania kończy połączenie bez ponawiania.
-  - Strona logowania zapisuje znak wywoławczy; bez logowania gracz dostaje konto gościa.
-  - Kod dostępu to sekret przechowywany w przeglądarce, bo pole hasła w formularzu jest jeszcze makietą.
+    - Odmowa logowania kończy połączenie bez ponawiania: zły bilet, brak sesji przy wyłączonych gościach (401 i 403). Brak serwera za proxy (5xx, błąd sieci) i limity są ponawiane.
+  - Strona logowania (`#/logowanie`) w trybie `remote`:
+    - ma znak wywoławczy i kod dostępu, przyciski „Zaloguj”, „Załóż konto” i „Graj jako gość”;
+    - pokazuje błąd serwera;
+    - zalogowanemu pokazuje „Zalogowano: …” z „Przejmij statek” i „Wyloguj”.
+
+    Po zmianie sesji strona ładuje się od nowa, żeby połączenie gry zalogowało się nową sesją. W trybach `mock-ts` i `wasm` przyjmuje cokolwiek, jak dotąd. e2e: `e2e/login.spec.ts`.
 - **e2e:** `npm run e2e:remote` buduje serwer i moduł WASM, startuje serwer w `DEV_MODE` na porcie 8090 (dane w `target/e2e-data`) i uruchamia projekt `chromium-remote`. Każdy test to nowe konto gościa. Wyniki pełnego zestawu (17 testów, Chrome, 2026-11-09 wieczorem):
   - `mock-ts`, 4 workery: 17 z 17 (2,4 min).
   - `remote`, 4 workery: 16 z 17 i 15 z 17. Za każdym razem padał inny test zależny od czasu: liczniki GPU po 20 przełączeniach, karta Arki zaraz po wejściu, opis „w locie” w trakcie krótkiego lotu. Każdy z nich przechodzi powtarzany przy 2 workerach (3 z 3 na `mock-ts` i na `remote`). Tryb `remote` jest bardziej wrażliwy na obciążenie: w każdym teście dochodzi logowanie, kompilacja modułu i punkt kontrolny.
   - `remote`, 2 workery (jak w CI), po przeniesieniu argon2 poza wątki runtime: **17 z 17** (1,8 min).
   - Przechodzą wszystkie testy panelu projektanta F6 (tabele ekonomii, przepływy, powtórka gry, eksport i import zapisu): liczy je kopia w kliencie, tym samym kodem co serwer.
 - **Logowanie:** argon2 liczy się w puli `spawn_blocking`, poza blokadą kont, więc logowanie nie wstrzymuje ticków światów ani innych logowań.
-- **`deploy/`:** `Dockerfile` serwera i `docker-compose.yml` (serwer + Caddy ze statycznym klientem). **Nie uruchamiane na tym komputerze**, bo Docker Desktop jest wyłączony. Obraz klienta musi teraz zawierać moduł WASM.
+- **`deploy/`:** `Dockerfile.server` (kontekst tylko `server/`, przez `Dockerfile.server.dockerignore`) i `docker-compose.yml`: PostgreSQL 17, serwer i Caddy ze statycznym klientem; Caddy wystawia `/ws`, `/api` i `/health`, a nie `/metrics`. **Uruchomione 2026-11-10 na tym komputerze** (Docker Desktop 27):
+  - komenda: `POSTGRES_PASSWORD=… HTTP_PORT=8088 docker compose -p space-game -f deploy/docker-compose.yml up -d --build`;
+  - obraz serwera (distroless) ma 30,5 MB, build w kontenerze trwa 1,5 min;
+  - serwer startuje na PostgreSQL w trybie produkcyjnym, a migracja 1 stosuje się sama;
+  - `e2e/login.spec.ts` z `E2E_BASE_URL=http://localhost:8088` (projekt `chromium-remote`, bez `ng serve`) przechodzi na tym stosie: rejestracja, gra, wylogowanie, zły kod, logowanie;
+  - po teście w bazie jest konto, sesja, migawka świata i stan rynku;
+  - `docker compose restart game-server` kończy serwer łagodnie, bo obsługuje SIGTERM (przedtem tylko Ctrl-C).
 
-Zmienne: `ADDR` (127.0.0.1:8080), `DATA_DIR` (./data), `DEV_MODE`, `WORLD_STEP_SECONDS` (1; dev 1/60), `SNAPSHOT_SECONDS` (60), `IDLE_SECONDS` (300), `OFFLINE_LIMIT_HOURS` (12), `MAX_REQUESTS_PER_SECOND` (20).
+Zmienne: `ADDR` (127.0.0.1:8080), `DATA_DIR` (./data), `DEV_MODE`, `WORLD_STEP_SECONDS` (1; dev 1/60), `SNAPSHOT_SECONDS` (60), `IDLE_SECONDS` (300), `OFFLINE_LIMIT_HOURS` (12), `MAX_REQUESTS_PER_SECOND` (20). Konta i sesje: `REGISTRATION`, `GUEST_ACCOUNTS`, `PASSWORD_HELLO`, `COOKIE_SECURE`, `SESSION_DAYS`, `SIGNUPS_PER_MINUTE`, `METRICS_TOKEN`. Baza: `DATABASE_URL`.
 
 Brakuje względem planu 02 §11 B4 (następne kroki):
-- PostgreSQL (`sqlx`, migracje, tabele z §7) zamiast plików. Interfejs `WorldRepository` jest gotowy, adapter plikowy działa. Na tym komputerze nie ma PostgreSQL ani działającego Dockera.
-- Metryki Prometheus, sesje w cookie i jednorazowy token WS, prawdziwe pole hasła i rejestracja w kliencie.
+- Osobne tabele zleceń, przesyłek i korporacji z transakcjami SQL (plan §7–§8), gdy rynek wyjdzie poza jeden węzeł; dziś cały stan rynku to jeden wiersz `galaxy_state`. Kompresja migawek (zstd) po pomiarze.
+- Zmiana hasła, e-mail i reset kodu (06-PANEL); limit logowań po adresie IP (za Caddy potrzebny zaufany `X-Forwarded-For`).
 - MessagePack (R-3, odłożony) i kompresja `reset` dla dużych światów, po pomiarze.
 
 ### Toolchain na tym komputerze
@@ -138,11 +195,133 @@ Brakuje względem planu 02 §11 B4 (następne kroki):
 - Rust 1.99.1 z rustup, toolchain `stable-x86_64-pc-windows-gnu`, bo nie ma tu MSVC Build Tools.
 - `cargo` leży w `%USERPROFILE%\.cargo\bin`. PATH nie był zmieniany; skrypty `web-game` szukają `cargo` w tym katalogu.
 - Toolchain `gnu` bez MinGW nie ma `dlltool`, a wymagają go crate'y z `windows-link` (`raw-dylib`). Dlatego `Cargo.lock` przypina wersje oparte na `windows-sys 0.59` / `windows-targets`: `tokio 1.47.1`, `mio 1.0.4`, `socket2 0.6.0`, `getrandom 0.2.15` i `0.3.1`.
+- Z tego samego powodu PostgreSQL ma przypięte: `tokio-postgres 0.7.13`, `postgres-protocol 0.6.8` i `postgres-types 0.2.9` (`rand 0.9` zamiast `0.10` z `getrandom 0.4`) oraz `parking_lot 0.12.3` / `parking_lot_core 0.9.10` (na `windows-targets` zamiast `windows-link`).
 - Na Linuksie i w kontenerze te przypięcia nie są potrzebne.
+
+## B6: usługa galaktyki (w toku od 2026-11-09)
+
+Plan 02 §11 B6 i 05-SOCIAL S0–S1. Brama „dwóch graczy handluje przez hub” przechodzi w teście WebSocket (`tests/ws.rs::two_players_trade_through_a_hub`).
+
+Zrobione:
+- **Rynek (`game-session::exchange`, R-22):** czysty, deterministyczny moduł; czas jest argumentem.
+  - 4 huby: Syriusz, Słońce, Procyon, Epsilon Eridani. Każdy ma księgę zleceń na każdy materiał katalogu.
+  - Zlecenia kupna i sprzedaży z limitem. Kupno wiąże kredyty z prowizją, sprzedaż wiąże towar w hubie.
+  - Dopasowanie: lepsza cena, potem starsze zlecenie; gracz przed frakcją przy równej cenie; po cenie strony czekającej. Częściowe realizacje, bez handlu z samym sobą.
+  - Prowizja 2% od każdej strony. Zlecenia wygasają po 7 dniach, najwyżej 50 na konto.
+  - Konto ma kredyty (start 1000 kr) i towary w każdym hubie.
+- **Frakcje NPC (R-7):** gospodarze hubów, czyli Konsorcjum Orion, Unia Lagrange, Kolektyw Hel-3 i Spółka Kriogen.
+  - Działają na `GalaxySim` z mocka. Kupują po 0,8·P, sprzedają po 1,25·P, najwyżej `NPC_DEPTH` sztuk na materiał między aktualizacjami. Ich transakcje przesuwają P.
+  - Ich dowódcy są na liście graczy z `npc: true`.
+  - `NPC_FACTIONS=off` je wyłącza: w hubach zostają tylko zlecenia graczy. Wyłączenie zachowuje kredyty, towary i zlecenia graczy.
+- **Przesyłki:**
+  - `SHIP_TO_HUB` to rozkaz w świecie gracza. Wymaga działającego portu; towar od razu schodzi z magazynu.
+  - Świat zgłasza wysyłkę usłudze. Po czasie `0,5 h + 2 h/ly` (w `DEV_MODE` sekundy) towar jest na koncie w hubie.
+  - Żądanie galaktyki `shipHome` wysyła towar z hubu do kolonii. Po przylocie usługa wpisuje do świata rozkaz systemowy `HUB_DELIVERY`; budzi przy tym świat, jeśli śpi.
+  - Świat przyjmuje przesyłkę raz, bo sprawdza swój dziennik. Dostawę, która nie może wylądować, usługa zwraca do hubu.
+  - `HUB_DELIVERY` od klienta jest odrzucane.
+  - Oba rozkazy są w dzienniku z krokiem, więc powtórka, odtworzenie i kopia klienta zostają dokładne (R-21).
+- **Usługa (`game-server/src/galaxy.rs`, R-20):**
+  - Jedno zadanie Tokio na zegarze serwera; tick co 250 ms w dev, co 1 s w produkcji.
+  - Żądania `{id, galaxy: {op: view | placeOrder | cancelOrder | shipHome}}` dostają `reply`. Po każdej zmianie każdy podłączony klient dostaje `{type: "galaxy", view}` swojego konta: kredyty, huby z notowaniami, księgą i odległością, zlecenia, przesyłki, transakcje, inni gracze.
+  - Stan trafia do `DATA_DIR/galaxy.json` atomowo, najwyżej co 1 s i przy zamknięciu. Plik, którego nie da się odczytać, jest odkładany na bok.
+- **Światy na serwerze nie mają własnej galaktyki** (`SessionOptions::galaxy = None`). Zapis ma `meta.galaxy: null`, więc kopia klienta też jej nie ma.
+  - Huby i graczy w migawce wkleja kopia z widoku usługi (`replica.ts`).
+  - Mock i WASM offline odpowiadają na handel `NO_TRADE`.
+- **Protokół 3:** `REMOTE_PROTOCOL_VERSION` w `packages/api`. `GameApi` ma `galaxy(op)` i `onGalaxy(listener)`, a typy są w `packages/api/src/galaxy.ts`.
+- **Testy:**
+  - `exchange::tests`: handel wewnątrz widełek frakcji, głębokość i ruch ceny, pieniądze, towary i zakaz handlu z sobą, rynek bez frakcji i wygasanie, przesyłki w obie strony, stan po JSON i wyłączenie frakcji;
+  - `hub::tests` w `game-core`;
+  - `world::tests::trade_crosses_into_the_galaxy_and_back_once`;
+  - w `tests/ws.rs` przez prawdziwy WebSocket: dwóch graczy (przesyłka, oferta, kupno, prowizje, dostawa do kolonii, rynek po restarcie), frakcje wyłączone, odmowa protokołu 2;
+  - `replica.spec.ts`: widok galaktyki w migawkach i żądanie rynku.
+  - e2e `remote`, pełny zestaw, Chrome, 2 workery: **17 z 17** (1,9 min). Widok galaktyki w kliencie pokazuje huby i graczy z usługi.
+- **Ekran hubu** (`apps/game/src/app/hud/hub-panel.ts`, F3 albo „Hub” w górnym pasku):
+  - kredyty, prowizja, zakładki 4 hubów z gospodarzem, odległością i czasem dostawy;
+  - tabela notowań: kupują / sprzedają, zmiana, zapas w kolonii i w hubie;
+  - zlecenie kupna lub sprzedaży z ilością i ceną;
+  - „Wyślij z kolonii” (`SHIP_TO_HUB`) i „Sprowadź do kolonii”;
+  - moje zlecenia z anulowaniem, przesyłki z odliczaniem, ostatnie transakcje.
+  - Bez serwera panel mówi, że handel działa tylko w grze na serwerze.
+  - e2e `hub.spec.ts` na `remote` (25 s): wysyłka do Epsilon Eridani, sprzedaż frakcji po jej cenie kupna, odkupienie, sprowadzenie do kolonii (zapas wraca dokładnie), zlecenie w księdze i anulowanie.
+  - Pełny zestaw `remote` z hubem (2 workery): 17 z 18. Padł test pliku projektu Atanora (AT6): klikał fabrykę, zanim kamera doleciała do planety. Ten sam test był niestabilny na mocku przy 4 workerach. Poprawiony (czeka na kafle do 10 s); potem 4 z 4 powtórzeń, a pełny zestaw `remote` **18 z 18** (2,7 min).
+- **Scalenie z terenem (2026-11-10):** `server-b6` (T0–T8) scalone do `galaxy-b6`. Jedyny konflikt był w wierszu stanu tego README. Moduł WASM po scaleniu: 1398 kB (370 kB gzip).
+- **S1: kontrakty frakcji, reputacja, cła (R-23):**
+  - Każda frakcja trzyma w swoim hubie 3 otwarte kontrakty, jeden z nich premium (od reputacji 75).
+  - `takeContract` przyjmuje kontrakt, `deliverContract` dostarcza go z towaru w hubie przed terminem. Za to jest nagroda ponad cenę i reputacja; za niedotrzymany termin kara.
+  - Reputacja rośnie za kontrakty i obroty z frakcją, a powyżej zera maleje o 1 dziennie. Cło od transakcji z frakcją zależy od reputacji: 10% / 5% / 2,5% / 0%.
+  - Ekran hubu pokazuje reputację i cło u gospodarza oraz listę kontraktów z przyciskami „Przyjmij” i „Dostarcz”.
+  - Testy:
+    - `exchange::tests::contracts_pay_and_build_reputation`;
+    - przez WebSocket `a_faction_contract_is_taken_delivered_and_paid` (brama S1 „kontrakt NPC rozliczony”);
+    - e2e `hub.spec.ts`: najtańszy kontrakt przyjęty, kupiony w hubie, dostarczony i opłacony.
+  - Po S1 i scaleniu z terenem: `cargo test --workspace`, clippy, fmt; vitest 463/463; e2e `mock-ts` 18 przeszło + 1 pominięty (kontrakt tylko na serwerze), e2e `remote` **19 z 19** (2,4 min), oba przy 2 workerach.
+
+- **S2: korporacje (R-24, `exchange/corporation.rs`):**
+  - Założenie: nazwa, znacznik, siedziba w hubie; kosztuje kredyty i STA z towaru w siedzibie.
+  - Role: szef, oficerowie (najwyżej 3), członkowie. Zaproszenia po znaku wywoławczym. Szef nadaje role, może przekazać funkcję szefa i usunąć każdego; oficer usuwa członków.
+  - Skarbiec: kredyty i towary w hubie siedziby. Wpłaty od każdego członka, wypłaty od szefa i oficerów, każdy ruch w dzienniku z notatką.
+  - Tablica ogłoszeń. Szef, który zostaje sam, rozwiązuje korporację i odbiera skarbiec.
+  - Widok galaktyki zawiera korporację gracza, zaproszenia i listę wszystkich korporacji. Gracze na liście mają nazwę swojej korporacji.
+  - Klient: panel „Korporacja” (F4 albo „Korp.” w górnym pasku). Panele hubu i korporacji wzajemnie się zamykają. Wpłaty towarów są w API (`deposit {goods}`), w panelu na razie tylko kredyty.
+  - Testy:
+    - `corporation::tests::three_accounts_a_treasury_and_its_ledger`;
+    - przez WebSocket `a_corporation_of_three_accounts_with_a_deposit_and_a_withdrawal_in_its_ledger` (brama S2 „korporacja z 3 kont, wpłata i wypłata w dzienniku”, widziana przez każdego członka);
+    - e2e `corp.spec.ts` na `remote`: założenie, wpłata, wypłata, dziennik, tablica, rozwiązanie.
+  - Po S2: `cargo test --workspace`, clippy (0), fmt; vitest 463/463; e2e `mock-ts` 19 + 1 pominięty, e2e `remote` **20 z 20** (2,4 min), oba przy 2 workerach.
+
+Zmienne: `NPC_FACTIONS` (on), `NPC_SEED`, `NPC_PLAYERS` (6), `NPC_UPDATE_SECONDS` (600; dev 10), `NPC_DEPTH` (50), `HUB_FEE` (0,02), `START_CREDITS` (1000), `ORDER_HOURS` (168), `SHIPPING_SECONDS_PER_LY` (7200; dev 2), `SHIPPING_HANDLING_SECONDS` (1800; dev 2), `CONTRACT_HOURS` (48; dev 1), `CONTRACTS_PER_HUB` (3), `CORP_FOUNDING_CREDITS` (5000; dev 500), `CORP_FOUNDING_STA` (100; dev 0), `CORP_MAX_MEMBERS` (20), `ALLIANCE_MAX_CORPS` (5), `ALLIANCE_LEAVE_HOURS` (48; dev 0,01), `MEGAPROJECT_SCALE` (1; dev 0,02), `SEASON_DAYS` (90; dev 0 = ręcznie).
+
+**S3 (2026-11-10, R-27): sojusze, megaprojekty, rankingi, sezony.** Brama 05-SOCIAL S3 („megaprojekt ukończony wkładami 2 korporacji; sezon zamknięty i otwarty”) przechodzi w teście WebSocket `two_corporations_complete_an_alliance_gate_and_a_season_turns`:
+- dwie korporacje zakładają sojusz (zaproszenie po znaczniku, przyjęcie przez szefa);
+- prowadząca zaczyna bramę sojuszu w hubie Słońce;
+- obie kupują brakujące towary od frakcji i je oddają, a brama jest ukończona z udziałami obu;
+- ranking sezonu pokazuje oba konta i obie korporacje;
+- `closeSeason` (tryb dev) zapisuje sezon 1 w historii, zeruje rynek (kredyty startowe, bez megaprojektów) i uruchamia od nowa świat gracza; korporacje i sojusz zostają;
+- po restarcie serwera trwa sezon 2 z historią, a świat nie resetuje się drugi raz;
+- w produkcji `closeSeason` jest odrzucany, bo sezon kończy się sam po `SEASON_DAYS`.
+
+Moduły:
+- `exchange/alliance.rs`: sojusz 2–5 korporacji, zaproszenia, wypowiedzenie z okresem, rozwiązanie;
+- `exchange/megaproject.rs`: terminal i brama, wkłady z zapasu w hubie, efekty `fee_for` (prowizja zapisana w zleceniu) i `travel_for`;
+- `exchange/season.rs`: rankingi, zamknięcie sezonu.
+
+Testy modułów: `an_alliance_of_two_corporations_builds_a_gate`, `a_terminal_cuts_the_fee_in_its_hub`, `rankings_and_a_season_closed_and_opened`.
+
+Serwer:
+- 9 nowych operacji galaktyki;
+- sezon w `AppState` i w migawce świata (`StoredWorld.season`);
+- `WorldMsg::NewSeason` restartuje działające światy, a uśpione startują od nowa przy wybudzeniu.
+
+Klient:
+- w panelu korporacji (F4) sekcje „Sojusz” i „Megaprojekty” (`hud/corp-projects.ts`: pasek postępu, braki, udziały korporacji, „Daj z hubu” z własnego zapasu);
+- panel „Rankingi” (F7, `hud/rankings-panel.ts`: sezon, moje miejsce, cztery listy, poprzednie sezony);
+- e2e `e2e/social.spec.ts` na remote: terminal zbudowany z towarów kupionych w hubie, sojusz, rankingi.
+
+Brakuje względem B6 i 05-SOCIAL (następne kroki):
+- Ekran hubu: księga zleceń poziomami (dane już są w widoku), handel dwóch graczy w e2e (jest w teście WebSocket).
+- Specjalizacje frakcji (które materiały skupują chętniej, jakie kontrakty wystawiają) i receptury za reputację 50.
+- Korporacje: wymóg portu L2 przy założeniu (świat musi zgłaszać poziom portu), kontrakty wewnętrzne bez prowizji, czat (korporacji, sojuszu, hubu), flaga i kolor (06), biblioteka projektów Atanora (AT6).
+- S3 dalej:
+  - Stacja badawcza (premia w świecie);
+  - wspólna tablica kontraktów sojuszu;
+  - wartość netto z budynkami i magazynami światów;
+  - rankingi projektów Atanora (SOC-4 B);
+  - kosmetyka i osiągnięcia przenoszone między sezonami (06).
+- Osobne tabele PostgreSQL dla zleceń, przesyłek i korporacji z transakcjami SQL (plan §8), gdy rynek wyjdzie poza jeden węzeł.
+
+Przesyłki a awaria serwera (2026-11-10): przedtem wysyłka mogła przepaść, jeśli serwer padł między rozkazem `SHIP_TO_HUB` a zapisem `galaxy.json`. Teraz obie połowy przesyłki są zapisane w kolejności.
+- Świat zgłasza wysyłkę do galaktyki i potwierdza przyjęcie dostawy dopiero wtedy, gdy rozkaz jest w jego dzienniku na dysku (`RepoOp::Then` w kolejce wątku I/O).
+- Galaktyka zapisuje stan zaraz po wysyłce i po dostawie, przez swój wątek zapisu: po kolei, bez dwóch zapisów naraz.
+- Świat odtworzony z dysku zgłasza jeszcze raz wysyłki z końcówki dziennika, czyli zdarzenia `follow`.
+- Rynek pamięta przyjęte wysyłki przez 7 dni (`departures`), więc ponowne zgłoszenie, także po dotarciu, nie liczy się drugi raz.
+- Sprawdzają to:
+  - `exchange::tests` (ponowne zgłoszenie po dotarciu);
+  - `world::tests::trade_crosses_into_the_galaxy_and_back_once`: zgłoszenie po zapisie dziennika i świat odtworzony „po awarii” zgłasza wysyłkę ponownie.
+- Zostaje okno między zapisem pliku a `fsync`: utrata zasilania, nie awaria procesu.
 
 ## Czego port nie zawiera
 
-- `galaxy-sim.ts` i `MockServer` nie są częścią `game-core`; mieszkają w `game-session` (B3). Czy NPC mają działać na serwerze produkcyjnym, rozstrzyga wciąż otwarte pytanie R-7.
+- `galaxy-sim.ts` i `MockServer` nie są częścią `game-core`; mieszkają w `game-session` (B3). Na serwerze `GalaxySim` napędza frakcje NPC usługi galaktyki (R-7), a nie pojedyncze światy.
 - Edytor maszyny po stronie klienta (`atanor/editor/solution-edit.ts`) poza dwoma sprawdzeniami, które serwer powtarza przy wdrożeniu (`programIssues`, `solutionKey`).
 
 Po każdej zmianie domeny TS: `npm run conformance:catalog`, `conformance:stars`, `conformance:vectors`, `conformance:replays` (z zacommitowanej rewizji, zob. `web-game/tools/conformance/README.md`), potem `cargo test --workspace`.

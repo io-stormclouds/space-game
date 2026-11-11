@@ -14,22 +14,32 @@ use game_core::sim::scenarios::Rng;
 
 use crate::contract::{MarketHub, MarketQuote, SimulatedPlayer};
 
+/// A hub: id, name (Polish), star.
+pub type HubDef = (&'static str, &'static str, &'static str);
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct GalaxyOptions {
     pub seed: i32,
     pub players: usize,
     /// Model minutes between market and player updates.
     pub update_every: f64,
+    /// Hubs with a market.
+    pub hubs: &'static [HubDef],
 }
 
-pub const DEFAULT_GALAXY_OPTIONS: GalaxyOptions = GalaxyOptions { seed: 20_261_107, players: 6, update_every: 10.0 };
+/// The canvas hubs (the mock's).
+pub const CANVAS_HUBS: [HubDef; 2] = [("hub-sirius", "Syriusz", "Sirius A"), ("hub-sol", "Słońce", "Sol (Sun)")];
+
+pub const DEFAULT_GALAXY_OPTIONS: GalaxyOptions = GalaxyOptions { seed: 20_261_107, players: 6, update_every: 10.0, hubs: &CANVAS_HUBS };
 
 const CALLSIGNS: [&str; 12] =
     ["Ares", "Lyra", "Kestrel", "Wega", "Orion", "Nadir", "Halley", "Kepler", "Rigel", "Tycho", "Cassini", "Hydra"];
 const CORPORATIONS: [&str; 6] =
     ["Konsorcjum Orion", "Kolektyw Hel-3", "Gildia Ferrytu", "Spółka Kriogen", "Syndykat Kwantyt", "Unia Lagrange"];
 const CANVAS_HOMES: [&str; 2] = ["Procyon A", "Alpha Centauri"];
-const HUBS: [(&str, &str, &str); 2] = [("hub-sirius", "Syriusz", "Sirius A"), ("hub-sol", "Słońce", "Sol (Sun)")];
+/// How far one trade moves a ratio: buying (or selling) `depth` units from a faction multiplies its
+/// demand/supply ratio by e^±0.1 (the price by about ±3%).
+pub const TRADE_IMPACT: f64 = 0.1;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default)]
 pub struct MarketState {
@@ -77,8 +87,26 @@ impl GalaxySim {
             Some(s) => s,
             None => sim.initial(),
         };
+        // a hub added since the state was saved opens with a market of its own
+        for (id, _, _) in opts.hubs {
+            if !sim.state.markets.contains_key(*id) {
+                let m = sim.fresh_market();
+                sim.state.markets.insert(id.to_string(), m);
+            }
+        }
         sim.state.rng = sim.rng.state;
         sim
+    }
+
+    fn fresh_market(&mut self) -> MarketState {
+        let mut m = MarketState::default();
+        for mat in self.materials.clone() {
+            let r = self.rng.range(0.7, 1.4);
+            m.price.insert(mat.clone(), self.price_of(&mat, r));
+            m.ratio.insert(mat.clone(), r);
+            m.change.insert(mat, 0.0);
+        }
+        m
     }
 
     fn initial(&mut self) -> GalaxySimState {
@@ -103,17 +131,49 @@ impl GalaxySim {
             });
         }
         let mut markets = IndexMap::new();
-        for (id, _, _) in HUBS {
-            let mut m = MarketState::default();
-            for mat in self.materials.clone() {
-                let r = self.rng.range(0.7, 1.4);
-                m.price.insert(mat.clone(), self.price_of(&mat, r));
-                m.ratio.insert(mat.clone(), r);
-                m.change.insert(mat, 0.0);
-            }
+        for (id, _, _) in self.opts.hubs {
+            let m = self.fresh_market();
             markets.insert(id.to_string(), m);
         }
         GalaxySimState { rng: self.rng.state, last_update: 0.0, players, markets }
+    }
+
+    /// Price P of a material at a hub [kr].
+    pub fn price(&self, hub: &str, material: &str) -> Option<f64> {
+        self.state.markets.get(hub)?.price.get(material).copied()
+    }
+
+    /// Base value V of a material [kr].
+    pub fn value(&self, material: &str) -> Option<f64> {
+        self.values.get(material).copied()
+    }
+
+    /// A trade with the hub's faction moves its demand/supply ratio: `units` bought from it (> 0)
+    /// raise the price, sold to it (< 0) lower it; `depth` is the faction's depth per update.
+    pub fn trade(&mut self, hub: &str, material: &str, units: f64, depth: f64) {
+        if depth <= 0.0 || units == 0.0 {
+            return;
+        }
+        let Some(r) = self.state.markets.get(hub).and_then(|m| m.ratio.get(material)).copied() else { return };
+        let r = (r * libm::exp(TRADE_IMPACT * units / depth)).clamp(0.25, 4.0);
+        let p = self.price_of(material, r);
+        let m = self.state.markets.get_mut(hub).expect("hub exists");
+        m.ratio.insert(material.to_string(), r);
+        m.price.insert(material.to_string(), p);
+    }
+
+    /// Model minute of the last update.
+    pub fn last_update(&self) -> f64 {
+        self.state.last_update
+    }
+
+    /// Skips updates beyond `max` before `t` (a server that slept long does not replay months of
+    /// random walk); then [`GalaxySim::advance`] runs at most `max`.
+    pub fn fast_forward(&mut self, t: f64, max: u32) {
+        let pending = ((t - self.state.last_update) / self.opts.update_every).floor();
+        if pending > max as f64 {
+            self.state.last_update += (pending - max as f64) * self.opts.update_every;
+        }
     }
 
     fn price_of(&self, material: &str, ratio: f64) -> f64 {
@@ -167,7 +227,9 @@ impl GalaxySim {
     }
 
     pub fn hubs(&self) -> Vec<MarketHub> {
-        HUBS.iter()
+        self.opts
+            .hubs
+            .iter()
             .map(|(id, name, star)| {
                 let m = &self.state.markets[*id];
                 let quotes = self

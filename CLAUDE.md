@@ -24,7 +24,7 @@ Zadanie jest skończone dopiero, gdy bramka dla zmienionego obszaru jest **zielo
 
 ## Zasady twarde
 
-- **R-20:** TS `web-game/packages/domain/src/sim/` jest zamrożony; nowe reguły gry tylko w Rust (`server/crates/game-core`), z parytetem i złotymi powtórkami (`server/conformance`). Nie wykonuj `cargo update` bez potrzeby (`Cargo.lock` przypina wersje pod toolchain `windows-gnu`).
+- **R-2 (plan 02 §3):** TS `web-game/packages/domain/src/sim/` jest zamrożony; nowe reguły gry tylko w Rust (`server/crates/game-core`), z parytetem i złotymi powtórkami (`server/conformance`). Nie wykonuj `cargo update` bez potrzeby (`Cargo.lock` przypina wersje pod toolchain `windows-gnu`).
 - **Nie zgadujesz.** Niejasność wymagań, sprzeczność ustaleń albo brak decyzji → zapisz pytanie w raporcie zadania (opcje + rekomendacja), oznacz zadanie jako zablokowane i weź następne niezależne. Nie wymyślaj mechaniki.
 - Nie zmieniasz `docs/DECISIONS.md`, kontraktów protokołu (`game-protocol`, `GameApi`) ani liczb ekonomii bez zadania, które tego wprost wymaga; wtedy opisz zmianę w raporcie.
 - Zero zmian poza zakresem zadania; zero refaktorów „przy okazji”.

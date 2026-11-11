@@ -24,12 +24,15 @@ async function ready(page: Page): Promise<void> {
 
 /** Clicks the Fabryka atanorowa on the planet (one of its 7 tiles on the near side). */
 async function selectFactory(page: Page): Promise<void> {
-  const hits = await page.evaluate(() => {
-    const w = (window as Window & { wgWorld?: Hook }).wgWorld!;
-    const atn = w.structures('ATN')[0]!;
-    return w.frontTiles(atn.bodyId).filter((p) => atn.tiles.includes(p.index) && document.elementFromPoint(p.x, p.y)?.tagName === 'CANVAS');
-  });
-  expect(hits.length).toBeGreaterThan(0);
+  const find = () =>
+    page.evaluate(() => {
+      const w = (window as Window & { wgWorld?: Hook }).wgWorld!;
+      const atn = w.structures('ATN')[0]!;
+      return w.frontTiles(atn.bodyId).filter((p) => atn.tiles.includes(p.index) && document.elementFromPoint(p.x, p.y)?.tagName === 'CANVAS');
+    });
+  // right after a view switch the camera may still be flying to the planet: wait for the tiles
+  let hits = await find();
+  await expect.poll(async () => (hits = await find()).length, { timeout: 10_000 }).toBeGreaterThan(0);
   await page.mouse.click(hits[0]!.x, hits[0]!.y);
   await expect(card(page)).toContainText('Fabryka atanorowa');
 }

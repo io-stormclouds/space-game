@@ -15,6 +15,7 @@ import type {
   TileInfo,
   Unsubscribe,
 } from './contract';
+import type { GalaxyOp, GalaxyReply, GalaxyView } from './galaxy';
 import type { ReplyValue, Request, WorkerLike, WorkerMessage } from './protocol';
 
 /** GameApi over a Web Worker that runs the mock server (W03 A). */
@@ -24,7 +25,9 @@ export function createWorkerGameApi(worker: WorkerLike): GameApi {
   const snapshotListeners = new Set<(s: GameSnapshot) => void>();
   const eventListeners = new Set<(e: DomainEvent[]) => void>();
   const frameListeners = new Set<(f: FrameData) => void>();
+  const galaxyListeners = new Set<(v: GalaxyView) => void>();
   let latest: GameSnapshot | null = null;
+  let latestGalaxy: GalaxyView | null = null;
 
   const onMessage = (e: MessageEvent<WorkerMessage>) => {
     const msg = e.data;
@@ -46,6 +49,10 @@ export function createWorkerGameApi(worker: WorkerLike): GameApi {
         return;
       case 'frame':
         for (const l of frameListeners) l(msg.frame);
+        return;
+      case 'galaxy':
+        latestGalaxy = msg.view;
+        for (const l of galaxyListeners) l(msg.view);
         return;
     }
   };
@@ -85,6 +92,11 @@ export function createWorkerGameApi(worker: WorkerLike): GameApi {
     onSnapshot: (l) => subscribe(snapshotListeners, l),
     onEvents: (l) => subscribe(eventListeners, l),
     onFrame: (l) => subscribe(frameListeners, l),
+    galaxy: <T extends GalaxyReply = GalaxyReply>(op: GalaxyOp) => call<T>({ kind: 'galaxy', op }),
+    onGalaxy: (l) => {
+      if (latestGalaxy) l(latestGalaxy);
+      return subscribe(galaxyListeners, l);
+    },
     dispose() {
       worker.removeEventListener('message', onMessage);
       worker.terminate();

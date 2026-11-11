@@ -1,4 +1,4 @@
-import type { ReplyValue, Request, RequestMessage, WorkerMessage } from '@space-game/api';
+import { NO_TRADE, type ReplyValue, type Request, type RequestMessage, type WorkerMessage } from '@space-game/api';
 import { MockServer, type MockServerOptions } from './server';
 
 /** Requests that do not change the game (no snapshot push after them). */
@@ -114,6 +114,8 @@ export class ServerHost {
         return s.economyReport(r.economy);
       case 'nominalFlows':
         return s.nominalFlows(r.bodyId);
+      case 'galaxy':
+        throw new Error(NO_TRADE);
     }
   }
 }

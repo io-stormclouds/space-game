@@ -12,6 +12,7 @@ import type {
   Tempo,
   TileInfo,
 } from './contract';
+import type { GalaxyOp, GalaxyReply, GalaxyView } from './galaxy';
 
 // Messages between the UI thread and the mock server in a Web Worker. Requests carry an id; the
 // worker answers each with a `reply` of the same id. Pushes (snapshot, events, frame) have no id.
@@ -33,7 +34,9 @@ export type Request =
   | { kind: 'suggestTile'; bodyId: BodyId; buildingKind: string; material?: string }
   | { kind: 'tileInfo'; bodyId: BodyId; tileIndex: number }
   | { kind: 'economyReport'; economy?: EconomyParams }
-  | { kind: 'nominalFlows'; bodyId: BodyId };
+  | { kind: 'nominalFlows'; bodyId: BodyId }
+  // the galaxy service (server only); on the wire `{ id, galaxy: op }`
+  | { kind: 'galaxy'; op: GalaxyOp };
 
 export type RequestMessage = { id: number; request: Request };
 
@@ -48,6 +51,7 @@ export type ReplyValue =
   | EconomyReport
   | NominalFlows
   | TileInfo
+  | GalaxyReply
   | null;
 
 export type WorkerMessage =
@@ -55,7 +59,8 @@ export type WorkerMessage =
   | { type: 'reply'; id: number; ok: false; error: string }
   | { type: 'snapshot'; snapshot: GameSnapshot }
   | { type: 'events'; events: DomainEvent[] }
-  | { type: 'frame'; frame: FrameData };
+  | { type: 'frame'; frame: FrameData }
+  | { type: 'galaxy'; view: GalaxyView };
 
 /** The part of a Worker the client needs (also lets tests pass a fake). */
 export interface WorkerLike {

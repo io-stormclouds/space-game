@@ -41,6 +41,15 @@ const MAX_STOCKS = 7;
           }
         </nav>
         <div class="seg">
+          <button type="button" data-action="hub" [attr.aria-pressed]="ui.hubOpen()" aria-keyshortcuts="F3" [title]="t.hub.toggleHint" (click)="ui.toggleHub()">
+            {{ t.hub.toggle }}
+          </button>
+          <button type="button" data-action="corp" [attr.aria-pressed]="ui.corpOpen()" aria-keyshortcuts="F4" [title]="t.corp.toggleHint" (click)="ui.toggleCorp()">
+            {{ t.corp.toggle }}
+          </button>
+          <button type="button" data-action="rankings" [attr.aria-pressed]="ui.rankingsOpen()" aria-keyshortcuts="F7" [title]="t.rankings.toggleHint" (click)="ui.toggleRankings()">
+            {{ t.rankings.toggle }}
+          </button>
           <button type="button" data-action="designer" [attr.aria-pressed]="designer.open()" aria-keyshortcuts="F2" [title]="t.designer.toggleHint" (click)="designer.toggle()">
             {{ t.designer.toggle }}
           </button>

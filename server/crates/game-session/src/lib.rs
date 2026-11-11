@@ -6,11 +6,15 @@
 //! events, frame). The same code runs in the browser worker (`game-wasm`, plan 02 B3) and in the
 //! network server (`game-server`, B4), so both behave like the TypeScript mock.
 //!
+//! [`exchange::Exchange`] is the shared market of the galaxy service (B6): hubs, order books,
+//! credits, shipments and the NPC factions; only the server runs it.
+//!
 //! No I/O and no clock of its own: the caller passes the time (`now_ms`) and a step timer.
 
 #![forbid(unsafe_code)]
 
 pub mod contract;
+pub mod exchange;
 pub mod galaxy;
 pub mod host;
 pub mod session;

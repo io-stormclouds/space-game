@@ -8,6 +8,7 @@ pub mod colony;
 pub mod construction;
 pub mod docking;
 pub mod extraction;
+pub mod hub;
 pub mod mining;
 pub mod production;
 pub mod rover;

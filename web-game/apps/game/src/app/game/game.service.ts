@@ -10,6 +10,9 @@ import type {
   EconomyParams,
   EconomyReport,
   FrameData,
+  GalaxyOp,
+  GalaxyReply,
+  GalaxyView,
   GameApi,
   GameSnapshot,
   NominalFlows,
@@ -47,6 +50,8 @@ export class GameService {
   readonly lastRejection = signal<Extract<DomainEvent, { type: 'COMMAND_REJECTED' }> | null>(null);
   /** Latest per-frame positions (mutable, read by the renderer). */
   frame: FrameData | null = null;
+  /** The player's view of the galaxy's market (B6); null without the game server. */
+  readonly galaxy = signal<GalaxyView | null>(null);
 
   readonly world = computed(() => this.snapshot()?.world ?? null);
   readonly time = computed(() => this.snapshot()?.world.time ?? 0);
@@ -62,6 +67,7 @@ export class GameService {
       this.api.onSnapshot((s) => this.snapshot.set(s)),
       this.api.onEvents((events) => this.record(events)),
       this.api.onFrame((f) => (this.frame = f)),
+      this.api.onGalaxy((v) => this.galaxy.set(v)),
     ];
     inject(DestroyRef).onDestroy(() => {
       off.forEach((o) => o());
@@ -108,6 +114,11 @@ export class GameService {
 
   nominalFlows(bodyId: BodyId): Promise<NominalFlows> {
     return this.api.nominalFlows(bodyId);
+  }
+
+  /** A request to the galaxy's market (fails without the game server). */
+  galaxyOp<T extends GalaxyReply>(op: GalaxyOp): Promise<T> {
+    return this.api.galaxy<T>(op);
   }
 
   /** Display names from the dictionary where the UI differs from the catalog (HQ → Port kosmiczny). */

@@ -12,7 +12,8 @@ use super::reducer::{ScanState, WorldState, reduce_all};
 use super::rules::Rules;
 use super::scenario::{Grids, Scenario, build_world_grids, create_world, landing_pad_tile_of, pad_docking_offset, scenario_constants};
 use super::systems::{
-    AtanorSystem, ExtractionSystem, MiningSystem, RoverSystem, TransferSystem, atanor, build, colony, construction, docking, production,
+    AtanorSystem, ExtractionSystem, MiningSystem, RoverSystem, TransferSystem, atanor, build, colony, construction, docking, hub,
+    production,
 };
 use crate::economy::{Economy, StorageClass};
 use crate::ids::{BodyId, RoverId, ShipId};
@@ -226,6 +227,10 @@ impl Simulation {
             Command::SaveAtanorDraft { structure_id, solution } => vec![atanor::save_draft(&self.world, structure_id, solution)],
             Command::DeployAtanor { structure_id, solution } => {
                 vec![atanor::deploy(&self.world, &self.rules, structure_id, solution)]
+            }
+            Command::ShipToHub { body_id, hub_id, cargo } => vec![hub::ship_to_hub(&self.world, body_id, hub_id, cargo)],
+            Command::HubDelivery { shipment_id, body_id, cargo } => {
+                vec![hub::hub_delivery(&self.world, shipment_id, body_id, cargo)]
             }
         };
         self.apply(&events, &mut all);

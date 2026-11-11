@@ -7,13 +7,21 @@ import type { RequestMessage, WorkerLike, WorkerMessage } from './protocol';
 // checks a state hash every few seconds. The UI's queries are answered by the replica; requests that
 // change the game go to the server. To the UI it is a worker like the mock's.
 
-/** Version of the WebSocket protocol; 2: the client keeps a replica (no snapshots on the wire). */
-export const REMOTE_PROTOCOL_VERSION = 2;
+/**
+ * Version of the WebSocket protocol; 2: the client keeps a replica (no snapshots on the wire);
+ * 3: the galaxy service (`{ id, galaxy }` requests, `{ type: 'galaxy', view }` pushes), and server
+ * worlds without a galaxy of their own (the replica shows the service's hubs and players).
+ */
+export const REMOTE_PROTOCOL_VERSION = 3;
 
-export interface RemoteCredentials {
-  callsign: string;
-  password: string;
-}
+/**
+ * How the replica logs in (R-25):
+ * - `{ session, guest }`: a one-time ticket of the session cookie (HTTP API at `session`, see
+ *   `account.ts`) for every connection; with `guest`, a guest account when nobody is logged in;
+ * - `{ callsign, password }`: in the hello itself, on servers that allow it (`PASSWORD_HELLO`: dev
+ *   mode, tools, tests).
+ */
+export type RemoteCredentials = { session: string; guest?: boolean } | { callsign: string; password: string };
 
 /** The server's answer to the login (hello). */
 export interface Welcome {

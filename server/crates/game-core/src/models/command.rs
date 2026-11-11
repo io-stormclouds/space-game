@@ -69,4 +69,30 @@ pub enum Command {
         structure_id: String,
         solution: Solution,
     },
+    /// Trade (B6, 05-SOCIAL §3.2): the cargo leaves the body's storage for a hub of the galaxy. The
+    /// world only lets it go; the galaxy service carries it (the server checks the hub id).
+    ShipToHub {
+        body_id: BodyId,
+        hub_id: String,
+        cargo: Cost,
+    },
+    /// System command: a shipment from a hub lands in the body's storage. The server writes it into
+    /// the world's log when the galaxy says it arrived; a client may not send it.
+    HubDelivery {
+        shipment_id: String,
+        body_id: BodyId,
+        cargo: Cost,
+    },
+}
+
+impl Command {
+    /// Commands only the server issues (the bridge from the galaxy into a world).
+    pub fn is_system(&self) -> bool {
+        matches!(self, Command::HubDelivery { .. })
+    }
+
+    /// Commands that only make sense with the galaxy service behind the world.
+    pub fn needs_galaxy(&self) -> bool {
+        matches!(self, Command::ShipToHub { .. } | Command::HubDelivery { .. })
+    }
 }

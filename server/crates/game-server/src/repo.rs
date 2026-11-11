@@ -4,9 +4,9 @@
 //! result equals the replay of the whole command log from the scenario's start (tested), which stays
 //! the fallback.
 //!
-//! Adapter for one node: files under `DATA_DIR/worlds/<world>/` (`world.json`, `log.jsonl`), written
-//! by one I/O thread fed through a channel, so a world's loop never waits for the disk (rule from
-//! `init.md`). PostgreSQL (`world_snapshots`, `world_commands`, `world_schedule`) is the next adapter.
+//! Adapters: files under `DATA_DIR/worlds/<world>/` (`world.json`, `log.jsonl`) and PostgreSQL
+//! (`world_snapshots`, `world_log`; `storage.rs`, R-26). Either is written by one I/O thread fed
+//! through a channel, so a world's loop never waits for the disk (rule from `init.md`).
 
 use std::fs::{self, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
@@ -32,6 +32,10 @@ pub struct StoredWorld {
     /// the log tail is replayed. Missing in snapshots written before it existed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sim: Option<SimState>,
+    /// The galaxy's season the world belongs to (S3); a world of an older season starts anew.
+    /// Missing in snapshots written before seasons: the season running.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub season: Option<u32>,
 }
 
 /// One line of `log.jsonl`: what changed after the snapshot.
@@ -47,6 +51,20 @@ pub trait WorldRepository: Send + 'static {
     /// New snapshot; the log restarts empty after it.
     fn write_snapshot(&self, world: &str, stored: &StoredWorld) -> std::io::Result<()>;
     fn append(&self, world: &str, entry: &LogEntry) -> std::io::Result<()>;
+}
+
+impl<T: WorldRepository + ?Sized> WorldRepository for Box<T> {
+    fn load(&self, world: &str) -> std::io::Result<Option<(StoredWorld, Vec<LogEntry>)>> {
+        (**self).load(world)
+    }
+
+    fn write_snapshot(&self, world: &str, stored: &StoredWorld) -> std::io::Result<()> {
+        (**self).write_snapshot(world, stored)
+    }
+
+    fn append(&self, world: &str, entry: &LogEntry) -> std::io::Result<()> {
+        (**self).append(world, entry)
+    }
 }
 
 pub struct FileRepository {
@@ -142,6 +160,10 @@ pub enum RepoOp {
     },
     /// Answers when every operation sent before it is done (shutdown, tests).
     Flush(std::sync::mpsc::Sender<()>),
+    /// Runs once every operation sent before it is written: what other services hear of a command
+    /// (a shipment to a hub, a delivery taken) follows the command in the log, so a crash between
+    /// the two never leaves the galaxy ahead of the world.
+    Then(Box<dyn FnOnce() + Send>),
 }
 
 /// Sender side of the I/O thread. Cloned into every world.
@@ -157,11 +179,15 @@ impl Persister {
             .name("world-io".into())
             .spawn(move || {
                 for op in rx {
-                    let result = match &op {
-                        RepoOp::Snapshot { world, stored } => repo.write_snapshot(world, stored),
-                        RepoOp::Append { world, entry } => repo.append(world, entry),
+                    let result = match op {
+                        RepoOp::Snapshot { world, stored } => repo.write_snapshot(&world, &stored),
+                        RepoOp::Append { world, entry } => repo.append(&world, &entry),
                         RepoOp::Flush(done) => {
                             let _ = done.send(());
+                            Ok(())
+                        }
+                        RepoOp::Then(f) => {
+                            f();
                             Ok(())
                         }
                     };

@@ -257,6 +257,18 @@ pub enum DomainEvent {
         produced: Stockpile,
         count: u64,
     },
+    // trade with the hubs (B6): the cargo left for a hub, a shipment from a hub landed
+    ShipmentDeparted {
+        shipment_id: String,
+        body_id: BodyId,
+        hub_id: String,
+        cargo: Stockpile,
+    },
+    HubDelivered {
+        shipment_id: String,
+        body_id: BodyId,
+        cargo: Stockpile,
+    },
     CommandRejected {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         ship_id: Option<ShipId>,
@@ -318,6 +330,8 @@ impl DomainEvent {
             DomainEvent::AtanorDeployed { .. } => "ATANOR_DEPLOYED",
             DomainEvent::AtanorConsumed { .. } => "ATANOR_CONSUMED",
             DomainEvent::AtanorDelivered { .. } => "ATANOR_DELIVERED",
+            DomainEvent::ShipmentDeparted { .. } => "SHIPMENT_DEPARTED",
+            DomainEvent::HubDelivered { .. } => "HUB_DELIVERED",
             DomainEvent::CommandRejected { .. } => "COMMAND_REJECTED",
         }
     }
