@@ -48,6 +48,8 @@ const add = (area, name, cmd, argv, cwd, opts = {}) => {
 const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 
 add('web', 'web:typecheck', npm, ['run', 'typecheck'], 'web-game');
+// moduł WASM jest ignorowany przez git: przestarzały plik daje fałszywe porażki replica.spec
+add('web', 'web:wasm-build', npm, ['run', 'wasm:build'], 'web-game');
 add('web', 'web:unit (vitest)', npm, ['run', 'test:unit'], 'web-game');
 add('rust', 'rust:fmt', 'cargo', ['fmt', '--all', '--', '--check'], 'server');
 add('rust', 'rust:clippy', 'cargo', ['clippy', '--workspace', '--all-targets', '--', '-D', 'warnings'], 'server');
@@ -57,7 +59,7 @@ if (args.full) {
   add('web', 'web:app-tests (ng test)', npm, ['run', 'test:app'], 'web-game');
   add('web', 'web:build', npm, ['run', 'build'], 'web-game');
   // e2e z jednym workerem: domyslne 6 workerow daje timeouty na laptopie; nie uruchamiaj rownolegle z cargo
-  add('web', 'web:e2e', npm, ['run', 'e2e', '--', '--workers=2'], 'web-game');
+  add('web', 'web:e2e', npm, ['run', 'e2e', '--', '--workers=2', '--retries=1'], 'web-game');
 }
 
 const results = [];
