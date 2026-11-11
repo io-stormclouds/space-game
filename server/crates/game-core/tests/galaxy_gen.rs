@@ -506,6 +506,17 @@ fn density_matches_the_parameter() {
     }
     let empty = GalaxyParams { stars_per_cell: 0.0, ..params() };
     assert_eq!(far_stars(&empty, 200).len(), 0);
+
+    // neighbouring cells are independent: the number of stars in a cell says nothing about the next one.
+    // The first 10 000 far cells are a 100 × 100 sheet: cell i + 1 is the next along x, cell i + 100 along y.
+    let p = GalaxyParams { stars_per_cell: 2.5, ..params() };
+    let counts: Vec<f64> = (0..10_000).map(|i| stars_in_cell(&p, far_cell(i)).len() as f64).collect();
+    let along_x: (Vec<f64>, Vec<f64>) = (0..10_000).filter(|i| i % 100 != 99).map(|i| (counts[i], counts[i + 1])).unzip();
+    let along_y: (Vec<f64>, Vec<f64>) = (0..9_900).map(|i| (counts[i], counts[i + 100])).unzip();
+    for (axis, (here, next)) in [("x", along_x), ("y", along_y)] {
+        let r = pearson(&here, &next);
+        assert!(r.abs() <= 0.05, "star counts of neighbouring cells along {axis}: correlation {r}");
+    }
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -747,6 +758,17 @@ fn system_type_distribution_within_bounds() {
     // belts: 40 % ± 2 points
     let belts = share(systems.iter().filter(|s| s.belt.is_some()).count(), systems.len());
     assert!((belts - rules.belt_share).abs() <= 0.02, "{belts:.4} of the systems have a belt, the parameters say {}", rules.belt_share);
+
+    // two stars of one cell draw their systems independently: both are empty in 25 % of 25 % of such pairs, ± 2.5 points
+    let pairs: Vec<&[SystemSpec]> =
+        systems.windows(2).filter(|w| w[0].star.key.index == 0 && w[1].star.key.cell == w[0].star.key.cell).collect();
+    assert!(pairs.len() >= 2_000, "most cells hold two stars or more: {} pairs", pairs.len());
+    let both_empty = share(pairs.iter().filter(|w| w[0].planets.is_empty() && w[1].planets.is_empty()).count(), pairs.len());
+    let independent = rules.empty_share * rules.empty_share;
+    assert!(
+        (both_empty - independent).abs() <= 0.025,
+        "both systems of a cell are empty in {both_empty:.4} of the pairs, independent draws give {independent:.4}"
+    );
 
     // the shares follow the parameters: the defaults give other numbers
     let defaults = params();
@@ -1050,13 +1072,27 @@ fn placement_is_deterministic() {
 
     // the set of occupied stars decides, not the order they are listed in
     let next = place_account(&p, &first, &RULES);
+    assert!(next.is_some());
+    let mut orders: Vec<Vec<StarKey>> = (1..first.len())
+        .map(|by| {
+            let mut rotated = first.clone();
+            rotated.rotate_left(by);
+            rotated
+        })
+        .collect();
     let mut reversed = first.clone();
     reversed.reverse();
-    assert_eq!(place_account(&p, &reversed, &RULES), next);
-    let mut rotated = first.clone();
-    rotated.rotate_left(17);
-    assert_eq!(place_account(&p, &rotated, &RULES), next);
-    assert!(next.is_some());
+    orders.push(reversed);
+    let mut sorted = first.clone();
+    sorted.sort();
+    orders.push(sorted);
+    for (i, order) in orders.iter().enumerate() {
+        assert_eq!(place_account(&p, order, &RULES), next, "order {i} of the same occupied stars");
+    }
+    // a star listed twice is still one occupied star
+    let mut doubled = first.clone();
+    doubled.extend_from_slice(&first[..10]);
+    assert_eq!(place_account(&p, &doubled, &RULES), next);
 }
 
 #[test]
@@ -1070,6 +1106,11 @@ fn placement_never_returns_an_occupied_system() {
     for key in placed {
         assert_eq!(star_at(&p, *key).origin, StarOrigin::Generated, "{key:?}: accounts start at generated stars");
     }
+
+    // the distance bounds are not what keeps occupied stars out: with no minimum every account still gets its own star
+    let open = PlacementParams { min_ly: 0.0, ..RULES };
+    let close: HashSet<StarKey> = place_many(&p, &open, 60).into_iter().collect();
+    assert_eq!(close.len(), 60, "60 accounts with min_ly = 0, 60 different stars");
 }
 
 #[test]
@@ -1091,6 +1132,14 @@ fn nearest_neighbour_distance_within_bounds() {
     let dense = GalaxyParams { stars_per_cell: 6.0, ..params() };
     let rules = PlacementParams { origin_ly: [20_005.0, 55.0, -35.0], min_ly: 12.0, max_ly: 20.0 };
     check(&dense, &rules, &place_many(&dense, &rules, 60));
+
+    // a shell too thin to hold a star: nothing nearer than min_ly or farther than max_ly is offered in its place
+    let p = params();
+    let first = place_account(&p, &[], &RULES).expect("a start system near Sol");
+    for min_ly in [3.0, 9.0, 14.0] {
+        let shell = PlacementParams { min_ly, max_ly: min_ly + 1e-9, ..RULES };
+        assert_eq!(place_account(&p, &[first], &shell), None, "a shell at {min_ly} ly");
+    }
 }
 
 #[test]
