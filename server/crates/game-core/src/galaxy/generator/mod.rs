@@ -194,7 +194,9 @@ pub struct BeltSpec {
 
 /// The planetary system of a generated star.
 ///
-/// - `planets` are sorted by strictly growing `orbit_radius`, at most `max_planets` of them;
+/// - `planets` are sorted by strictly growing `orbit_radius`, at most `max_planets` of them; the
+///   number differs between systems, and some systems have three planets or more;
+/// - a system with planets and without a gas giant has a rocky planet (there is no third kind);
 /// - no two bodies touch: with the reach of a planet = its radius, or the largest
 ///   `orbit_radius + radius` of its moons, `star_body_radius < r₀ − reach₀` and
 ///   `rᵢ + reachᵢ < rᵢ₊₁ − reachᵢ₊₁`;

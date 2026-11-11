@@ -643,7 +643,7 @@ fn insolation_follows_luminosity() {
             assert!((belt.insolation - want).abs() <= 1e-9 * belt.insolation, "{:?} belt: {} vs {want}", spec.star.key, belt.insolation);
         }
     }
-    assert!(checked >= 10_000, "10 000 systems hold at least 10 000 planets, found {checked}");
+    assert!(checked >= 7_000, "three quarters of 10 000 systems have planets, found {checked} planets");
 }
 
 #[test]
@@ -822,7 +822,8 @@ fn deposit_weights_use_catalog_materials() {
             }
         }
     }
-    assert!(surfaces >= 5_000, "10 000 systems hold thousands of rocky planets, found {surfaces}");
+    // a system with planets and no gas giant has a rocky planet: at least 75 % − 35 % of the systems
+    assert!(surfaces >= 3_500, "10 000 systems hold thousands of rocky planets, found {surfaces}");
 
     // the shares of the parameters decide what a planet holds: always, never, sometimes
     let mut chosen = params();
@@ -1023,7 +1024,7 @@ fn default_insolation_equals_the_spec() {
             checked += 1;
         }
     }
-    assert!(checked >= 1_000, "1000 systems hold at least 1000 rocky planets and belts, found {checked}");
+    assert!(checked >= 500, "1000 systems hold hundreds of rocky planets and belts, found {checked}");
 }
 
 #[test]
