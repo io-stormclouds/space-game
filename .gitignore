@@ -22,3 +22,4 @@ server/target/
 
 # Rust game session for the browser (npm run wasm:build in web-game)
 web-game/apps/game/public/wasm/
+docs/reports/gate-last.json
