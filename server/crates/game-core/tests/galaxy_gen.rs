@@ -975,7 +975,6 @@ fn deposit_weights_use_catalog_materials() {
 // E1-06: the habitable zone as a calculation
 
 #[test]
-#[ignore = "E1-06"]
 fn habitable_zone_scales_with_sqrt_luminosity() {
     // insolation 1 at 900 around 1 L☉; a quarter of it twice as far
     let limits = ZoneLimits { inner_insolation: 1.0, outer_insolation: 0.25 };
@@ -1006,7 +1005,6 @@ fn habitable_zone_scales_with_sqrt_luminosity() {
 }
 
 #[test]
-#[ignore = "E1-06"]
 fn zone_labels_match_orbits() {
     let mut seen: HashSet<ZoneLabel> = HashSet::new();
     for limits in [ZoneLimits::default(), ZoneLimits { inner_insolation: 2.0, outer_insolation: 0.5 }] {

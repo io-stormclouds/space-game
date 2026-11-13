@@ -42,7 +42,7 @@ use super::{
 use crate::models::body::Atmosphere;
 
 /// Insolation 1 at this orbit around a star of 1 L☉ (FACT: `sim::colony::insolation_of`).
-const REFERENCE_ORBIT: f64 = 900.0;
+pub(super) const REFERENCE_ORBIT: f64 = 900.0;
 
 /// Minutes per circle at [`REFERENCE_ORBIT`] (FACT: the PoC planet).
 const REFERENCE_PERIOD: f64 = 240.0;

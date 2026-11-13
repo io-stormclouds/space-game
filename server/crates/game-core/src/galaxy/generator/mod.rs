@@ -274,25 +274,31 @@ pub fn generate_system(p: &GalaxyParams, star: StarKey) -> Option<SystemSpec> {
 
 /// The habitable zone of a star (task E1-06, G-22): `inner` = 900 × √(L / `inner_insolation`),
 /// `outer` = 900 × √(L / `outer_insolation`). A calculation only: no rule and no biome reads it.
-#[expect(unused_variables, reason = "skeleton: E1-06 implements it")]
 pub fn habitable_zone(limits: &ZoneLimits, luminosity: f64) -> HabitableZone {
-    unimplemented!("E1-06")
+    // the orbit where L × (900 / r)² equals the insolation; only ÷, √ and ×, all exact in IEEE 754
+    let edge = |insolation: f64| system::REFERENCE_ORBIT * (luminosity / insolation).sqrt();
+    HabitableZone { inner: edge(limits.inner_insolation), outer: edge(limits.outer_insolation) }
 }
 
 impl HabitableZone {
     /// Where an orbit lies: `Hot` below `inner`, `Cold` above `outer`, `Habitable` between, edges included (task E1-06).
-    #[expect(unused_variables, reason = "skeleton: E1-06 implements it")]
     pub fn label(&self, orbit_radius: f64) -> ZoneLabel {
-        unimplemented!("E1-06")
+        if orbit_radius < self.inner {
+            ZoneLabel::Hot
+        } else if orbit_radius > self.outer {
+            ZoneLabel::Cold
+        } else {
+            ZoneLabel::Habitable
+        }
     }
 }
 
 impl SystemSpec {
     /// The zone label of every planet, in the order of `planets` (task E1-06). Computed on demand, so
     /// a stored system follows a later change of the limits.
-    #[expect(unused_variables, reason = "skeleton: E1-06 implements it")]
     pub fn planet_zones(&self, limits: &ZoneLimits) -> Vec<ZoneLabel> {
-        unimplemented!("E1-06")
+        let zone = habitable_zone(limits, self.star.luminosity);
+        self.planets.iter().map(|planet| zone.label(planet.orbit_radius)).collect()
     }
 }
 
