@@ -26,6 +26,7 @@
 //!
 //! [`LY_PER_PARSEC`]: crate::galaxy::stars::LY_PER_PARSEC
 
+mod cell_stars;
 pub mod params;
 pub mod rng;
 
@@ -239,9 +240,10 @@ pub enum ZoneLabel {
 }
 
 /// The cell that holds a position: `floor(pos / cell_ly)` on each axis (task E1-04).
-#[expect(unused_variables, reason = "skeleton: E1-04 implements it")]
 pub fn cell_of(p: &GalaxyParams, pos_ly: [f64; 3]) -> CellCoord {
-    unimplemented!("E1-04")
+    // the cast saturates: a position beyond the range of `i32` cells lands in the outermost cell
+    let axis = |at: f64| libm::floor(at / p.cell_ly) as i32;
+    CellCoord { x: axis(pos_ly[0]), y: axis(pos_ly[1]), z: axis(pos_ly[2]) }
 }
 
 /// Every star of a cell (task E1-04).
@@ -253,9 +255,8 @@ pub fn cell_of(p: &GalaxyParams, pos_ly: [f64; 3]) -> CellCoord {
 /// register star is near, and each of them takes its class with probability share / Σ shares. A
 /// generated star never lies closer than `min_real_separation_ly` to a register star: such a
 /// candidate is left out, so cells near register stars hold fewer.
-#[expect(unused_variables, reason = "skeleton: E1-04 implements it")]
 pub fn stars_in_cell(p: &GalaxyParams, cell: CellCoord) -> Vec<StarSpec> {
-    unimplemented!("E1-04")
+    cell_stars::stars_in_cell(p, cell)
 }
 
 /// The planetary system of a generated star (task E1-05; plan 07 §5: `generate_system(seed, coords)`).
