@@ -314,7 +314,6 @@ fn neighbouring_cells_are_uncorrelated() {
 // E1-04: stars of a cell and the register of 41 stars
 
 #[test]
-#[ignore = "E1-04"]
 fn same_cell_same_stars_bytes() {
     let p = params();
     let cells =
@@ -335,7 +334,6 @@ fn same_cell_same_stars_bytes() {
 }
 
 #[test]
-#[ignore = "E1-04"]
 fn order_of_cells_does_not_matter() {
     let p = params();
     // a far cell, its neighbour, and the cell of Sol with register stars in it
@@ -392,7 +390,6 @@ fn check_separation(p: &GalaxyParams) -> usize {
 }
 
 #[test]
-#[ignore = "E1-04"]
 fn real_stars_are_kept() {
     let p = params();
 
@@ -458,7 +455,6 @@ fn real_stars_are_kept() {
 }
 
 #[test]
-#[ignore = "E1-04"]
 fn star_parameters_are_positive() {
     let p = round_params();
     let stars: Vec<StarSpec> = far_stars(&p, 4_000).into_iter().take(10_000).collect();
@@ -490,7 +486,6 @@ fn star_parameters_are_positive() {
 }
 
 #[test]
-#[ignore = "E1-04"]
 fn spectral_distribution_within_bounds() {
     for (name, p) in [("defaults", params()), ("round shares", round_params())] {
         let stars = far_stars(&p, 10_000);
@@ -508,7 +503,6 @@ fn spectral_distribution_within_bounds() {
 }
 
 #[test]
-#[ignore = "E1-04"]
 fn density_matches_the_parameter() {
     for mean in [3.0, 6.0] {
         let p = GalaxyParams { stars_per_cell: mean, ..params() };
