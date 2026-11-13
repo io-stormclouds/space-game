@@ -528,7 +528,6 @@ fn density_matches_the_parameter() {
 // E1-05: the planetary system of a star
 
 #[test]
-#[ignore = "E1-05"]
 fn same_star_same_system_bytes() {
     let p = params();
     let mut keys: Vec<StarKey> = far_stars(&p, 30).iter().map(|s| s.key).collect();
@@ -578,7 +577,6 @@ fn same_star_same_system_bytes() {
 }
 
 #[test]
-#[ignore = "E1-05"]
 fn systems_do_not_depend_on_generation_order() {
     let mut p = params();
     // moons of rocky planets take part: half of the planets have one here, whatever the default is
@@ -611,7 +609,6 @@ fn systems_do_not_depend_on_generation_order() {
 }
 
 #[test]
-#[ignore = "E1-05"]
 fn orbits_strictly_increase() {
     let p = round_params();
     let rules = &p.system;
@@ -648,7 +645,6 @@ fn orbits_strictly_increase() {
 }
 
 #[test]
-#[ignore = "E1-05"]
 fn insolation_follows_luminosity() {
     let expected = |luminosity: f64, orbit: f64| luminosity * (900.0 / orbit) * (900.0 / orbit);
     let mut checked = 0;
@@ -674,7 +670,6 @@ fn insolation_follows_luminosity() {
 }
 
 #[test]
-#[ignore = "E1-05"]
 fn no_zero_or_negative_parameters() {
     let p = round_params();
     let rules = &p.system;
@@ -741,7 +736,6 @@ fn no_zero_or_negative_parameters() {
 }
 
 #[test]
-#[ignore = "E1-05"]
 fn system_type_distribution_within_bounds() {
     let p = round_params();
     let rules = &p.system;
@@ -810,7 +804,6 @@ fn system_type_distribution_within_bounds() {
 }
 
 #[test]
-#[ignore = "E1-05"]
 fn rocky_moon_share_within_bounds() {
     // The defaults record the human's rule (E1-01 question 3 = b): a moon for 15 % of the rocky planets,
     // exactly one. Unlike the proposals among the defaults they are pinned: whoever changes the rule
@@ -914,7 +907,6 @@ fn rocky_moon_share_within_bounds() {
 }
 
 #[test]
-#[ignore = "E1-05"]
 fn deposit_weights_use_catalog_materials() {
     let raw = raw_materials();
     assert!(raw.contains("FER") && raw.contains("PLA") && !raw.contains("STA"), "raw materials are the T0 tiers of the catalog");

@@ -28,8 +28,10 @@
 
 mod cell_stars;
 pub mod params;
+mod profile;
 pub mod rng;
 mod streams;
+mod system;
 
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
@@ -266,9 +268,8 @@ pub fn stars_in_cell(p: &GalaxyParams, cell: CellCoord) -> Vec<StarSpec> {
 /// authored content (Tau Ceti) or do not exist yet (P-17 a keeps the 41 stars as they are).
 ///
 /// The result does not depend on which other stars, cells or systems were generated before.
-#[expect(unused_variables, reason = "skeleton: E1-05 implements it")]
 pub fn generate_system(p: &GalaxyParams, star: StarKey) -> Option<SystemSpec> {
-    unimplemented!("E1-05")
+    system::generate_system(p, star)
 }
 
 /// The habitable zone of a star (task E1-06, G-22): `inner` = 900 × √(L / `inner_insolation`),
