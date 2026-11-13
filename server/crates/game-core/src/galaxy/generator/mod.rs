@@ -22,7 +22,7 @@
 //!
 //! Out of scope of the pilot: terrain and biomes of generated planets, identifiers of stars for the
 //! market and the server (E3-01), start criteria beyond "has a landable planet" (E4-02), gas giants
-//! as world bodies (E6-01).
+//! as world bodies (E6-01), moons of rocky planets as world bodies (P-19 a: data of the spec only).
 //!
 //! [`LY_PER_PARSEC`]: crate::galaxy::stars::LY_PER_PARSEC
 
@@ -115,7 +115,8 @@ pub struct SurfaceSpec {
     pub deposit_weights: IndexMap<String, f64>,
 }
 
-/// A moon of a gas giant. Orbit values are relative to the planet.
+/// A moon of a planet: of a gas giant, or the bonus moon of a rocky planet. Orbit values are relative
+/// to the planet.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct MoonSpec {
@@ -129,6 +130,7 @@ pub struct MoonSpec {
     /// 0xRRGGBB.
     pub color: u32,
     /// `Some` when the moon can be landed on; then `grid_frequency` is in 1 ..= `grid_frequency.max`.
+    /// Always `None` for the moon of a rocky planet (no grid in the pilot).
     pub surface: Option<SurfaceSpec>,
     pub profile: BodyProfile,
 }
@@ -137,8 +139,10 @@ pub struct MoonSpec {
 ///
 /// Rocky: `surface` is `Some`, with `grid_frequency` inside [`SystemParams::grid_frequency`] and deposit
 /// materials from [`SystemParams::deposits`] (weights inside the material's bounds);
-/// `radius` = `radius_per_frequency` × `grid_frequency`; no moons (no determination covers moons of
-/// rocky planets).
+/// `radius` = `radius_per_frequency` × `grid_frequency`. Moons (the human's rule, E1-01 question 3 = b):
+/// every rocky planet draws on its own, from the key like everything else; with probability
+/// [`SystemParams::rocky_moon_share`] it has exactly [`SystemParams::rocky_moon_count`] moons,
+/// otherwise none. Such a moon is data only: its `surface` is `None`.
 ///
 /// Gas giant (P-47 a): only around a star whose class is in [`SystemParams::giant_classes`];
 /// `insolation` below `snow_line_insolation`; `radius` inside `giant_radius`; `surface` is `None`;
@@ -201,7 +205,7 @@ pub struct BeltSpec {
 ///   `orbit_radius + radius` of its moons, `star_body_radius < r₀ − reach₀` and
 ///   `rᵢ + reachᵢ < rᵢ₊₁ − reachᵢ₊₁`;
 /// - the shares of [`SystemParams`] (`empty_share`, `giant_share`, `belt_share`, `civilization_share`)
-///   hold over many systems.
+///   hold over many systems, and `rocky_moon_share` over many rocky planets.
 ///
 /// The spec is complete: [`system_bodies`] needs nothing else.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -290,7 +294,8 @@ impl SystemSpec {
 /// The world bodies of a system (task E1-07), ready for `OrbitSolver`, `insolation_of` and `build_world_grids`.
 ///
 /// Order: the star, the rocky planets by growing orbit, the belt. Gas giants and their moons are
-/// left out until `BodyKind` knows them (E6-01).
+/// left out until `BodyKind` knows them (E6-01); the moons of rocky planets are left out too (P-19 a:
+/// the spec describes them, the pilot's worlds do not hold them).
 ///
 /// - star: `BodyKind::Star`, no parent, `radius` = `star_body_radius`, `luminosity` = the star's,
 ///   `name` and `color` of the star;

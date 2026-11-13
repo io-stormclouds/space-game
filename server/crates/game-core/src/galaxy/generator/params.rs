@@ -1,7 +1,8 @@
 //! Parameters of the galaxy generator and their provisional defaults.
 //!
 //! Every default in this file is a PROPOSAL that waits for the human's confirmation (plan 08,
-//! questions P-17, P-18, P-19, P-47; values for production are set before stage E3). The acceptance
+//! questions P-17, P-18, P-19, P-47; values for production are set before stage E3); the two values
+//! of the moons of rocky planets come from the human's rule and are marked TO BE CONFIRMED. The acceptance
 //! tests pass their own values wherever a number matters, so changing a default here does not change
 //! a test. Values marked FACT repeat what the existing worlds already use.
 
@@ -93,6 +94,10 @@ pub struct SystemParams {
     pub radius_per_frequency: f64,
     /// Deposit materials of rocky planets and of moons with a surface.
     pub deposits: Vec<DepositParams>,
+    /// Share of rocky planets that have moons; every planet draws on its own (E1-01 question 3 = b).
+    pub rocky_moon_share: f64,
+    /// Moons of a rocky planet that has any.
+    pub rocky_moon_count: u32,
     /// Classes of stars whose systems can hold gas giants (P-47 a).
     pub giant_classes: Vec<SpectralClass>,
     /// Share of the systems of those classes that hold at least one gas giant.
@@ -194,6 +199,11 @@ impl Default for SystemParams {
                 deposit("TYT", 0.3, bounds(50.0, 70.0)),
                 deposit("URA", 0.1, bounds(20.0, 30.0)),
             ],
+            // TO BE CONFIRMED (the human's rule of 2026-11-13, E1-01 question 3 = b): a moon is a bonus of
+            // about 15 % of the rocky planets
+            rocky_moon_share: 0.15,
+            // TO BE CONFIRMED (the same rule): exactly one moon
+            rocky_moon_count: 1,
             // P-47 a
             giant_classes: vec![SpectralClass::F, SpectralClass::G, SpectralClass::K],
             // PROPOSAL (P-47): the answer names the classes, not how many of their systems hold a giant

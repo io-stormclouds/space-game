@@ -57,6 +57,8 @@ fn round_params() -> GalaxyParams {
     p.system.giant_share = 0.5;
     p.system.belt_share = 0.4;
     p.system.civilization_share = 0.01;
+    p.system.rocky_moon_share = 0.25;
+    p.system.rocky_moon_count = 1;
     p
 }
 
@@ -161,6 +163,11 @@ fn rocky(spec: &SystemSpec) -> impl Iterator<Item = &PlanetSpec> {
 
 fn giants(spec: &SystemSpec) -> impl Iterator<Item = &PlanetSpec> {
     spec.planets.iter().filter(|p| p.kind == PlanetKind::GasGiant)
+}
+
+/// The system has a rocky planet with a moon.
+fn has_rocky_moon(spec: &SystemSpec) -> bool {
+    rocky(spec).any(|p| !p.moons.is_empty())
 }
 
 fn share(count: usize, of: usize) -> f64 {
@@ -543,6 +550,22 @@ fn same_star_same_system_bytes() {
         assert_eq!(first.star, star_at(&p, *key), "{key:?}: the system is the system of this star");
     }
 
+    // the moons of rocky planets are part of the system: the same bytes too (their share is set here, so a
+    // changed default does not empty the sample)
+    let mut mooned = params();
+    mooned.system.rocky_moon_share = 0.5;
+    let with_moons: Vec<SystemSpec> = far_systems(&mooned, 200).into_iter().filter(has_rocky_moon).collect();
+    assert!(with_moons.len() >= 20, "half of the rocky planets of 200 systems have a moon, found {} such systems", with_moons.len());
+    for first in &with_moons {
+        let key = first.star.key;
+        let second = generate_system(&mooned, key).expect("a generated star has a system");
+        assert_eq!(first, &second, "{key:?}");
+        let text = json(first);
+        assert_eq!(text, json(&second), "{key:?}");
+        let back: SystemSpec = serde_json::from_str(&text).expect("the system reads back from JSON");
+        assert_eq!(&back, first, "{key:?}: JSON keeps the moons");
+    }
+
     // another seed: other systems
     let other = GalaxyParams { seed: SEED + 1, ..params() };
     assert_ne!(json(&far_systems(&other, 50)), json(&far_systems(&p, 50)));
@@ -559,10 +582,16 @@ fn same_star_same_system_bytes() {
 #[test]
 #[ignore = "E1-05"]
 fn systems_do_not_depend_on_generation_order() {
-    let p = params();
-    // two stars of one cell and a star of another cell
+    let mut p = params();
+    // moons of rocky planets take part: half of the planets have one here, whatever the default is
+    p.system.rocky_moon_share = 0.5;
+    // two stars of one cell and a star of another cell, whose system has a rocky planet with a moon
     let pair = (0..10_000).map(far_cell).find(|c| stars_in_cell(&p, *c).len() >= 2).expect("a far cell with two stars");
-    let lone = (0..10_000).map(far_cell).find(|c| *c != pair && !stars_in_cell(&p, *c).is_empty()).expect("another far cell with a star");
+    let first_has_moon = |c: &CellCoord| generate_system(&p, StarKey { cell: *c, index: 0 }).is_some_and(|s| has_rocky_moon(&s));
+    let lone = (0..10_000)
+        .map(far_cell)
+        .find(|c| *c != pair && first_has_moon(c))
+        .expect("another far cell whose first star has a rocky planet with a moon");
     let keys = [StarKey { cell: pair, index: 0 }, StarKey { cell: pair, index: 1 }, StarKey { cell: lone, index: 0 }];
     let mut results: Vec<[String; 3]> = Vec::new();
     for (round, order) in ORDERS.iter().enumerate() {
@@ -672,7 +701,10 @@ fn no_zero_or_negative_parameters() {
                         "{what}: radius {} at n = {n}",
                         planet.radius
                     );
-                    assert!(planet.moons.is_empty(), "{what}: rocky planets have no moons");
+                    // no moon, or exactly as many as the parameters say; such a moon has no surface in the pilot
+                    let moons = planet.moons.len() as u32;
+                    assert!(moons == 0 || moons == rules.rocky_moon_count, "{what}: {moons} moons");
+                    assert!(planet.moons.iter().all(|m| m.surface.is_none()), "{what}: the moon of a rocky planet has a surface");
                     frequencies.insert(n);
                 }
                 PlanetKind::GasGiant => {
@@ -777,6 +809,97 @@ fn system_type_distribution_within_bounds() {
     assert!((empty - defaults.system.empty_share).abs() <= 0.02, "defaults: {empty:.4} of the systems have no planet");
     let belts = share(systems.iter().filter(|s| s.belt.is_some()).count(), systems.len());
     assert!((belts - defaults.system.belt_share).abs() <= 0.02, "defaults: {belts:.4} of the systems have a belt");
+}
+
+#[test]
+#[ignore = "E1-05"]
+fn rocky_moon_share_within_bounds() {
+    let p = round_params();
+    let rules = &p.system;
+    let count = rules.rocky_moon_count as usize;
+    assert!(count >= 1 && rules.rocky_moon_share > 0.0 && rules.rocky_moon_share < 1.0, "the round parameters give some planets moons");
+
+    // a rocky planet has no moon or exactly `rocky_moon_count`; a quarter of them have, ± 2.5 points
+    let planets: Vec<&PlanetSpec> = SYSTEMS.iter().flat_map(rocky).collect();
+    // a system with planets and no gas giant has a rocky planet: at least 75 % − 35 % of the systems
+    assert!(planets.len() >= 3_500, "10 000 systems hold thousands of rocky planets, found {}", planets.len());
+    for planet in &planets {
+        assert!(planet.moons.is_empty() || planet.moons.len() == count, "a rocky planet with {} moons", planet.moons.len());
+        assert!(planet.moons.iter().all(|m| m.surface.is_none()), "the moon of a rocky planet has no surface in the pilot");
+    }
+    let with_moon = share(planets.iter().filter(|p| !p.moons.is_empty()).count(), planets.len());
+    assert!(
+        (with_moon - rules.rocky_moon_share).abs() <= 0.025,
+        "{with_moon:.4} of the rocky planets have a moon, the parameters say {}",
+        rules.rocky_moon_share
+    );
+
+    // each planet draws on its own: the first two rocky planets of a system both have a moon in share² of
+    // the systems, ± 3 points. The contract does not say how many systems hold two rocky planets, so the
+    // check needs a sample that makes ± 3 points four standard deviations.
+    let pairs: Vec<(&PlanetSpec, &PlanetSpec)> = SYSTEMS
+        .iter()
+        .filter_map(|s| {
+            let mut planets = rocky(s);
+            Some((planets.next()?, planets.next()?))
+        })
+        .collect();
+    if pairs.len() >= 1_000 {
+        let both = share(pairs.iter().filter(|(a, b)| !a.moons.is_empty() && !b.moons.is_empty()).count(), pairs.len());
+        let independent = rules.rocky_moon_share * rules.rocky_moon_share;
+        assert!(
+            (both - independent).abs() <= 0.03,
+            "both planets have a moon in {both:.4} of {} systems, independent draws give {independent:.4}",
+            pairs.len()
+        );
+    }
+
+    // the parameters decide: share 0 gives no moon to a rocky planet and leaves the giants' moons alone
+    let mut never = params();
+    never.system.rocky_moon_share = 0.0;
+    let systems = far_systems(&never, 1_000);
+    // the defaults leave four systems in five with planets, and giants only around the rarer classes
+    assert!(systems.iter().flat_map(rocky).count() >= 500, "1000 systems hold hundreds of rocky planets");
+    for spec in &systems {
+        assert!(rocky(spec).all(|planet| planet.moons.is_empty()), "{:?}: share 0, yet a rocky planet has a moon", spec.star.key);
+        for giant in giants(spec) {
+            let moons = giant.moons.len() as u32;
+            assert!(
+                never.system.giant_moons.min <= moons && moons <= never.system.giant_moons.max,
+                "{:?}: a giant with {moons} moons",
+                spec.star.key
+            );
+        }
+    }
+
+    // share 1 and two moons: every rocky planet has exactly two, and nothing touches
+    let mut always = params();
+    always.system.rocky_moon_share = 1.0;
+    always.system.rocky_moon_count = 2;
+    let systems = far_systems(&always, 1_000);
+    let mut seen = 0;
+    for spec in &systems {
+        let key = spec.star.key;
+        let mut edge = spec.star_body_radius;
+        for (i, planet) in spec.planets.iter().enumerate() {
+            assert!(planet.orbit_radius - reach(planet) > edge, "{key:?} planet {i} touches the body inside its orbit");
+            edge = planet.orbit_radius + reach(planet);
+            if planet.kind != PlanetKind::Rocky {
+                continue;
+            }
+            assert_eq!(planet.moons.len(), 2, "{key:?} planet {i}: share 1 and two moons");
+            let mut moon_edge = planet.radius;
+            for (j, moon) in planet.moons.iter().enumerate() {
+                let what = format!("{key:?} planet {i} moon {j}");
+                assert!(positive(moon.radius) && positive(moon.orbit_radius) && positive(moon.orbit_speed), "{what}");
+                assert!(moon.orbit_radius - moon.radius > moon_edge, "{what} touches the body inside its orbit");
+                moon_edge = moon.orbit_radius + moon.radius;
+                assert!(moon.surface.is_none(), "{what}: no surface in the pilot");
+            }
+            seen += 1;
+        }
+    }
+    assert!(seen >= 500, "1000 systems hold hundreds of rocky planets, found {seen}");
 }
 
 #[test]
@@ -919,7 +1042,8 @@ fn zone_labels_match_orbits() {
 // ------------------------------------------------------------------------------------------------
 // E1-07: conversion to world bodies
 
-/// The bodies of a system with the structure `system_bodies` documents checked: the star, the rocky planets, the belt.
+/// The bodies of a system with the structure `system_bodies` documents checked: the star, the rocky planets, the belt
+/// (no gas giant and no moon, of a giant or of a rocky planet).
 fn checked_bodies(spec: &SystemSpec) -> Vec<CelestialBody> {
     let key = spec.star.key;
     let bodies = system_bodies(spec);
@@ -980,6 +1104,7 @@ fn checked_bodies(spec: &SystemSpec) -> Vec<CelestialBody> {
 #[ignore = "E1-07"]
 fn generated_bodies_feed_the_orbit_solver() {
     let mut with_giant = 0;
+    let mut with_rocky_moon = 0;
     for spec in SYSTEMS.iter().take(1_000) {
         let bodies = checked_bodies(spec);
         assert_eq!(json(&bodies), json(&system_bodies(spec)), "{:?}: the same spec gives the same bodies", spec.star.key);
@@ -998,8 +1123,10 @@ fn generated_bodies_feed_the_orbit_solver() {
             }
         }
         with_giant += usize::from(giants(spec).next().is_some());
+        with_rocky_moon += usize::from(has_rocky_moon(spec));
     }
     assert!(with_giant > 0, "the 1000 systems include systems with gas giants, which are left out of the bodies");
+    assert!(with_rocky_moon > 0, "the 1000 systems include rocky planets with moons, which are left out of the bodies too");
 }
 
 #[test]
