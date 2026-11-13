@@ -9,6 +9,10 @@
 //!
 //! Imports from the module `env`: `sg_now() -> f64` (performance.now, for the step statistics) and
 //! `sg_panic(ptr, len)` (UTF-8 panic message before the trap).
+//!
+//! `sg_galaxy` is a test hook outside `GameApi` (P-16 a, task E1-09): the galaxy generator's
+//! vectors as text, compared byte for byte with the natively recorded
+//! `server/conformance/vectors/galaxy-gen.json` (`web-game/packages/wasm-host/src/galaxy-gen.spec.ts`).
 
 // `#[no_mangle]` exports and the two imports are the only unsafe parts; no raw pointer is dereferenced.
 #![allow(unsafe_code)]
@@ -158,6 +162,107 @@ pub extern "C" fn sg_view(now_ms: f64) -> usize {
     })
 }
 
+/// Test hook of the galaxy generator, outside `GameApi` (P-16 a): the request in the input buffer
+/// (`len` bytes of JSON, see [`galaxy::vectors`]) gives the text of the generator's vectors in the
+/// output buffer; a bad request gives `{"error"}`. Returns the result length.
+#[unsafe(no_mangle)]
+pub extern "C" fn sg_galaxy(len: usize) -> usize {
+    with(|s| {
+        let text = std::str::from_utf8(&s.input[..len.min(s.input.len())])
+            .map_err(|e| format!("bad galaxy request: {e}"))
+            .and_then(galaxy::vectors)
+            .unwrap_or_else(|error| serde_json::json!({ "error": error }).to_string());
+        s.output.clear();
+        s.output.extend_from_slice(text.as_bytes());
+        s.output.len()
+    })
+}
+
+/// The galaxy generator's vectors as one text (task E1-09). The same function records
+/// `server/conformance/vectors/galaxy-gen.json` natively (`conformance galaxy-record`) and answers
+/// `sg_galaxy` on `wasm32`, so the two texts differ only if the platform changes a result.
+pub mod galaxy {
+    use game_core::galaxy::generator::{CellCoord, GalaxyParams, generate_system, stars_in_cell};
+    use serde_json::Value;
+
+    /// How many cells of the row the systems are searched in at most.
+    const MAX_ROW_CELLS: i32 = 1_000_000;
+
+    /// The vectors of a request. Request (JSON):
+    ///
+    /// ```text
+    /// {"seed": u64, "cells": [CellCoord], "systems": {"from": CellCoord, "count": u32}}
+    /// ```
+    ///
+    /// Parameters: `GalaxyParams::default()` with `seed`. Result: one JSON object, one entry per line
+    /// (readable diffs when the generator changes on purpose), ending with a newline:
+    ///
+    /// ```text
+    /// {"request":{…the request…},
+    /// "params":{…GalaxyParams…},
+    /// "cells":[
+    /// {"cell":CellCoord,"stars":[StarSpec…]},   one line per requested cell, in request order
+    /// …
+    /// ],
+    /// "systems":[
+    /// SystemSpec,                               one line per system
+    /// …
+    /// ]}
+    /// ```
+    ///
+    /// `systems`: the first `count` systems of the row of cells `from`, `from + (1, 0, 0)`, … (the
+    /// stars of each cell in index order; stars without a system, the register's, are skipped).
+    /// Every value is `serde_json` of the generator's own type, as the acceptance tests compare it.
+    pub fn vectors(request: &str) -> Result<String, String> {
+        let request: Value = serde_json::from_str(request).map_err(|e| format!("bad galaxy request: {e}"))?;
+        let seed = request["seed"].as_u64().ok_or("galaxy request: `seed` must be an unsigned integer")?;
+        let cells: Vec<CellCoord> =
+            serde_json::from_value(request["cells"].clone()).map_err(|e| format!("galaxy request: `cells`: {e}"))?;
+        let from: CellCoord =
+            serde_json::from_value(request["systems"]["from"].clone()).map_err(|e| format!("galaxy request: `systems.from`: {e}"))?;
+        let count = request["systems"]["count"]
+            .as_u64()
+            .and_then(|n| u32::try_from(n).ok())
+            .ok_or("galaxy request: `systems.count` must be an unsigned 32-bit integer")?;
+
+        let p = GalaxyParams { seed, ..GalaxyParams::default() };
+        let text = |value: Result<String, serde_json::Error>| value.map_err(|e| format!("galaxy vectors: {e}"));
+
+        // the request again, as this function read it: the same text whatever the caller's formatting
+        let echo = serde_json::json!({ "seed": seed, "cells": cells, "systems": { "from": from, "count": count } });
+        let mut out = format!("{{\"request\":{echo},\n\"params\":{},\n\"cells\":[\n", text(serde_json::to_string(&p))?);
+        for (i, cell) in cells.iter().enumerate() {
+            let stars = text(serde_json::to_string(&stars_in_cell(&p, *cell)))?;
+            let cell = text(serde_json::to_string(cell))?;
+            let comma = if i + 1 < cells.len() { "," } else { "" };
+            out.push_str(&format!("{{\"cell\":{cell},\"stars\":{stars}}}{comma}\n"));
+        }
+        out.push_str("],\n\"systems\":[\n");
+        let mut found = 0u32;
+        let mut row = 0i32;
+        while found < count {
+            if row == MAX_ROW_CELLS {
+                return Err(format!("galaxy vectors: fewer than {count} systems in {MAX_ROW_CELLS} cells"));
+            }
+            let x = from.x.checked_add(row).ok_or("galaxy vectors: the row of cells leaves the range of i32")?;
+            row += 1;
+            for star in stars_in_cell(&p, CellCoord { x, ..from }) {
+                if found == count {
+                    break;
+                }
+                let Some(system) = generate_system(&p, star.key) else { continue };
+                found += 1;
+                let comma = if found < count { "," } else { "" };
+                out.push_str(&text(serde_json::to_string(&system))?);
+                out.push_str(comma);
+                out.push('\n');
+            }
+        }
+        out.push_str("]}\n");
+        Ok(out)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -193,5 +298,31 @@ mod tests {
         sg_tick(0.0);
         let out = output();
         assert!(out.as_array().unwrap().iter().any(|m| m["type"] == "frame"));
+    }
+
+    fn galaxy_through_buffers(json: &str) -> String {
+        sg_input(json.len());
+        with(|s| s.input.copy_from_slice(json.as_bytes()));
+        let len = sg_galaxy(json.len());
+        with(|s| String::from_utf8(s.output[..len].to_vec()).expect("utf-8"))
+    }
+
+    #[test]
+    fn galaxy_hook_returns_the_vectors_text() {
+        let request =
+            r#"{"seed":7,"cells":[{"x":0,"y":0,"z":0},{"x":3000,"y":0,"z":0}],"systems":{"from":{"x":3000,"y":0,"z":0},"count":4}}"#;
+        let text = galaxy_through_buffers(request);
+        assert_eq!(text, galaxy::vectors(request).expect("a good request"));
+        let value: serde_json::Value = serde_json::from_str(&text).expect("the vectors are JSON");
+        assert_eq!(value["request"], serde_json::from_str::<serde_json::Value>(request).unwrap());
+        assert_eq!(value["params"]["seed"], 7);
+        assert_eq!(value["cells"].as_array().map(Vec::len), Some(2));
+        assert_eq!(value["systems"].as_array().map(Vec::len), Some(4));
+        assert_eq!(value["cells"][1]["cell"]["x"], 3000);
+        assert!(value["systems"][0]["star"]["key"]["cell"]["x"].as_i64().is_some_and(|x| x >= 3000));
+
+        let bad = galaxy_through_buffers(r#"{"seed":-1}"#);
+        let bad: serde_json::Value = serde_json::from_str(&bad).expect("the error is JSON");
+        assert!(bad["error"].as_str().is_some_and(|e| e.contains("seed")), "{bad}");
     }
 }

@@ -179,6 +179,7 @@ name = "conformance"
 version = "0.1.0"
 dependencies = [
  "game-core",
+ "game-wasm",
  "serde",
  "serde_json",
 ]
@@ -352,6 +353,7 @@ dependencies = [
 name = "game-wasm"
 version = "0.1.0"
 dependencies = [
+ "game-core",
  "game-session",
  "serde_json",
 ]
