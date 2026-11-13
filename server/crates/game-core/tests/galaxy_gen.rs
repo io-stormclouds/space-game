@@ -85,6 +85,13 @@ fn far_systems(p: &GalaxyParams, n: usize) -> Vec<SystemSpec> {
     panic!("fewer than {n} stars in a million cells");
 }
 
+/// The same systems in the same order, generated one at a time: for a sample whose size is not known beforehand.
+fn far_systems_lazily(p: &GalaxyParams) -> impl Iterator<Item = SystemSpec> + '_ {
+    (0..1_000_000)
+        .flat_map(move |i| stars_in_cell(p, far_cell(i)))
+        .map(move |star| generate_system(p, star.key).expect("a generated star has a system"))
+}
+
 /// 10 000 systems of `round_params`, generated once for all the tests that read them.
 static SYSTEMS: LazyLock<Vec<SystemSpec>> = LazyLock::new(|| far_systems(&round_params(), 10_000));
 
@@ -814,6 +821,13 @@ fn system_type_distribution_within_bounds() {
 #[test]
 #[ignore = "E1-05"]
 fn rocky_moon_share_within_bounds() {
+    // The defaults record the human's rule (E1-01 question 3 = b): a moon for 15 % of the rocky planets,
+    // exactly one. Unlike the proposals among the defaults they are pinned: whoever changes the rule
+    // changes this line with it.
+    for defaults in [GalaxyParams::default().system, SystemParams::default()] {
+        assert_eq!((defaults.rocky_moon_share, defaults.rocky_moon_count), (0.15, 1), "the default moon rule");
+    }
+
     let p = round_params();
     let rules = &p.system;
     let count = rules.rocky_moon_count as usize;
@@ -835,24 +849,30 @@ fn rocky_moon_share_within_bounds() {
     );
 
     // each planet draws on its own: the first two rocky planets of a system both have a moon in share² of
-    // the systems, ± 3 points. The contract does not say how many systems hold two rocky planets, so the
-    // check needs a sample that makes ± 3 points four standard deviations.
-    let pairs: Vec<(&PlanetSpec, &PlanetSpec)> = SYSTEMS
-        .iter()
+    // the systems, ± 2.5 points over 2000 such systems. How many systems hold two rocky planets is the
+    // generator's choice, so the sample grows until it has them; the contract promises one such system in
+    // a hundred, and a generator below that fails here instead of going unchecked.
+    const PAIRS: usize = 2_000;
+    const SCANNED: usize = 200_000;
+    let pairs: Vec<(bool, bool)> = far_systems_lazily(&p)
+        .take(SCANNED)
         .filter_map(|s| {
-            let mut planets = rocky(s);
-            Some((planets.next()?, planets.next()?))
+            let mut has_moon = rocky(&s).map(|planet| !planet.moons.is_empty());
+            Some((has_moon.next()?, has_moon.next()?))
         })
+        .take(PAIRS)
         .collect();
-    if pairs.len() >= 1_000 {
-        let both = share(pairs.iter().filter(|(a, b)| !a.moons.is_empty() && !b.moons.is_empty()).count(), pairs.len());
-        let independent = rules.rocky_moon_share * rules.rocky_moon_share;
-        assert!(
-            (both - independent).abs() <= 0.03,
-            "both planets have a moon in {both:.4} of {} systems, independent draws give {independent:.4}",
-            pairs.len()
-        );
-    }
+    assert_eq!(
+        pairs.len(),
+        PAIRS,
+        "too few systems with two rocky planets among {SCANNED} to check that the planets draw their moons independently"
+    );
+    let both = share(pairs.iter().filter(|(first, second)| *first && *second).count(), pairs.len());
+    let independent = rules.rocky_moon_share * rules.rocky_moon_share;
+    assert!(
+        (both - independent).abs() <= 0.025,
+        "both planets have a moon in {both:.4} of {PAIRS} systems, independent draws give {independent:.4}"
+    );
 
     // the parameters decide: share 0 gives no moon to a rocky planet and leaves the giants' moons alone
     let mut never = params();

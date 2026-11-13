@@ -4,7 +4,8 @@
 //! questions P-17, P-18, P-19, P-47; values for production are set before stage E3); the two values
 //! of the moons of rocky planets come from the human's rule and are marked TO BE CONFIRMED. The acceptance
 //! tests pass their own values wherever a number matters, so changing a default here does not change
-//! a test. Values marked FACT repeat what the existing worlds already use.
+//! a test; the one exception is that pair of moon values, which `rocky_moon_share_within_bounds` pins
+//! because they are a rule and not a proposal. Values marked FACT repeat what the existing worlds already use.
 
 use serde::{Deserialize, Serialize};
 
