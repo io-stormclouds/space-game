@@ -84,7 +84,7 @@ pub(super) fn generate_system(p: &GalaxyParams, key: StarKey) -> Option<SystemSp
     Some(system_of(p, star))
 }
 
-fn system_of(p: &GalaxyParams, star: StarSpec) -> SystemSpec {
+pub(super) fn system_of(p: &GalaxyParams, star: StarSpec) -> SystemSpec {
     let rules = &p.system;
     let key = star.key;
     let luminosity = star.luminosity;

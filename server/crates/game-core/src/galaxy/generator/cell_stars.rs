@@ -132,7 +132,7 @@ fn register_color(color: &str) -> u32 {
 // geometry of a cell
 
 /// The lower edge of a cell on one axis and the upper edge, which belongs to the next cell.
-fn edges(coord: i32, cell_ly: f64) -> (f64, f64) {
+pub(super) fn edges(coord: i32, cell_ly: f64) -> (f64, f64) {
     let low = f64::from(coord) * cell_ly;
     (low, low + cell_ly)
 }
@@ -160,7 +160,7 @@ fn nearest_in_cell(p: &GalaxyParams, cell: CellCoord, pos: [f64; 3]) -> [f64; 3]
     [axis(cell.x, pos[0]), axis(cell.y, pos[1]), axis(cell.z, pos[2])]
 }
 
-fn distance_ly(a: [f64; 3], b: [f64; 3]) -> f64 {
+pub(super) fn distance_ly(a: [f64; 3], b: [f64; 3]) -> f64 {
     let (dx, dy, dz) = (a[0] - b[0], a[1] - b[1], a[2] - b[2]);
     (dx * dx + dy * dy + dz * dz).sqrt()
 }
