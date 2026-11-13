@@ -130,6 +130,24 @@ describe('CameraRig (no DOM: OrbitControls skipped)', () => {
     expect(rig.target.x).toBe(900);
   });
 
+  it('leaving a mode in mid-flight remembers where the flight was going, not the point in between', () => {
+    const rig = new CameraRig(null);
+    rig.update(0.016, goal('planet:a', 900, 170));
+    rig.setMode('system');
+    rig.update(0.016, goal('system:s', 0, 5000));
+    rig.update(TRANSITION_SECONDS / 2, goal('system:s', 0, 5000));
+    expect(rig.transitioning).toBe(true);
+    expect(rig.distance).toBeGreaterThan(170);
+    expect(rig.distance).toBeLessThan(5000);
+    rig.setMode('planet'); // the player turns back before the camera arrives
+    for (let t = 0; t < TRANSITION_SECONDS + 0.2; t += 0.05) rig.update(0.05, goal('planet:a', 900, 170));
+    expect(rig.distance).toBeCloseTo(170, 3);
+    rig.setMode('system');
+    for (let t = 0; t < TRANSITION_SECONDS + 0.2; t += 0.05) rig.update(0.05, goal('system:s', 0, 5000));
+    expect(rig.distance).toBeCloseTo(5000, 3);
+    expect(rig.target.x).toBe(0);
+  });
+
   it('refocusing on another body flies there with its default distance', () => {
     const rig = new CameraRig(null);
     rig.update(0.016, goal('planet:a', 900, 170));

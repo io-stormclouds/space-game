@@ -1063,7 +1063,10 @@ export class SystemScene {
       const centre = this.root?.world ?? this.tmp.set(0, 0, 0);
       const d = fitDistance(this.extent, FOV, this.width / this.height, 1.05);
       g.target.copy(centre);
-      g.key = 'system';
+      // the overview of this system at this size: the rig keeps the player's angle and zoom per key, and a
+      // zoom remembered for another world (Tau Ceti shows first, then a preset swaps the world) would leave
+      // the far bodies of a larger system outside the view
+      g.key = `system:${this.root?.id ?? ''}:${this.extent}`;
       g.distance = d;
       g.phi = 0.78;
       g.theta = 0.35;

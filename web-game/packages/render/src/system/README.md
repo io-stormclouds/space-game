@@ -76,6 +76,8 @@ host.pick(x, y, input);         // piksele względem kontenera
 - **Kamera:**
   - planeta: kamera patrzy na środek kolonii albo, bez budowli, na stronę oświetloną;
   - układ: dopasowana do najdalszej orbity, środek w gwieździe;
+  - pamięć ujęcia gracza (kąt i zoom na tryb) dotyczy jednego celu: ujęcie układu ma klucz `system:<gwiazda>:<extent>`, więc po podmianie świata przegląd wraca do dopasowania nowego układu, a nie do zoomu poprzedniego (E1-02b);
+  - zmiana trybu w trakcie przelotu zapamiętuje cel tego przelotu, nie położenie pośrednie;
   - drobne ciała (< 80 px) nie rysują krawędzi kafelków, a poniżej 24 px także budowli.
 
 ## Zmierzone (Chromium headless + SwiftShader, 1440×900, harness)
