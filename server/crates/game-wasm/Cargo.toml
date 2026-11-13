@@ -10,5 +10,6 @@ description = "WebAssembly build of the game session for the client worker (Game
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
+game-core = { path = "../game-core" }
 game-session = { path = "../game-session" }
 serde_json = { workspace = true }

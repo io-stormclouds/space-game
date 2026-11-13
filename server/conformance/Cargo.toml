@@ -15,5 +15,6 @@ path = "src/main.rs"
 
 [dependencies]
 game-core = { path = "../crates/game-core" }
+game-wasm = { path = "../crates/game-wasm" }
 serde = { workspace = true }
 serde_json = { workspace = true }
