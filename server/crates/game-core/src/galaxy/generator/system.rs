@@ -24,7 +24,7 @@
 //!   edge of the window in [`SQUEEZE_STEPS`] steps; when even the tightest layout overflows, the
 //!   outermost planet up to the overflowing body is removed, unless it is the innermost planet or the
 //!   innermost giant, and the layout starts again. The belt is never removed that way, so the shares
-//!   above survive the layout.
+//!   above survive the layout; only a window too small for these kept bodies cuts them off.
 //! - **Civilisation.** It lives on one of the rocky planets, picked uniformly once the layout is done.
 //!
 //! Periods follow the existing worlds: a planet at 900 circles in 240 min and a moon at 160 from its
