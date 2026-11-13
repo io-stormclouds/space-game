@@ -26,6 +26,7 @@
 //!
 //! [`LY_PER_PARSEC`]: crate::galaxy::stars::LY_PER_PARSEC
 
+mod bodies;
 mod cell_stars;
 pub mod params;
 pub mod rng;
@@ -315,9 +316,8 @@ impl SystemSpec {
 /// - `insolation` may stay `None` (the default rule gives the spec's value) or repeat the spec's value;
 /// - `revealed` and `unknown_name` stay `None` (what the start scan hides is decided in E4), and so
 ///   do `is_home_base` (false), `resources` and `shape`.
-#[expect(unused_variables, reason = "skeleton: E1-07 implements it")]
 pub fn system_bodies(spec: &SystemSpec) -> Vec<CelestialBody> {
-    unimplemented!("E1-07")
+    bodies::system_bodies(spec)
 }
 
 /// The start star of a new account (task E1-08, P-18 a).

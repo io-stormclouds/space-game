@@ -1102,7 +1102,6 @@ fn checked_bodies(spec: &SystemSpec) -> Vec<CelestialBody> {
 }
 
 #[test]
-#[ignore = "E1-07"]
 fn generated_bodies_feed_the_orbit_solver() {
     let mut with_giant = 0;
     let mut with_rocky_moon = 0;
@@ -1131,7 +1130,6 @@ fn generated_bodies_feed_the_orbit_solver() {
 }
 
 #[test]
-#[ignore = "E1-07"]
 fn default_insolation_equals_the_spec() {
     let mut checked = 0;
     for spec in SYSTEMS.iter().take(1_000) {
@@ -1156,7 +1154,6 @@ fn default_insolation_equals_the_spec() {
 }
 
 #[test]
-#[ignore = "E1-07"]
 fn grids_build_for_every_landable_body() {
     let mut built = 0;
     for spec in SYSTEMS.iter().filter(|s| rocky(s).next().is_some()).take(60) {
