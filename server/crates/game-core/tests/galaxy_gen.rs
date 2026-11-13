@@ -205,7 +205,6 @@ fn check_surface(surface: &SurfaceSpec, deposits: &[DepositParams], what: &str) 
 // E1-03: keyed random numbers
 
 #[test]
-#[ignore = "E1-03"]
 fn rng_is_a_pure_function_of_its_key() {
     let draw = |seed: u64, cell: CellCoord, stream: u64| -> Vec<u64> {
         let mut rng = Rng::for_cell(seed, cell, stream);
@@ -250,7 +249,6 @@ fn rng_is_a_pure_function_of_its_key() {
 }
 
 #[test]
-#[ignore = "E1-03"]
 fn rng_matches_recorded_values() {
     // Computed from the description in `generator/rng.rs` by an independent program (BigInt
     // arithmetic), whose SplitMix64 step was checked against the published sequence for 1234567.
@@ -284,7 +282,6 @@ fn rng_matches_recorded_values() {
 }
 
 #[test]
-#[ignore = "E1-03"]
 fn neighbouring_cells_are_uncorrelated() {
     let first = |seed: u64, cell: CellCoord, stream: u64| Rng::for_cell(seed, cell, stream).next_f64();
     type Line = fn(i32) -> CellCoord;
