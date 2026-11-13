@@ -15,5 +15,7 @@ path = "src/main.rs"
 
 [dependencies]
 game-core = { path = "../crates/game-core" }
+# the galaxy vectors (E1-09): the same function that answers sg_galaxy on wasm32, compiled natively
+game-wasm = { path = "../crates/game-wasm" }
 serde = { workspace = true }
 serde_json = { workspace = true }
