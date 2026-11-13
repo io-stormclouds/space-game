@@ -29,6 +29,7 @@
 mod bodies;
 mod cell_stars;
 pub mod params;
+mod placement;
 pub mod rng;
 mod system;
 
@@ -329,7 +330,6 @@ pub fn system_bodies(spec: &SystemSpec) -> Vec<CelestialBody> {
 ///
 /// The result depends on the set of occupied stars, not on their order. Keys in `occupied` that
 /// name no star are ignored.
-#[expect(unused_variables, reason = "skeleton: E1-08 implements it")]
 pub fn place_account(p: &GalaxyParams, occupied: &[StarKey], rules: &PlacementParams) -> Option<StarKey> {
-    unimplemented!("E1-08")
+    placement::place_account(p, occupied, rules)
 }

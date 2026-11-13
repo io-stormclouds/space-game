@@ -1188,7 +1188,6 @@ fn grids_build_for_every_landable_body() {
 // E1-08: placement of new accounts
 
 #[test]
-#[ignore = "E1-08"]
 fn placement_is_deterministic() {
     let p = params();
     let first = place_many(&p, &RULES, 40);
@@ -1222,7 +1221,6 @@ fn placement_is_deterministic() {
 }
 
 #[test]
-#[ignore = "E1-08"]
 fn placement_never_returns_an_occupied_system() {
     let p = params();
     let placed = &*PLACED;
@@ -1240,7 +1238,6 @@ fn placement_never_returns_an_occupied_system() {
 }
 
 #[test]
-#[ignore = "E1-08"]
 fn nearest_neighbour_distance_within_bounds() {
     let check = |p: &GalaxyParams, rules: &PlacementParams, placed: &[StarKey]| {
         let positions: Vec<[f64; 3]> = placed.iter().map(|k| star_at(p, *k).pos_ly).collect();
@@ -1269,7 +1266,6 @@ fn nearest_neighbour_distance_within_bounds() {
 }
 
 #[test]
-#[ignore = "E1-08"]
 fn placement_only_offers_systems_with_a_landable_planet() {
     let p = params();
     for key in PLACED.iter() {
