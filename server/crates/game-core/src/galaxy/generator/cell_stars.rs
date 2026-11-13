@@ -227,7 +227,7 @@ fn pick_class(classes: &[ClassParams], total_share: f64, u: f64) -> Option<&Clas
 }
 
 /// The value `place` of the way from `min` to `max`, for `place` in [0, 1); never outside the range.
-fn within(bounds: Bounds, place: f64) -> f64 {
+pub(super) fn within(bounds: Bounds, place: f64) -> f64 {
     let value = bounds.min + place * (bounds.max - bounds.min);
     // `min + (max − min)` can miss `max` by a rounding error
     if value > bounds.max {
