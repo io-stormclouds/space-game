@@ -11,5 +11,6 @@
 | E1-01 nr 4, 5, 6, 7, 8 | a |
 | E1-02 nr 1 rozkaz lotu | **b**: najpierw osobne zadanie klienta (kadr widoku układu), potem test wraca do kliknięcia w ciało na scenie (zadanie E1-02b; wersja z lotem przez mapę nie zostaje) |
 | E1-02 nr 2, 3, 4 | a |
+| E1-02b: kadr przeglądu układu z marginesami HUD (insets w `view-factories.ts`, pytanie Fable, 2026-11-13) | a: osobne zadanie klienta PO pilotażu; w E1-02b krok z kółkiem myszy w teście zostaje |
 | Scalenie `auto/E1-prep` do `main` | a: po skończeniu E1-02b i poprawki księżyców |
 | Wypchnięcie `main` na origin | a: po scaleniu |
