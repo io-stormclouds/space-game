@@ -74,10 +74,14 @@ export class CameraRig {
     return this.transition !== null;
   }
 
-  /** Switches the preset; the next `update` flies to it. Remembers the player's view of the old mode. */
+  /**
+   * Switches the preset; the next `update` flies to it. Remembers the player's view of the old mode: where
+   * the camera is, or, when it is still flying there, where that flight ends (the point in between is a
+   * view nobody chose, and coming back to it would frame the target at an arbitrary zoom).
+   */
   setMode(mode: CameraMode): void {
     if (mode === this.mode) return;
-    if (this.key !== null) this.saved[this.mode] = { key: this.key, offset: this.currentOffset(new THREE.Spherical()) };
+    if (this.key !== null) this.saved[this.mode] = { key: this.key, offset: this.transition ? this.transition.to.clone() : this.currentOffset(new THREE.Spherical()) };
     this.mode = mode;
     this.key = null; // the next update starts a flight
   }

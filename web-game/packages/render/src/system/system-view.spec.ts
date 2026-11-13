@@ -26,11 +26,12 @@ import type { FetchBytes } from './model-library';
 import { boxMatrix } from './model-kit';
 import { MODELS } from './model-registry';
 import { DS, SCENE } from './palette';
+import { fitDistance } from './placement';
 import { TRANSITION_SECONDS } from './camera-rig';
 import { STRUCTURE_FULL_PX, STRUCTURE_LOD_PX } from './system-scene';
 import { SystemView } from './system-view';
 import { SHIP_LENGTH } from './units-layer';
-import { VIEW_SCALE, WORLD_SCALE, type ViewScale } from './view-scale';
+import { VIEW_SCALE, WORLD_SCALE, sceneExtent, type ViewScale } from './view-scale';
 import { createSystemView } from './index';
 
 const PUBLIC = join(process.cwd(), 'apps', 'game', 'public');
@@ -281,6 +282,43 @@ describe('SystemView (planet + system kinds, one scene)', () => {
     h.view.setKind('planet');
     h.frames(Math.ceil(TRANSITION_SECONDS * 60) + 5);
     expect(s.rig.distance).toBeCloseTo(planetDistance, 0);
+  });
+
+  it('the overview frames the system it shows: after a world swap every body is in the view, wherever it is on its orbit', () => {
+    // the app's start by address: Tau Ceti shows first in the overview, the preset swaps the world, the start
+    // view is the colony planet; `between` = frames the new world is drawn in the overview before that switch
+    const flight = Math.ceil(TRANSITION_SECONDS * 60) + 5;
+    const fit = fitDistance(sceneExtent(sim.world.bodies, VIEW_SCALE), 50, W / H, 1.05);
+    for (const between of [0, 1, 10]) {
+      const tc = new Simulation(TAU_CETI_SCENARIO);
+      const x = mount(snapshotOf(tc.world, 'tau-ceti'));
+      x.view.setKind('system');
+      x.frames(flight);
+      const s = scene(x);
+      expect(s.rig.distance).toBeCloseTo(fitDistance(sceneExtent(tc.world.bodies, VIEW_SCALE), 50, W / H, 1.05), 3);
+      x.input = { ...x.input, snapshot: snapshotOf(sim.world) };
+      x.frames(between);
+      x.view.setKind('planet');
+      x.frames(flight);
+      x.view.setKind('system');
+      x.frames(flight);
+      // the zoom remembered for Tau Ceti (a smaller system) is not this system's
+      expect(s.rig.distance, `between = ${between}`).toBeCloseTo(fit, 3);
+      for (let time = 0; time <= 600; time += 25) {
+        x.input = { ...x.input, frame: { time, rovers: {}, transit: {} } };
+        x.frames(1);
+        for (const b of sim.world.bodies) {
+          const p = s.screenOf(b.id)!;
+          expect(p.visible, `${b.id} at ${time}`).toBe(true);
+          expect(p.x, `${b.id} at ${time}`).toBeGreaterThanOrEqual(0);
+          expect(p.x, `${b.id} at ${time}`).toBeLessThanOrEqual(W);
+          expect(p.y, `${b.id} at ${time}`).toBeGreaterThanOrEqual(0);
+          expect(p.y, `${b.id} at ${time}`).toBeLessThanOrEqual(H);
+        }
+      }
+      x.view.dispose();
+      x.container.remove();
+    }
   });
 
   it('follows the focus body (planet kind) and centres the system camera on the star', () => {
