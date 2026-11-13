@@ -14,3 +14,9 @@
 | E1-02b: kadr przeglądu układu z marginesami HUD (insets w `view-factories.ts`, pytanie Fable, 2026-11-13) | a: osobne zadanie klienta PO pilotażu; w E1-02b krok z kółkiem myszy w teście zostaje |
 | Scalenie `auto/E1-prep` do `main` | a: po skończeniu E1-02b i poprawki księżyców |
 | Wypchnięcie `main` na origin | a: po scaleniu |
+
+## Dopisek 2026-11-13 (w trakcie pilotażu E1)
+
+| Pytanie | Odpowiedź |
+|---|---|
+| Reguła zmiennoprzecinkowa kontraktu: operacje dokładne w IEEE (`floor`/`ceil`/`trunc`, `abs`, `min`/`max`) | Dopuszczone (z `f64`, bez `libm`). Brief pilotażu niczego tu nie dopowiada i zostaje bez zmian dla obu zespołów; weryfikator nie oblewa tych operacji. Zapis w kontrakcie dopiero po pilotażu. Arbitrem jest test bajtów na `wasm32` (E1-09). |
