@@ -43,7 +43,7 @@ const PLANET_LIMIT: u32 = 100;
 const MOON_LIMIT: u32 = 100;
 
 /// FACT: an orbit of 900 around a star of 1 L☉ has insolation 1 (`sim::colony`).
-const REFERENCE_ORBIT: f64 = 900.0;
+pub(super) const REFERENCE_ORBIT: f64 = 900.0;
 /// FACT: the PoC planet takes 240 model minutes around its sun at 900, and Tau Ceti's planets scale
 /// that period with the orbit to the power of 1.5 (`sim::scenarios`).
 const REFERENCE_PERIOD: f64 = 240.0;
