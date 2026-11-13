@@ -159,7 +159,7 @@ fn pick_class<'a>(classes: &[&'a ClassParams], total: f64, u: f64) -> &'a ClassP
 
 /// The value at `t` ∈ [0, 1) between the bounds: `min · (max / min)^t` when both are positive,
 /// otherwise linear; never outside the bounds.
-fn between(b: Bounds, t: f64) -> f64 {
+pub(super) fn between(b: Bounds, t: f64) -> f64 {
     let value = if b.min > 0.0 && b.max > 0.0 {
         let (low, high) = (libm::log(b.min), libm::log(b.max));
         libm::exp(low + t * (high - low))
