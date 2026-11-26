@@ -31,7 +31,8 @@
 ## 4. Zadania zapisane na później
 
 - Dokument ekonomii (generowany z `web-game/tools/economy-model/template.md`, liczby tylko przez model): §5.1 moduły orbitalne z puli planety (C-5); §3.1 i §4.5 kalibracja przy morale (C-9, K3, P-34 a); §9 gwiazdolot, napędy, habitat hibernacyjny (C-1, C-2, P-33 a, P-52 a); odsyłacz EXP-3 → C-7.
-- `PERF-REPORT.md`: L planet draw calls (UWAGA 119; BatchedMesh budowli na ciało).
+- `PERF-REPORT.md`: L planet draw calls (UWAGA 110; BatchedMesh budowli na ciało).
+- Wygląd pasma LOD-mid przy krawędzi tarczy (decyzja człowieka 2026-11-26: zostaje, poprawka później): bryły zastępcze mają rozmiar całego prostopadłościanu modelu i są wyraźnie kanciaste (`docs/img/lod-mid/`). Kierunek: uproszczone modele średniego detalu dla najcięższych budowli (wiertło, skład, wiatrak), opcje w `docs/reports/tasks/LOD-mid-structures.md` §8. Zapas pod 200 tys. trójkątów w L planet to ok. 23 tys.
 - Komentarz „PROPOSAL T-7” w `design-system/src/tokens/design-tokens.ts` (T-7 przyjęte).
 - Etapy mapy drogowej E2–E11 (`docs/plan/08-MAPA-DROGOWA.md`), po odpowiedzi na pytanie 1.
 - Serwer B6 dalej (`server/README.md`, „Brakuje względem B6”): specjalizacje frakcji, port L2 korporacji, czat, stacja badawcza, tabele PostgreSQL.
@@ -64,4 +65,21 @@ cd web-game && npm start                  # gra na http://localhost:4420
 
 ## 6. Wynik bramki końcowej
 
-Uzupełniane przy scaleniu do `main` (sekcja poniżej).
+`node tools/gate.mjs --full` na gałęzi domknięcia (`auto/domkniecie`, commit `a7cc924`, port e2e 4441), 2026-11-26, przed scaleniem do `main`:
+
+```text
+> web:typecheck ... ok (4.0 s)
+> web:wasm-build ... ok (22.5 s)
+> web:unit (vitest) ... ok (8.6 s)
+> rust:fmt ... ok (0.4 s)
+> rust:clippy ... ok (18.9 s)
+> rust:test ... ok (61.1 s)
+> docs:econ-check ... ok (0.8 s)
+> tools:test (node --test) ... ok (0.2 s)
+> web:app-tests (ng test) ... ok (7.4 s)
+> web:build ... ok (7.0 s)
+> web:e2e (port 4441) ... ok (125.1 s)
+BRAMKA: ZIELONA
+```
+
+Pomiar `npm run perf` po LOD-mid (1440×900; ekran 60 Hz, więc FPS nieporównywalny z raportem z 10.11): L planet 176 987 trójkątów i 110 draw calli, M planet 143 862, teren-M planet 156 268; brak „PRZEKROCZONY” (`web-game/docs/PERF-REPORT.md`).
