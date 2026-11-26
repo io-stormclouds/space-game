@@ -601,5 +601,5 @@ Polecenie użytkownika 2026-11-26: „decyzje T-* wg rekomendacji”. Wiersze re
 | T-23 | siła przygaszenia ruin (×0,8, 30 % do szarości) | wg rekomendacji, `DECISIONS.md` T-23 |
 | T-7 | grupa `terrain` w tokenach DS | wg rekomendacji, `DECISIONS.md` T-7 |
 | T-8 | licencja KayKit Medieval Hexagon | obowiązuje (sprawdzone 2026-11-26 na stronie autora: CC0 1.0, bez wymogu atrybucji), `DECISIONS.md` T-8 |
-| T-13 | budżet planety w fokusie 200 tys. | wg rekomendacji, `DECISIONS.md` T-13; trzymany we wszystkich scenariuszach poza L planet |
-| — | pośredni LOD budowli na ciele w fokusie (L planet) | w realizacji (etap domknięcia); propozycja w `web-game/docs/PERF-REPORT.md` |
+| T-13 | budżet planety w fokusie 200 tys. | wg rekomendacji, `DECISIONS.md` T-13; trzymany we wszystkich scenariuszach (L planet od LOD-mid, 2026-11-26: 176 987) |
+| — | pośredni LOD budowli na ciele w fokusie (L planet) | wykonany 2026-11-26 (LOD-mid, `docs/reports/tasks/LOD-mid-structures.md`, weryfikacja PASS); do oceny zrzuty `docs/img/lod-mid/` (bryły przy krawędzi tarczy) |

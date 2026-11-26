@@ -7,7 +7,9 @@ import { CulledInstances, type HemisphereCuller } from './hemisphere-culler';
  * With a culler (instances on a body, T4) the instances are kept in their own order and only those
  * in the camera's visible cap are drawn, compacted to the front (`CulledInstances`); `recull` after
  * the culler moved. Indices given to `setMatrixAt` are always source indices. A parked batch (`park`, the
- * T4b level of detail draws a proxy instead) keeps its instances written but draws none of them.
+ * T4b level of detail draws a proxy instead) keeps its instances written but draws none of them. With a culler a
+ * filter (`setFilter`, the mid LOD band of the structures) leaves more source instances out; `refilter` after its
+ * answers changed.
  */
 export class InstancedBatch {
   mesh: THREE.InstancedMesh;
@@ -16,6 +18,8 @@ export class InstancedBatch {
   /** Instances of the last `commit`. */
   private written = 0;
   private parked = false;
+  /** Source instances to draw besides the culling (null = all); only with a culler. */
+  private keep: ((i: number) => boolean) | undefined = undefined;
 
   constructor(
     private readonly parent: THREE.Object3D,
@@ -92,7 +96,22 @@ export class InstancedBatch {
 
   /** Re-culls when the culler recomputed its cap since the last commit (cheap otherwise). */
   recull(): void {
-    if (!this.parked) this.culled?.cull(this.mesh, this.culler);
+    if (!this.parked) this.culled?.cull(this.mesh, this.culler, this.keep);
+  }
+
+  /**
+   * Draws only the source instances `keep` lets through (as well as in the visible cap); null draws them all.
+   * Needs a culler (the compaction does the filtering); without one it is ignored. Set once: the function is asked
+   * on every re-cull, so it reads its answers from state the owner keeps (`refilter` when they change).
+   */
+  setFilter(keep: ((i: number) => boolean) | null): void {
+    this.keep = keep ?? undefined;
+    this.refilter();
+  }
+
+  /** The filter's answers changed: the next `recull` (or unparking) rewrites the drawn instances; no-op without a culler. */
+  refilter(): void {
+    this.culled?.refilter();
   }
 
   /** Parks the batch (draws nothing, no draw call) or draws its written instances again. */
@@ -109,12 +128,12 @@ export class InstancedBatch {
     // the extent of the instances comes from the geometry's bounds
     if (this.culled) {
       this.culled.invalidate();
-      if (!this.parked) this.culled.cull(this.mesh, this.culler);
+      if (!this.parked) this.culled.cull(this.mesh, this.culler, this.keep);
     }
   }
 
   private draw(): void {
-    if (this.culled) return this.culled.apply(this.mesh, this.culler);
+    if (this.culled) return this.culled.apply(this.mesh, this.culler, this.keep);
     this.mesh.count = this.written;
     this.mesh.visible = this.written > 0;
     this.mesh.instanceMatrix.needsUpdate = true;

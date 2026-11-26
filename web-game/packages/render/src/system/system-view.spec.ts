@@ -28,6 +28,7 @@ import { MODELS } from './model-registry';
 import { DS, SCENE } from './palette';
 import { fitDistance } from './placement';
 import { TRANSITION_SECONDS } from './camera-rig';
+import { STRUCTURE_MID_ANGLE, STRUCTURE_MID_PX } from './structure-layer';
 import { STRUCTURE_FULL_PX, STRUCTURE_LOD_PX } from './system-scene';
 import { SystemView } from './system-view';
 import { SHIP_LENGTH } from './units-layer';
@@ -625,6 +626,81 @@ describe('SystemView (planet + system kinds, one scene)', () => {
     for (const r of owned) r.addEventListener('dispose', () => disposed.add(r));
     h.view.dispose();
     expect([...owned].filter((r) => !disposed.has(r)).map((r) => r.type)).toEqual([]);
+  });
+
+  it('structure mid band (LOD-mid): on the planet in focus the structures near the limb and small on screen are boxes, the ones near the camera models; picking holds; cullDetail false has no band', async () => {
+    const world = structuredClone(sim.world);
+    h = mount(snapshotOf(world), { loadModels: true });
+    await h.view.ready;
+    h.frames(2);
+    const s = scene(h);
+    const grid = s.gridOf(PLANET_ID)!;
+    const parts = s.bodyParts(PLANET_ID)!;
+    const camLocal = () => parts.group.worldToLocal(s.rig.camera.position.clone());
+    // habitats on free tiles along a great circle from the point under the camera to past the limb
+    const used = new Set(world.structures.filter((x) => x.bodyId === PLANET_ID).flatMap((x) => x.tiles.map(tileIndexOf)));
+    const dir = camLocal().normalize();
+    const axis = new THREE.Vector3(1, 0, 0).cross(dir).normalize();
+    const along = (a: number) => dir.clone().applyAxisAngle(axis, (a * Math.PI) / 180);
+    const free = grid.tiles.filter((t) => !used.has(t.index) && !t.deposit && t.neighbors.length === 6);
+    const towards = (a: number) => {
+      const want = along(a);
+      const dot = (t: (typeof free)[number]) => want.x * t.normal.x + want.y * t.normal.y + want.z * t.normal.z;
+      return free.reduce((b, t) => (dot(t) > dot(b) ? t : b));
+    };
+    const ring = [0, 20, 40, 55, 65, 75, 85].map(towards);
+    expect(new Set(ring.map((t) => t.index)).size).toBe(ring.length);
+    const habs = ring.map((t) => standingStructure('HAB', PLANET_ID, [t.index]));
+    h.input = { ...h.input, snapshot: snapshotOf({ ...world, structures: [...world.structures, ...habs] }) };
+    h.frames(2);
+    const layer = parts.structures!;
+    expect(layer.proxied).toBe(false); // a near body: no T4b proxies
+    // the scene feeds the band the camera in the body frame and the screen scale of this view
+    const cam = camLocal();
+    const pxPerUnit = H / 2 / Math.tan((s.rig.camera.fov * Math.PI) / 360);
+    for (const p of layer.parts) {
+      const px = (p.width * pxPerUnit) / cam.distanceTo(p.center);
+      const a = p.center.clone().normalize().angleTo(cam);
+      expect(layer.inMidBand(p)).toBe(a > STRUCTURE_MID_ANGLE && px < STRUCTURE_MID_PX);
+    }
+    const habParts = habs.map((x) => layer.partsOf(x.id)[0]!);
+    // near the camera: the models, as before the band
+    expect(habParts.slice(0, 3).map((p) => layer.inMidBand(p))).toEqual([false, false, false]);
+    for (const p of habParts.slice(0, 3)) expect(layer.slotOfPart(p)).toBeGreaterThanOrEqual(0);
+    // round towards the limb: boxes (the culled ones past it draw nothing)
+    const boxed = habParts.filter((p) => layer.inMidBand(p));
+    expect(boxed.length).toBeGreaterThanOrEqual(2);
+    for (const p of boxed) expect(layer.slotOfPart(p)).toBe(-1);
+    expect(boxed.some((p) => layer.midSlotOfPart(p) >= 0)).toBe(true);
+    // the counters: the models drawn plus 12 triangles per box
+    const out = { triangles: 0, instances: 0 };
+    for (const m of layer.group.children) if (m instanceof THREE.InstancedMesh && m.visible && m !== layer.midMesh) out.triangles += geometryTriangles(m.geometry) * m.count;
+    expect(s.frameStats.structureTriangles).toBe(out.triangles + 12 * layer.midInstances.drawn);
+    // picking a box: its screen point over the planet's limb side hits that structure
+    const target = boxed
+      .filter((p) => layer.midSlotOfPart(p) >= 0)
+      .map((p) => ({ p, at: s.screenOfLocal(PLANET_ID, new THREE.Vector3(0, s.kit.box(p.model).max.y * 0.8, 0).applyMatrix4(p.local))! }))
+      .find(({ at }) => at.visible && h.pickAt(at).kind === 'STRUCTURE');
+    expect(target).toBeDefined();
+    expect(h.pickAt(target!.at)).toMatchObject({ kind: 'STRUCTURE', bodyId: PLANET_ID, structureId: target!.p.structureId });
+
+    // turning the camera onto the limb structures brings their models back, and boxes the far side instead
+    const aim = s.rig.target.clone();
+    const offset = along(65).transformDirection(parts.group.matrixWorld).multiplyScalar(s.rig.distance);
+    s.rig.camera.position.copy(aim).add(offset);
+    h.frames(3);
+    expect(layer.inMidBand(habParts[4]!)).toBe(false);
+    expect(layer.slotOfPart(habParts[4]!)).toBeGreaterThanOrEqual(0);
+    expect(layer.inMidBand(habParts[0]!)).toBe(true);
+
+    const full = mount(snapshotOf({ ...world, structures: [...world.structures, ...habs] }), { loadModels: true, cullDetail: false });
+    await full.view.ready;
+    full.frames(2);
+    const all = scene(full).bodyParts(PLANET_ID)!.structures!;
+    expect(all.midMesh).toBeNull();
+    expect(all.parts.some((p) => all.inMidBand(p))).toBe(false);
+    full.view.dispose();
+    full.container.remove();
   });
 
   it('unit LOD (T4b): ships and rovers far away are proxies (the system view), near ones models; picked by screen position either way; cullDetail false keeps the models', () => {
