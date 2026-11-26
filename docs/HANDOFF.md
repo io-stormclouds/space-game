@@ -22,7 +22,7 @@
 
 ## 3. Pytania do człowieka (otwarte)
 
-1. **Start E2 (blokuje):** czy koszt i czas zespołu Fable 5.2 w pilotażu są akceptowalne (07 §5)? Opcje i rekomendacja: `docs/reports/E1.md` §7.
+1. ~~Start E2~~ — **rozstrzygnięte 2026-11-26: wariant a** (W-16): autonomia etapowa od E2 z Fable 5.2 (koordynator, wykonawcy, weryfikatorzy), Opus 5.5 do niezależnych przeglądów. Warunki wejścia E2 z mapy (decyzja po E1, P-20 a, P-21 a) są spełnione.
 2. E1 §4 pkt 7 i 11 (G-37, G-41): ciało poza oknem orbit; granice `PlacementParams`.
 3. Z przeglądu (`docs/reports/E1-review.md`, nieblokujące): walidacja parametrów generatora przed E3, `cell_ly` tylko całkowite, semantyka udziału złóż, pomiar `place_account` przy 10 000 kont.
 4. Rejestr, status „otwarte”: R-30 (tożsamość gwiazd w usłudze galaktyki), R-32 (protokół 4, rozstrzyga E3-07), C-11 (model stacji; P-41 = b rozstrzyga część), G-31 (reguła biomu planet generowanych, przed E4-01).
@@ -34,7 +34,7 @@
 - `PERF-REPORT.md`: L planet draw calls (UWAGA 110; BatchedMesh budowli na ciało).
 - Wygląd pasma LOD-mid przy krawędzi tarczy (decyzja człowieka 2026-11-26: zostaje, poprawka później): bryły zastępcze mają rozmiar całego prostopadłościanu modelu i są wyraźnie kanciaste (`docs/img/lod-mid/`). Kierunek: uproszczone modele średniego detalu dla najcięższych budowli (wiertło, skład, wiatrak), opcje w `docs/reports/tasks/LOD-mid-structures.md` §8. Zapas pod 200 tys. trójkątów w L planet to ok. 23 tys.
 - Komentarz „PROPOSAL T-7” w `design-system/src/tokens/design-tokens.ts` (T-7 przyjęte).
-- Etapy mapy drogowej E2–E11 (`docs/plan/08-MAPA-DROGOWA.md`), po odpowiedzi na pytanie 1.
+- **Następny krok: E2** (`docs/plan/08-MAPA-DROGOWA.md` §4 „E2 — Fundament”, 6 zadań, E2-01 pierwsze: bramka `--full` z e2e na `wasm` i `remote`), w trybie z planu 07 §2 i decyzji W-5, W-15, W-16; potem E3–E11.
 - Serwer B6 dalej (`server/README.md`, „Brakuje względem B6”): specjalizacje frakcji, port L2 korporacji, czat, stacja badawcza, tabele PostgreSQL.
 
 ## 5. Uruchomienie na nowej maszynie
