@@ -84,3 +84,34 @@ BRAMKA: ZIELONA
 ```
 
 Pomiar `npm run perf` po LOD-mid (1440×900; ekran 60 Hz, więc FPS nieporównywalny z raportem z 10.11): L planet 176 987 trójkątów i 110 draw calli, M planet 143 862, teren-M planet 156 268; brak „PRZEKROCZONY” (`web-game/docs/PERF-REPORT.md`).
+
+## 7. Wymagania serwera: 20 graczy testowych z bazą danych
+
+Układ z `deploy/docker-compose.yml`: `game-server` + PostgreSQL (`postgres:17-alpine`) + Caddy (`caddy:2`, TLS i proxy), na Linuksie z Docker Engine.
+
+**FAKT (pomiary i kod):**
+
+| Co | Wartość | Źródło |
+|---|---|---|
+| Krok świata w produkcji | co 1 s, jeden świat na konto | `server/README.md` (protokół, usługa galaktyki) |
+| Koszt kroku | `load-m` (300 budowli) 103 µs, `load-l` (1400–1500 budowli) ≈ 1,0 ms | `server/README.md`, tabela pomiarów (`bench`) |
+| Logowanie (argon2id, `Argon2::default()`) | 19 MiB pamięci na jedno trwające logowanie, poza wątkami runtime (`spawn_blocking`) | `server/crates/game-server/src/accounts.rs` |
+| Obraz serwera (distroless) | 30,5 MB; build w kontenerze 1,5 min (laptop) | `server/README.md` (B4) |
+
+Wniosek z pomiarów: 20 światów wielkości `load-l` to ok. 20 ms CPU na sekundę, czyli ok. 2% jednego rdzenia. CPU nie ogranicza; o rozmiarze maszyny decyduje pamięć PostgreSQL i system.
+
+**PROPOZYCJA (szacunek, niezmierzony na tym projekcie):**
+
+| Profil | vCPU | RAM | Dysk | Uwagi |
+|---|---|---|---|---|
+| Minimum | 1 | 1 GB | 10 GB SSD | obraz serwera budowany gdzie indziej (lokalnie albo CI) i tylko pobierany na serwer |
+| Wygodnie | 2 | 2 GB | 20 GB SSD | zapas na PostgreSQL, logi, kopie zapasowe, jednoczesne logowania (20 × 19 MiB ≈ 0,4 GB w najgorszym razie) |
+| Build na serwerze | 2 | 2–4 GB | ≥ 20 GB | obraz Rusta do kompilacji ok. 1,5 GB + pamięć podręczna kilku GB; przy 1 GB RAM kompilacja może się nie zmieścić |
+
+Koszt samego Dockera (szacunek):
+- Linux, Docker Engine: `dockerd` + `containerd` ok. 50–100 MB RAM, kontenery bez maszyny wirtualnej.
+- Obrazy razem: ok. 0,4 GB (serwer 30,5 MB zmierzone; `postgres:17-alpine` ok. 250–300 MB i `caddy:2` ok. 50 MB to wartości typowe).
+- Docker Desktop (Windows, macOS): maszyna wirtualna 1–2 GB RAM i kilka–kilkanaście GB dysku. Wystarcza na komputer deweloperski, ale na serwer dla graczy szkoda zasobów.
+- Bez Dockera (plik wykonywalny jako usługa systemowa + natywny PostgreSQL i Caddy/nginx) oszczędza ok. 100 MB RAM, ale traci gotowy `deploy/docker-compose.yml`. Przy 20 graczach różnica nie ma znaczenia.
+
+**Do zrobienia (otwarte):** twarde liczby z nowej maszyny: `docker stats` i `/metrics` (histogram czasu ticku) przy 20 zalogowanych kontach, wynik do `server/README.md` (B4). Ruchu sieciowego w bajtach dotąd nie mierzono.
