@@ -113,7 +113,22 @@ Bramki:
 
 ## 7. Wynik bramki `--full`
 
-(uzupełnione po przebiegu)
+`E2E_CHANNEL=chrome node tools/gate.mjs --full` (2026-11-26, na kodzie z commita `3c70a5d`; potem zmieniały się tylko dokumentacja i generator raportu perf). Przed startem sprawdziłem, że nie działa żaden `cargo`/`rustc`:
+
+```
+> web:typecheck ... ok (4.1 s)
+> web:wasm-build ... ok (0.6 s)
+> web:unit (vitest) ... ok (8.7 s)
+> rust:fmt ... ok (0.4 s)
+> rust:clippy ... ok (20.0 s)
+> rust:test ... ok (64.8 s)
+> docs:econ-check ... ok (1.0 s)
+> tools:test (node --test) ... ok (0.2 s)
+> web:app-tests (ng test) ... ok (6.7 s)
+> web:build ... ok (6.8 s)
+> web:e2e (port 4441) ... ok (126.0 s)
+BRAMKA: ZIELONA
+```
 
 ## 8. Pytania do człowieka
 
