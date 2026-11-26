@@ -48,7 +48,8 @@ cd web-game && npm start                  # gra na http://localhost:4420
 ```
 
 - `Cargo.lock` przypina wersje pod `stable-x86_64-pc-windows-gnu` bez MinGW (R-17, `server/README.md` „Toolchain”). Na Linuksie / z MSVC przypięcia nie są potrzebne, ale **nie** rób `cargo update` bez potrzeby: zmienia bajty zależności i może zmienić wyniki testów.
-- `CLAUDE.md` § „Środowisko” opisuje starą maszynę (cargo poza PATH, brak MSVC, PostgreSQL i Dockera, port 4420 człowieka, 4430 PoC wnętrz). Po przeniesieniu zaktualizuj tę sekcję pod nową maszynę.
+- `CLAUDE.md` § „Środowisko” opisuje już nową maszynę (2026-11-26: Windows z MSVC, `cargo` na PATH, Chromium Playwrighta, Docker, lokalny PostgreSQL; porty 4420 i 4430 człowieka bez zmian) i zasady wspólne dla każdej maszyny.
+- **Poprzednia maszyna** (dla porównań pomiarów i historii): Windows bez MSVC i MinGW, toolchain `stable-x86_64-pc-windows-gnu`, `cargo` poza PATH (`%USERPROFILE%\.cargo\bin`), bez pobranego Chromium Playwrighta (stąd domyślne `E2E_CHANNEL=chrome` w bramce), bez PostgreSQL, Docker wyłączony, pobieranie obcych binariów blokowane (stąd surowe ABI `game-wasm` zamiast `wasm-bindgen`, R-13); laptop Ryzen 7 8840HS, Radeon 780M, ekran 120 Hz (pomiary `PERF-REPORT.md` z 10.11 i 26.11).
 - Testowy PostgreSQL (opcjonalnie): kontener `postgres:16-alpine` na `127.0.0.1:55432`, użytkownik / hasło / baza `sg`, potem `TEST_DATABASE_URL=postgres://sg:sg@127.0.0.1:55432/sg cargo test`. Uruchomienie `deploy/`: `POSTGRES_PASSWORD=… HTTP_PORT=8088 docker compose -p space-game -f deploy/docker-compose.yml up -d --build`.
 
 ### Pułapki znane ze starej maszyny
