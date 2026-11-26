@@ -339,7 +339,7 @@ Czysta, deterministyczna funkcja w `crates/game-core/src/galaxy/generator/` (pla
 **Testy i wzorce:**
 
 ```bash
-cargo test -p game-core --test galaxy_gen                                   # 26 testów akceptacyjnych pilotażu (+ ziarno)
+cargo test -p game-core --test galaxy_gen                                   # 27 testów: 26 akceptacyjnych pilotażu + ziarno (G-36)
 cargo run -p conformance --release -- galaxy conformance/vectors/galaxy-gen.json         # porównanie bajt w bajt
 cargo run -p conformance --release -- galaxy-record conformance/vectors/galaxy-gen.json  # ponowne nagranie (tylko przy zmianie kontraktu)
 ```
