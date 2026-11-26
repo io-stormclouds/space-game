@@ -21,6 +21,34 @@ export interface PlacedPart {
   width: number;
 }
 
+/**
+ * Mid LOD band of the structures on a near body (LOD-mid; with a culler, while the body is not far): a structure
+ * that stands more than STRUCTURE_MID_ANGLE round the body from the point under the camera (towards and past the
+ * limb, where it is seen edge-on, squeezed into a thin ring of the disc, often only its top showing over the
+ * horizon) and is narrower on screen than STRUCTURE_MID_PX is drawn as the T4b proxy boxes of its parts (the same
+ * `kit.proxyBox` fitted to `kit.box(model)`, in `kit.tone(model)`). It gets its models back once nearer the camera
+ * than STRUCTURE_NEAR_ANGLE or wider than STRUCTURE_NEAR_PX (the gaps are the hysteresis, per structure).
+ *
+ * The angle keeps what is near the camera full at any window size and zoom: in a close-up the horizon itself is
+ * nearer than the band (acos(R/d) < 50° below d ≈ 1.56 R), at the default planet view (3.4 R, horizon 73°) the
+ * inner nine tenths of the disc's radius on screen keep the models, and the band grows with the visible cap as the
+ * camera backs away, so fewer models are drawn the further it is. The width is the "small on screen" guard: a
+ * structure wider than STRUCTURE_MID_PX (a big window, a large footprint) stays a model [rad; px: the whole footprint
+ * width at the distance of its centre].
+ */
+export const STRUCTURE_MID_ANGLE = (50 * Math.PI) / 180;
+export const STRUCTURE_NEAR_ANGLE = (46 * Math.PI) / 180;
+export const STRUCTURE_MID_PX = 64;
+export const STRUCTURE_NEAR_PX = 72;
+const COS_MID = Math.cos(STRUCTURE_MID_ANGLE);
+const COS_NEAR = Math.cos(STRUCTURE_NEAR_ANGLE);
+/**
+ * The band is evaluated again only after the camera moved (body frame) by more than this share of its height above
+ * the surface: in between no structure's angle moves by more than about 1° nor its distance by more than 2 %, well
+ * inside the hysteresis.
+ */
+export const MID_LOD_REFRESH = 0.02;
+
 const UP = new THREE.Vector3(0, 1, 0);
 const SCALE_Y = new THREE.Matrix4();
 const SCALE = new THREE.Vector3();
@@ -74,6 +102,8 @@ export function partMatrix(frame: SurfaceFrame, part: ModelPart, out: THREE.Matr
 interface Batch {
   solid: InstancedBatch;
   outline: LineBuffer;
+  /** Source index in `solid` → index of its part in `parts` (the mid band's filter). */
+  src: Int32Array;
 }
 
 /**
@@ -92,6 +122,13 @@ interface Batch {
  * (`boxMatrix(kit.box(model))`, the same box picking tests) and tinted with the model's mean colour
  * (`kit.tone`), all in one culled InstancedMesh: one draw call for the body. The model batches are parked
  * meanwhile (their instances stay written); the site outlines are unchanged.
+ *
+ * Mid band (LOD-mid, only with a culler and while not proxied): `updateBand` (the scene, from the camera in the body
+ * frame) sends every structure far round the body from the camera and small on screen (STRUCTURE_MID_ANGLE,
+ * STRUCTURE_MID_PX) to a second proxy batch with the same boxes and tones, filtered by structure; the model batches
+ * leave those parts out (`InstancedBatch.setFilter`). Both batches hold every solid part from the last write, so a
+ * switch only re-compacts what is drawn: no new instances, meshes or geometries. `parts`, picking, `tileOwner` and
+ * the site outlines do not change.
  */
 export class StructureLayer {
   readonly group = new THREE.Group();
@@ -107,6 +144,15 @@ export class StructureLayer {
   /** Proxy boxes of every solid part and deposit rock (T4b); null without a culler (no LOD). */
   private readonly proxy: InstancedBatch | null = null;
   private proxyOn = false;
+  /** Mid-band proxy boxes of every solid part (LOD-mid), drawn for the parts flagged in `partMid`; null without a culler. */
+  private readonly mid: InstancedBatch | null = null;
+  /** Per part (`parts` order): 1 = its structure is in the mid band (drawn as boxes). */
+  private partMid = new Uint8Array(0);
+  /** Source index in `mid` (solid parts in order) → index of its part in `parts`. */
+  private midSrc = new Int32Array(8);
+  /** Camera (body frame) and px scale of the last band evaluation (NaN: evaluate at the next update). */
+  private readonly bandCam = new THREE.Vector3(NaN, NaN, NaN);
+  private bandScale = 0;
   /** The proxies no longer match the parts, rocks or loaded models (rewritten when they show). */
   private proxyStale = true;
   private readonly fit = new THREE.Matrix4();
@@ -135,6 +181,8 @@ export class StructureLayer {
     if (culler) {
       this.proxy = new InstancedBatch(this.group, kit.proxyBox(), kit.material, `${grid.bodyId}_Proxies`, 8, culler, true);
       this.proxy.park(true);
+      this.mid = new InstancedBatch(this.group, kit.proxyBox(), kit.material, `${grid.bodyId}_MidProxies`, 8, culler, true);
+      this.mid.setFilter((i) => this.partMid[this.midSrc[i]!] === 1);
     }
   }
 
@@ -143,6 +191,49 @@ export class StructureLayer {
     if (this.proxyOn) return this.proxy!.recull();
     for (const b of this.batches.values()) b.solid.recull();
     this.decor?.recull();
+    this.mid?.recull();
+  }
+
+  /**
+   * Mid band (LOD-mid): flags the structures more than STRUCTURE_MID_ANGLE round the body from the point under the
+   * camera and narrower on screen than STRUCTURE_MID_PX for their proxy boxes (back nearer than STRUCTURE_NEAR_ANGLE
+   * or wider than STRUCTURE_NEAR_PX). `camera` is the camera position in the body frame, `pxPerUnit` the screen size
+   * of one unit at distance one [px] ((height / 2) / tan(fov / 2)). Evaluated only when the camera moved by more than
+   * MID_LOD_REFRESH of its height above the surface, the scale changed or the layout was rebuilt; no-op without a
+   * culler or while proxied. Returns whether a structure changed band (the next `recull` draws it).
+   */
+  updateBand(camera: THREE.Vector3, pxPerUnit: number): boolean {
+    if (!this.mid || this.proxyOn) return false;
+    const r = camera.length();
+    const step = MID_LOD_REFRESH * Math.max(r - this.grid.radius, 0);
+    if (pxPerUnit === this.bandScale && this.bandCam.distanceToSquared(camera) <= step * step) return false; // NaN: evaluate
+    this.bandCam.copy(camera);
+    this.bandScale = pxPerUnit;
+    let changed = false;
+    for (let i = 0; i < this.parts.length; i++) {
+      const p = this.parts[i]!;
+      const d = camera.distanceTo(p.center);
+      const px = d > 0 ? (p.width * pxPerUnit) / d : Infinity;
+      const c = p.center;
+      const len = r * c.length();
+      // cosine of the angle round the body centre between the structure and the camera
+      const cos = len > 0 ? (c.x * camera.x + c.y * camera.y + c.z * camera.z) / len : 1;
+      const was = this.partMid[i] === 1;
+      const boxed = was ? cos < COS_NEAR && px < STRUCTURE_NEAR_PX : cos < COS_MID && px < STRUCTURE_MID_PX;
+      if (boxed === was) continue;
+      this.partMid[i] = boxed ? 1 : 0;
+      changed = true;
+    }
+    if (changed) {
+      for (const b of this.batches.values()) b.solid.refilter();
+      this.mid.refilter();
+    }
+    return changed;
+  }
+
+  /** Whether a part's structure is in the mid band now (drawn as boxes unless the body is proxied; tests, harness). */
+  inMidBand(part: PlacedPart): boolean {
+    return this.partMid[this.parts.indexOf(part)] === 1;
   }
 
   /**
@@ -155,6 +246,7 @@ export class StructureLayer {
     if (on && this.proxyStale) this.writeProxies();
     for (const b of this.batches.values()) b.solid.park(on);
     this.decor?.park(on);
+    this.mid?.park(on);
     this.proxy.park(!on);
     return true;
   }
@@ -180,6 +272,27 @@ export class StructureLayer {
     let i = 0;
     for (const p of this.parts) {
       if (p === part) return this.proxy.slotOf(i);
+      if (p.look.solid) i++;
+    }
+    return -1;
+  }
+
+  /** Mid-band proxy instances: written (every solid part) and drawn after the band and culling (tests, harness). */
+  get midInstances(): { written: number; drawn: number } {
+    return { written: this.mid?.count ?? 0, drawn: this.mid?.drawn ?? 0 };
+  }
+
+  /** The mid-band proxy mesh (tests, harness); null without LOD. */
+  get midMesh(): THREE.InstancedMesh | null {
+    return this.mid?.mesh ?? null;
+  }
+
+  /** Where a part's mid-band proxy is drawn in the mid mesh, -1 when culled, not solid, not in the band or proxied (tests). */
+  midSlotOfPart(part: PlacedPart): number {
+    if (!this.mid || !part.look.solid) return -1;
+    let i = 0;
+    for (const p of this.parts) {
+      if (p === part) return this.mid.slotOf(i);
       if (p.look.solid) i++;
     }
     return -1;
@@ -242,6 +355,7 @@ export class StructureLayer {
     if (b) {
       b.solid.setGeometry(this.kit.geometry(id));
       this.writeOutline(id, b);
+      this.writeMid(); // its bounds and tone came with it
     }
     if (id === DEPOSIT_MODEL && this.decor) this.decor.setGeometry(this.kit.geometry(id));
     if (b || id === DEPOSIT_MODEL) this.proxiesChanged(); // its bounds and tone came with it
@@ -273,13 +387,14 @@ export class StructureLayer {
     for (const b of this.batches.values()) drawnInstances(b.solid.mesh, out);
     if (this.decor) drawnInstances(this.decor.mesh, out);
     if (this.proxy) drawnInstances(this.proxy.mesh, out);
+    if (this.mid) drawnInstances(this.mid.mesh, out);
   }
 
   /** Draw calls this layer would issue (for tests and stats). */
   get drawables(): number {
     let n = 0;
     for (const b of this.batches.values()) n += (b.solid.mesh.visible ? 1 : 0) + (b.outline.lines.visible ? 1 : 0);
-    return n + (this.decor?.mesh.visible ? 1 : 0) + (this.proxy?.mesh.visible ? 1 : 0);
+    return n + (this.decor?.mesh.visible ? 1 : 0) + (this.proxy?.mesh.visible ? 1 : 0) + (this.mid?.mesh.visible ? 1 : 0);
   }
 
   dispose(): void {
@@ -291,10 +406,13 @@ export class StructureLayer {
     this.decor?.dispose();
     this.decor = null;
     this.proxy?.dispose(); // the box geometry is the kit's
+    this.mid?.dispose();
     this.group.removeFromParent();
   }
 
   private rebuild(): void {
+    // the mid band carries over by structure: a layout change elsewhere does not pop one inside the hysteresis gap
+    const wasMid = this.mid ? new Set(this.parts.filter((_, i) => this.partMid[i] === 1).map((p) => p.structureId)) : null;
     this.parts.length = 0;
     this.tileOwner.clear();
     this.centroid.set(0, 0, 0);
@@ -314,6 +432,9 @@ export class StructureLayer {
     }
     if (this.centroid.lengthSq() > 1e-12) this.centroid.normalize();
     else this.centroid.set(0, 1, 0);
+    this.partMid = new Uint8Array(this.parts.length);
+    if (wasMid) this.parts.forEach((p, i) => (this.partMid[i] = wasMid.has(p.structureId) ? 1 : 0));
+    this.bandCam.set(NaN, NaN, NaN); // new parts: the band is evaluated at the next update
     this.writeSolids();
     for (const [id, b] of this.batches) this.writeOutline(id, b);
   }
@@ -329,19 +450,48 @@ export class StructureLayer {
   private writeSolids(): void {
     const counts = new Map<ModelId, number>();
     for (const p of this.parts) if (p.look.solid) counts.set(p.model, (counts.get(p.model) ?? 0) + 1);
-    for (const [id, n] of counts) this.batches.get(id)!.solid.ensure(n);
+    for (const [id, n] of counts) {
+      const b = this.batches.get(id)!;
+      b.solid.ensure(n);
+      if (b.src.length < n) b.src = new Int32Array(Math.max(n, b.src.length * 2));
+    }
     counts.clear();
-    for (const p of this.parts) {
-      if (!p.look.solid) continue;
+    this.parts.forEach((p, k) => {
+      if (!p.look.solid) return;
       const b = this.batches.get(p.model)!;
       const i = counts.get(p.model) ?? 0;
       this.m.copy(p.local);
       if (p.look.height < 1) this.m.multiply(SCALE_Y.makeScale(1, p.look.height, 1));
       b.solid.setMatrixAt(i, this.m);
+      b.src[i] = k;
       counts.set(p.model, i + 1);
-    }
+    });
     for (const [id, b] of this.batches) b.solid.commit(counts.get(id) ?? 0);
+    this.writeMid();
     this.proxiesChanged();
+  }
+
+  /**
+   * One mid-band box per solid part, in `parts` order: the same matrix and tone as its far proxy (`writeProxies`).
+   * Every solid part is written, whatever its band: switching only changes the filter.
+   */
+  private writeMid(): void {
+    const mid = this.mid;
+    if (!mid) return;
+    let n = 0;
+    for (const p of this.parts) if (p.look.solid) n++;
+    mid.ensure(n);
+    if (this.midSrc.length < n) this.midSrc = new Int32Array(Math.max(n, this.midSrc.length * 2));
+    let i = 0;
+    this.parts.forEach((p, k) => {
+      if (!p.look.solid) return;
+      this.m.copy(p.local);
+      if (p.look.height < 1) this.m.multiply(SCALE_Y.makeScale(1, p.look.height, 1));
+      mid.setMatrixAt(i, this.m.multiply(boxMatrix(this.kit.box(p.model), this.fit)));
+      mid.setColorAt(i, this.kit.tone(p.model));
+      this.midSrc[i++] = k;
+    });
+    mid.commit(i);
   }
 
   /** The parts, rocks or models changed: the proxies follow now when they show, else when they next do. */
@@ -396,7 +546,11 @@ export class StructureLayer {
       b = {
         solid: new InstancedBatch(this.group, this.kit.geometry(id), this.kit.material, `${this.grid.bodyId}_${id}`, 8, this.culler),
         outline: new LineBuffer(this.outlineMaterial, 256, false, `${this.grid.bodyId}_${id}_Sites`),
+        src: new Int32Array(8),
       };
+      const batch = b;
+      // the mid band draws these parts as boxes instead
+      if (this.mid) b.solid.setFilter((i) => this.partMid[batch.src[i]!] !== 1);
       this.group.add(b.outline.lines);
       this.batches.set(id, b);
       if (this.proxyOn) b.solid.park(true);

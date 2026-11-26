@@ -1,0 +1,9 @@
+defaults: planets hist [2080, 990, 966, 1013, 958, 993, 996, 982, 1022, 0]
+ rocky hist [2222, 1037, 1090, 1063, 949, 943, 906, 866, 924, 0]
+ mean planets 3.578, mean rocky 3.381
+ giant systems 887, giants per giant system 2.229
+ belts 3070, civ 96, rocky with moon 0.1500
+ max orbit 7642.32659792024
+ atmospheres [8466, 8396, 8618, 8327]
+ systems with a landable planet 0.7778
+ systems with >= 2 rocky 0.6741

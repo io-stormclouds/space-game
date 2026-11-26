@@ -193,6 +193,11 @@ export class CulledInstances {
     this.extentOf = null;
   }
 
+  /** Forces the next `cull` to rewrite the mesh because the filter's answers changed (the extents stay measured). */
+  refilter(): void {
+    this.applied = -1;
+  }
+
   /** Slot of source instance `i` in the mesh after the last `apply`, -1 when not drawn. */
   slotOf(i: number): number {
     return i < this.count ? this.slots[i]! : -1;

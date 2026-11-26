@@ -453,6 +453,8 @@ Przykład: SIL 10 → 11 (las), 14 (skała), 12 (śnieg), 9 (droga). Pod T5: san
 
 ## 12. Decyzje do podjęcia
 
+> **Rozstrzygnięte 2026-11-26** wg rekomendacji (polecenie użytkownika): wiersze w `docs/DECISIONS.md`, sekcja „Teren”.
+
 | ID | Pytanie | Opcje | Rekomendacja | Kiedy potrzebna |
 |---|---|---|---|---|
 | T-15 | Wartości `TERRAIN_RULES` | tabela 9.1 / inne | tabela 9.1, strojenie po playteście | przed A3 (T8) |
@@ -588,14 +590,16 @@ Pomiar na innym komputerze niż raport z 2026-11-07 (Ryzen 7 8840HS, Radeon 780M
 | `npm run e2e:wasm` (kopia świata w Rust, 2 wątki) | 17/17, w tym Play flow |
 | `npm run perf` (Radeon 780M, 120 Hz) | brak „PRZEKROCZONY”; M planet 161 870, teren-M 193 510, L planet 278 944 trójkątów (UWAGA) i 119 draw calli; pierwsze pobranie 5,1 MB (1,9 MB gzip) przy budżecie 15 MB |
 
-### Decyzje czekające na użytkownika
+### Decyzje (rozstrzygnięte 2026-11-26)
+
+Polecenie użytkownika 2026-11-26: „decyzje T-* wg rekomendacji”. Wiersze rejestru: `docs/DECISIONS.md`, sekcja „Teren” (tam też pozostałe decyzje z rozdz. 12).
 
 | ID | Co | Stan |
 |---|---|---|
-| T-15 | wartości kar terenu (las +10 %/+50 %, skała +40 %/+25 %, śnieg +20 %/+40 %, piasek +10 %/+20 %, lód +25 %/+50 %, droga −15 %/−25 %) | wdrożone wg rekomendacji, do strojenia po playteście |
-| T-22 | mapowanie typów budowli na modele (Space Base Bits i skórka medieval) | stykówki w `docs/img/structures/` |
-| T-23 | siła przygaszenia ruin (×0,8, 30 % do szarości) | wdrożone wg rekomendacji |
-| T-7 | grupa `terrain` w tokenach DS | dodana jako propozycja, po akceptacji zrzutów biomów |
-| T-8 | licencja KayKit Medieval (CC0 do potwierdzenia na stronie autora) | akcja użytkownika |
-| T-13 | budżet planety w fokusie 200 tys. | trzymany we wszystkich scenariuszach poza L planet |
-| — | pośredni LOD budowli na ciele w fokusie (L planet) | propozycja w `web-game/docs/PERF-REPORT.md` |
+| T-15 | wartości kar terenu (las +10 %/+50 %, skała +40 %/+25 %, śnieg +20 %/+40 %, piasek +10 %/+20 %, lód +25 %/+50 %, droga −15 %/−25 %) | wg rekomendacji, `DECISIONS.md` T-15; do strojenia po playteście |
+| T-22 | mapowanie typów budowli na modele (Space Base Bits i skórka medieval) | wg rekomendacji, `DECISIONS.md` T-22 (mapowanie wdrożone, stykówki w `docs/img/structures/`) |
+| T-23 | siła przygaszenia ruin (×0,8, 30 % do szarości) | wg rekomendacji, `DECISIONS.md` T-23 |
+| T-7 | grupa `terrain` w tokenach DS | wg rekomendacji, `DECISIONS.md` T-7 |
+| T-8 | licencja KayKit Medieval Hexagon | obowiązuje (sprawdzone 2026-11-26 na stronie autora: CC0 1.0, bez wymogu atrybucji), `DECISIONS.md` T-8 |
+| T-13 | budżet planety w fokusie 200 tys. | wg rekomendacji, `DECISIONS.md` T-13; trzymany we wszystkich scenariuszach (L planet od LOD-mid, 2026-11-26: 176 987) |
+| — | pośredni LOD budowli na ciele w fokusie (L planet) | wykonany 2026-11-26 (LOD-mid, `docs/reports/tasks/LOD-mid-structures.md`, weryfikacja PASS); do oceny zrzuty `docs/img/lod-mid/` (bryły przy krawędzi tarczy) |

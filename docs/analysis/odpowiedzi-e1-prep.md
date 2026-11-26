@@ -1,6 +1,7 @@
 # Odpowiedzi człowieka na pytania z E1-01 i E1-02 (2026-11-13)
 
 > **Status:** USTALENIA użytkownika (artefakt „E1: braki do odpowiedzi”, baza `e1prep`). Nie są wpisami w `docs/DECISIONS.md`. Pytania z treścią: `docs/reports/tasks/E1-01.md` §8 i `E1-02.md` §7 na gałęzi `auto/E1-prep`.
+> **Przeniesione:** do `docs/DECISIONS.md` 2026-11-26 (polecenie użytkownika); ten plik jest historią.
 
 | Pytanie | Odpowiedź |
 |---|---|

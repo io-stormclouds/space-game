@@ -252,17 +252,20 @@ fn rng_is_a_pure_function_of_its_key() {
 fn rng_matches_recorded_values() {
     // Computed from the description in `generator/rng.rs` by an independent program (BigInt
     // arithmetic), whose SplitMix64 step was checked against the published sequence for 1234567.
+    // Recomputed for the seed mixed before the coordinates (pilot E1, question 6, decision
+    // 2026-11-26) by a new BigInt program written from the description; the same program, with the
+    // seed not mixed, gives back every value recorded here before the change.
     const RECORDED: [u64; 10] = [
-        0x7490_7a61_25f3_62fe,
-        0xdfcc_0756_2190_b3ae,
-        0xbfe9_7185_f81e_052e,
-        0x78d1_65d7_be42_65f1,
-        0xb718_dc3b_4f7d_0435,
-        0x04f8_6666_2449_d91d,
-        0xb68d_3b9f_bd81_e1b5,
-        0x68e8_6d04_faef_821a,
-        0x9b40_4e33_c3d5_ffb8,
-        0x0eaa_225b_414f_5f0b,
+        0x83ca_c558_0859_c96b,
+        0x8397_9f53_6f2c_0b1b,
+        0xa9f1_4b97_c2b8_3fd9,
+        0x54f1_0462_8edf_614a,
+        0x5702_0780_aee8_68b6,
+        0x66a5_be53_76bd_0ace,
+        0xd98a_cd2c_f6ba_0129,
+        0xcd74_cbe0_2aa9_a250,
+        0x9bdf_916d_3871_5485,
+        0xa32d_9211_4b20_72cc,
     ];
     let key = (0x5eed_cafe_f00d_0001_u64, CellCoord { x: -3, y: 7, z: 12 }, 5_u64);
     let mut rng = Rng::for_cell(key.0, key.1, key.2);
@@ -271,14 +274,14 @@ fn rng_matches_recorded_values() {
 
     let mut rng = Rng::for_cell(key.0, key.1, key.2);
     let floats: Vec<u64> = (0..4).map(|_| rng.next_f64().to_bits()).collect();
-    assert_eq!(floats, [0x3fdd_241e_9849_7cd8, 0x3feb_f980_eac4_3216, 0x3fe7_fd2e_30bf_03c0, 0x3fde_3459_75ef_9098]);
-    assert_eq!(Rng::for_cell(key.0, key.1, key.2).next_f64(), 0.455329560010751);
+    assert_eq!(floats, [0x3fe0_7958_ab01_0b39, 0x3fe0_72f3_ea6d_e581, 0x3fe5_3e29_72f8_5707, 0x3fd5_3c41_18a3_b7d8]);
+    assert_eq!(Rng::for_cell(key.0, key.1, key.2).next_f64(), 0.5148127880023373);
 
     // the edges of the key space: the zero key, and the largest seed, coordinates and a wide stream
     let mut zero = Rng::for_cell(0, CellCoord { x: 0, y: 0, z: 0 }, 0);
-    assert_eq!([zero.next_u64(), zero.next_u64()], [0x78ae_5a9a_6b5f_d45e, 0xb989_5a2b_6859_2df1]);
+    assert_eq!([zero.next_u64(), zero.next_u64()], [0xcbd3_7ad2_9b93_b094, 0x2994_69dd_535a_ceff]);
     let mut edge = Rng::for_cell(u64::MAX, CellCoord { x: i32::MIN, y: i32::MAX, z: -1 }, 0xffff_ffff);
-    assert_eq!([edge.next_u64(), edge.next_u64()], [0x255c_773c_7bf3_9178, 0x0b35_c49b_8d82_87a5]);
+    assert_eq!([edge.next_u64(), edge.next_u64()], [0x027f_13e7_7da8_6e41, 0x3897_1932_4921_1c03]);
 }
 
 #[test]
@@ -307,6 +310,58 @@ fn neighbouring_cells_are_uncorrelated() {
         let b: Vec<f64> = (-5000..5000).map(|i| first(seed, cell(i), 1)).collect();
         let r = pearson(&a, &b);
         assert!(r.abs() <= 0.05, "seed {seed}, streams 0 and 1: correlation {r}");
+    }
+}
+
+#[test]
+fn seeds_differing_in_low_bits_give_different_galaxies() {
+    // Pilot E1, question 6, decision 2026-11-26: with `seed ^ x` as the first step of the key, cell
+    // (x, y, z) of the seed s drew what cell (x ^ d, y, z) of the seed s ^ d draws (d < 2^32), so
+    // such seeds gave one galaxy with its cells swapped along x.
+    let counts = |seed: u64| -> Vec<usize> {
+        let p = GalaxyParams { seed, ..GalaxyParams::default() };
+        (0..10_000).map(|i| stars_in_cell(&p, far_cell(i)).len()).collect()
+    };
+    // how many cells hold 0, 1, 2, … stars
+    let histogram = |counts: &[usize]| {
+        let mut cells = vec![0_usize; counts.iter().max().map_or(0, |n| n + 1)];
+        for &n in counts {
+            cells[n] += 1;
+        }
+        cells
+    };
+    let seeds = [1_u64, 2, 3];
+    let by_seed = seeds.map(counts);
+    for a in 0..seeds.len() {
+        for b in a + 1..seeds.len() {
+            let (sa, sb) = (seeds[a], seeds[b]);
+            assert!(by_seed[a] != by_seed[b], "seeds {sa} and {sb}: the same count of stars in each of 10 000 cells");
+            // the cells x = 2000 ..= 2099 are closed under x ^ d for d < 4: a swap along x keeps the histogram
+            assert_ne!(
+                histogram(&by_seed[a]),
+                histogram(&by_seed[b]),
+                "seeds {sa} and {sb}: the same counts of stars, only in other cells"
+            );
+        }
+    }
+
+    // cell (x, 0, 0) of the seed s against cell (x ^ d, 0, 0) of the seed s ^ d
+    let draws = |seed: u64, x: i32, stream: u64| {
+        let mut rng = Rng::for_cell(seed, CellCoord { x, y: 0, z: 0 }, stream);
+        [rng.next_u64(), rng.next_u64(), rng.next_u64()]
+    };
+    let pairs: [(u64, u32, i32); 5] =
+        [(1, 3, 0), (SEED, 1, 5), (SEED, 0xffff_ffff, FAR_X), (0x5eed_cafe_f00d_0001, 0x8000_0000, -3), (0, 7, 100)];
+    for (seed, d, x) in pairs {
+        let swapped = (x as u32 ^ d) as i32;
+        for stream in [0, 1 << 32] {
+            assert_ne!(
+                draws(seed, x, stream),
+                draws(seed ^ u64::from(d), swapped, stream),
+                "cell ({x}, 0, 0) of the seed {seed} and cell ({swapped}, 0, 0) of the seed {} draw the same (stream {stream})",
+                seed ^ u64::from(d)
+            );
+        }
     }
 }
 

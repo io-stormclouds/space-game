@@ -10,10 +10,11 @@
 //!   I/O, thread or address dependent order); calls can come in any order and from any thread;
 //! - randomness only through [`Rng`], keyed by the galaxy seed and the cell;
 //! - integers of fixed width in everything that reaches a result (`usize` only for indexing);
-//! - floating point: `+ - × ÷` and `sqrt` are exact in IEEE 754 and may be used directly; every
-//!   other function (`ln`, `exp`, `pow`, `sin`, `cos`, …) comes from the `libm` crate, never from
-//!   the `f64` methods, whose results differ between platforms (R-10). The same bytes must come out
-//!   natively and on `wasm32`;
+//! - floating point: `+ - × ÷` and `sqrt` are exact in IEEE 754 and may be used directly; so may
+//!   the other operations that are exact in IEEE 754, as `f64` methods: `floor`, `ceil`, `trunc`,
+//!   `abs`, `min`, `max` (pilot E1, question 1 a). Every other function (`ln`, `exp`, `pow`, `sin`,
+//!   `cos`, …) comes from the `libm` crate, never from the `f64` methods, whose results differ
+//!   between platforms (R-10). The same bytes must come out natively and on `wasm32`;
 //! - maps in results keep insertion order (`IndexMap`); never iterate a `HashMap` into a result.
 //!
 //! Units: galaxy positions in light years with Sol at the origin (the register's parsecs ×

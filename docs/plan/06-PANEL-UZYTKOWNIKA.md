@@ -142,7 +142,7 @@ Korporacje: pole `flag jsonb` i `color_id` w `corporations` (05 §5).
 |---|---|---|---|
 | U-1 | Metoda logowania | A e-mail + hasło; B OAuth; C oba | **A** w MVP, C w U3 |
 | U-2 | Awatar | A zestaw; B generowany; C upload | **B** |
-| U-3 | Kolor gracza a DS | tylko świat i mapa; także akcenty HUD gracza | **tylko świat i mapa** |
+| U-3 | Kolor gracza a DS | tylko świat i mapa; także akcenty HUD gracza | **tylko świat i mapa**. **Decyzja (U-3 w `docs/DECISIONS.md`, 2026-11-11): wariant c zamiast rekomendacji**: domyślnie świat i mapa, do tego opcjonalny motyw interfejsu w ustawieniach; kolory ostrzeżeń, błędów i sukcesu bez zmian |
 | U-4 | Flaga w 3D | maszt dwu-tonowy bez symbolu; tekstura KTX2; brak flagi w 3D | **maszt dwu-tonowy** w U3; KTX2 odłożone (M-3) |
 | U-5 | Callsign | unikalny globalnie, zmiana co 30 dni; nieunikalny + tag | **unikalny**, zmiana co 30 dni |
 | U-6 | Język interfejsu | PL; PL + EN | PL w MVP; słownik gotowy na EN (W16) |

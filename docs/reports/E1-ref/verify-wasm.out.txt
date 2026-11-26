@@ -1,0 +1,8 @@
+recorded: 667109 bytes sha256 d269625ceef4b7c26d3049aa8f7a5595f000bd5d8043f195a6d6511bfc10b5d8
+wasm:     667109 bytes sha256 d269625ceef4b7c26d3049aa8f7a5595f000bd5d8043f195a6d6511bfc10b5d8
+Buffer.equals: true
+row 2000..2068: 202 stars, 202 generated; file systems 200
+systems == first 200 star keys of the row: true
+system lines from line 56; first system line equals row output first system: true
+cell (0,0,0) stars equal: true; stars 2
+seed 20261112 equals file: false

@@ -145,7 +145,7 @@ Faza E5. Dane: `alliances { id, name, flag }`, `alliance_members { alliance_id, 
 | S-5 (SOC-5) | Rywalizacja | A rankingi projektów; B + sezonowe ekonomiczne; C + wyścig o zasoby | **B**; C po wspólnych układach |
 | S-6 (SOC-6) | Komunikacja | A bez czatu; B korporacja i hub; C globalny + prywatne | **B** |
 | S-7 (EKO-7) | Waluta | kredyty; barter | **kredyty** `kr` (model już je liczy) |
-| S-8 (WIZ-6) | PvP | brak bezpośredniego szkodzenia; ograniczone (blokady hubów); pełne | **brak** w MVP; decyzja o rywalizacji o zasoby razem z MP-2 B |
+| S-8 (WIZ-6) | PvP | brak bezpośredniego szkodzenia; ograniczone (blokady hubów); pełne | **brak** w MVP; decyzja o rywalizacji o zasoby razem z MP-2 B. **Potwierdzone dla MVP** (S-8 w `docs/DECISIONS.md`, 2026-11-11): PvP w następnym etapie, frakcje prowadzą wtedy ekspansję; SOC-3 C bez zmian na teraz |
 | S-9 | Które gwiazdy są hubami poza Syriuszem i Słońcem | 1–3 z zasięgu Mk II | Epsilon Eridani i Procyon (dane w `stars.data.ts`, obie w zasięgu kanwy) |
 | S-10 | Czas dostawy k [h/ly] | 1; 2; 4 | 2 (do kalibracji w `sim-cli`) |
 | S-11 | Sojusze w MVP | E5; później | E5 (S3) |
