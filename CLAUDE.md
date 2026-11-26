@@ -24,7 +24,7 @@ Zadanie jest skończone dopiero, gdy bramka dla zmienionego obszaru jest **zielo
 
 ## Zasady twarde
 
-- **R-2 (plan 02 §3):** TS `web-game/packages/domain/src/sim/` jest zamrożony; nowe reguły gry tylko w Rust (`server/crates/game-core`), z parytetem i złotymi powtórkami (`server/conformance`). Nie wykonuj `cargo update` bez potrzeby (`Cargo.lock` przypina wersje pod toolchain `windows-gnu`).
+- **R-2 (plan 02 §3):** TS `web-game/packages/domain/src/sim/` jest zamrożony; nowe reguły gry tylko w Rust (`server/crates/game-core`), z parytetem i złotymi powtórkami (`server/conformance`). Nie wykonuj `cargo update` bez potrzeby: `Cargo.lock` przypina wersje (R-17, pierwotnie pod `windows-gnu` bez MinGW), a zmiana zależności może zmienić bajty wyników i wzorce.
 - **Nie zgadujesz.** Niejasność wymagań, sprzeczność ustaleń albo brak decyzji → zapisz pytanie w raporcie zadania (opcje + rekomendacja), oznacz zadanie jako zablokowane i weź następne niezależne. Nie wymyślaj mechaniki.
 - Nie zmieniasz `docs/DECISIONS.md`, kontraktów protokołu (`game-protocol`, `GameApi`) ani liczb ekonomii bez zadania, które tego wprost wymaga; wtedy opisz zmianę w raporcie.
 - Zero zmian poza zakresem zadania; zero refaktorów „przy okazji”.
@@ -36,15 +36,25 @@ Zadanie jest skończone dopiero, gdy bramka dla zmienionego obszaru jest **zielo
 - Praca autonomiczna: jeden worktree i jedna gałąź na zadanie (`git worktree add ../space-game-<zadanie> -b auto/<etap>/<zadanie> <baza>`). Bez `force push`, bez zmian na `main`, bez `--no-verify`.
 - Commit po każdym zielonym kroku; komunikat: co i dlaczego (po polsku, jak w historii repo).
 
-## Środowisko (ta maszyna, Windows)
+## Środowisko
 
-- `cargo` nie jest na PATH: `export PATH="$USERPROFILE/.cargo/bin:$PATH"` (bramka robi to sama). Toolchain `stable-x86_64-pc-windows-gnu`; bez MSVC, bez PostgreSQL, Docker wyłączony.
-- Pobieranie obcych binariów jest blokowane — nie próbuj instalować narzędzi spoza rustup/npm.
-- Playwright: bez wbudowanego Chromium; użyj `E2E_CHANNEL=chrome`. Wybierz wolny `E2E_PORT` i **sprawdź port** (`Get-NetTCPConnection -LocalPort <port>`) — użytkownik trzyma własny `ng serve` na 4420, a PoC wnętrz na 4430. Nie zabijaj jego procesów; zatrzymuj tylko własne.
-- Nie uruchamiaj `cargo build/test` równolegle z e2e ani `ng test`. e2e: `--workers=1` lub `2`.
-- Git Bash przerabia argumenty wyglądające na ścieżki: prefiks `MSYS_NO_PATHCONV=1` (np. adresy `#/...`).
+### Zasady na każdej maszynie
+
+- **Porty:** użytkownik trzyma własny `ng serve` na **4420**, a PoC wnętrz na **4430** — nigdy ich nie używaj. Bramka bierze port e2e z puli 4441–4449 (albo `E2E_PORT`), `npm run perf` — `PERF_PORT` (domyślnie 4435). Przed startem serwera **sprawdź port** (`Get-NetTCPConnection -LocalPort <port>`). Nie zabijaj cudzych procesów; zatrzymuj tylko własne (także zawieszony `ng serve` po przerwanym Playwright).
+- Nie uruchamiaj `cargo build/test` równolegle z e2e, `ng test` ani `npm run perf` (obciążenie daje fałszywe porażki e2e). e2e: `--workers=1` lub `2`, jeśli przy domyślnej liczbie wątków przekraczają czas.
 - vitest połyka `console.log`; pomiary zapisuj do pliku.
-- `npm run perf` jest ograniczony vsync (120 Hz); sygnałem budżetu są trójkąty i draw calls.
+- `npm run perf`: FPS jest ograniczony vsync monitora; sygnałem budżetu są trójkąty i draw calls. Pomiary przed/po porównuj na tym samym GPU.
+- Świeży worktree: `npm ci` w `web-game/` przed bramką (`econ:check` wymaga `tsx`). `git worktree remove --force` zostawia `web-game/node_modules` (dowiązania workspace): resztę usuń `cmd /c rmdir /s /q <katalog>` (nie wchodzi w cele dowiązań).
+- Nie instaluj narzędzi spoza rustup/npm bez zgody użytkownika.
+
+### Ta maszyna (Windows, od 2026-11-26)
+
+- Rust z rustup, toolchain **`stable-x86_64-pc-windows-msvc`** (Visual Studio Build Tools), `cargo` na PATH; target `wasm32-unknown-unknown` potrzebny do `npm run wasm:build` (`rustup target add wasm32-unknown-unknown`). Przypięcia `Cargo.lock` z R-17 (pod `windows-gnu`) działają też tu — nie zmieniaj ich bez zadania; aktualizacja R-17 to decyzja człowieka.
+- Playwright z własnym Chromium (`npx playwright install chromium`). Bramka domyślnie ustawia `E2E_CHANNEL=chrome` (zainstalowany Chrome); żeby użyć Chromium Playwrighta, uruchom ją z pustym `E2E_CHANNEL=`.
+- Docker działa i jest lokalny PostgreSQL: testy adaptera bazy z `TEST_DATABASE_URL=postgres://…` (lokalna baza testowa albo kontener, `docs/HANDOFF.md` §5), uruchomienie `deploy/` przez `docker compose` (`server/README.md`, B4).
+- Git Bash przerabia argumenty wyglądające na ścieżki: prefiks `MSYS_NO_PATHCONV=1` (np. adresy `#/...`); bramka ustawia to sama.
+
+Notatki o poprzedniej maszynie (`windows-gnu` bez MinGW, `cargo` poza PATH, brak Chromium Playwrighta, ekran 120 Hz): `docs/HANDOFF.md` §5.
 
 ## Definicja ukończenia zadania
 
