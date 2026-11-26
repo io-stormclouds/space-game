@@ -1,6 +1,7 @@
 # Propozycje wpisów do `docs/DECISIONS.md`
 
 > **Status:** PROPOZYCJA (krok 1 autonomii, zadanie B). Ten plik niczego nie rozstrzyga i nie zmienia `docs/DECISIONS.md`; przeniesienie wierszy wymaga polecenia człowieka (07 §4).
+> **Przeniesione:** do `docs/DECISIONS.md` 2026-11-26 (polecenie użytkownika); ten plik jest historią.
 > **Data:** 2026-11-11
 > **Źródła:** `docs/analysis/2026-11-11-ustalenia-sesji.md`, rejestr pytań w `docs/analysis/2026-11-11-dziennik-pomyslow.md` (sekcje B i C), `docs/DECISIONS.md`, `web-game/docs/UNIFICATION.md`.
 > **Powiązane:** audyt i mapa `docs/plan/08-MAPA-DROGOWA.md`, pytania `docs/analysis/kolejka-pytan.md` (P-10…P-52).

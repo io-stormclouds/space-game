@@ -1,6 +1,7 @@
 # Odpowiedzi człowieka na kolejkę pytań (P-10…P-52)
 
 > **Status:** USTALENIA użytkownika z 2026-11-11 (artefakt „Kolejka pytań”). Nie są wpisami w `docs/DECISIONS.md`; przeniesienie wymaga polecenia człowieka. Treść opcji: `kolejka-pytan.md`.
+> **Przeniesione:** do `docs/DECISIONS.md` 2026-11-26 (polecenie użytkownika); ten plik jest historią.
 > **Zasada odczytu:** litera = opcja z `kolejka-pytan.md`. Wszystkie odpowiedzi zgodne z rekomendacją koordynatora, z wyjątkiem P-10 (c zamiast a).
 
 ## Start pilotażu

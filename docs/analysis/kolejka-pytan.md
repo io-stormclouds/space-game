@@ -1,6 +1,7 @@
 # Kolejka pytań do człowieka (krok 1 autonomii)
 
 > **Status:** PYTANIA z audytu z 2026-11-11 (`docs/plan/07-AUTONOMIA.md` §4, zadanie D). Zawiera tylko to, czego nie da się rozstrzygnąć z `docs/DECISIONS.md`, planów, dziennika pomysłów ani kodu.
+> **Przeniesione:** do `docs/DECISIONS.md` 2026-11-26 (polecenie użytkownika); ten plik jest historią.
 > **Powiązane:** mapa drogowa `docs/plan/08-MAPA-DROGOWA.md` (zadania E1…E11), propozycje wpisów `docs/analysis/propozycje-decyzji.md`.
 > **Konwencja:** ID `P-10…P-52` kontynuują numerację pytań otwartych (P1–P9 są w `web-game/docs/UNIFICATION.md` §5–6). Każda rekomendacja to PROPOZYCJA koordynatora, nie decyzja. FAKT ma odnośnik do pliku.
 > **Jak odpowiadać:** wystarczy `P-24: a` albo własna treść. Odpowiedzi trafiają do `DECISIONS.md` poleceniem człowieka.

@@ -4,9 +4,9 @@ Gra ekonomiczno-strategiczna w kosmosie: klient Angular 22 + Three.js (`web-game
 
 ## Źródła prawdy (czytaj przed pracą)
 
-1. `docs/DECISIONS.md` — rejestr decyzji (ID R-, W-, M-, A-, G-, S-, U-). **Obowiązuje**, dopóki człowiek go nie zmieni.
+1. `docs/DECISIONS.md` — rejestr decyzji (ID R-, W-, M-, A-, G-, C-, S-, U-, D-, T-, P-). **Obowiązuje**, dopóki człowiek go nie zmieni. Od 2026-11-26 zawiera też ustalenia z listopada, odpowiedzi P-10…P-52 i decyzje terenu T-*.
 2. `docs/plan/` — plan (00 INIT, 01 WORKFLOW, 02 BACKEND, 03 PIPELINE-3D, 05 SOCIAL, 06 PANEL).
-3. `docs/analysis/2026-11-11-dziennik-pomyslow.md` — dziennik pomysłów #1–#33, rejestr pytań i **ustalenia z listopada 2026** (sekcja C rejestru). Ustalenia z sesji nadpisują rekomendacje agentów, ale **nie** wpisy w `DECISIONS.md`, dopóki człowiek ich tam nie przeniesie (zob. mapa drogowa).
+3. `docs/analysis/2026-11-11-dziennik-pomyslow.md` — dziennik pomysłów #1–#33, rejestr pytań i **ustalenia z listopada 2026** (sekcja C rejestru). Ustalenia przeniesione do `DECISIONS.md` 2026-11-26; nowe ustalenia z sesji nadpisują rekomendacje agentów, ale **nie** wpisy w `DECISIONS.md`, dopóki człowiek ich tam nie przeniesie.
 4. Kod i testy. Liczby ekonomii tylko przez model (`web-game/packages/economy-model`, `npm run econ:docs`).
 
 Etykiety w dokumentach: USTALENIE / FAKT / PROPOZYCJA / PYTANIE. Nie zamieniaj PROPOZYCJI w USTALENIE.

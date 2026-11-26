@@ -16,7 +16,7 @@ Oznaczenia: **FAKT** wynika z kodu lub dokumentów, **DECYZJA** pochodzi z planu
 | W03 | Kształt warstwy mock | A · Kontrakt i Web Worker | Kontrakt `GameApi` (rozkazy, zapytania, zdarzenia), mock w Web Workerze, symulacja poza wątkiem UI. |
 | W04 | Repozytorium | A · Git w całym projekcie | Jedno repo: docs, design-system, web-game i poc (kod PoC bez zmian). |
 | W05 | Założenia Z1–Z6 | wszystkie: Potwierdzam | Zob. tabela niżej. |
-| W06 | Scenariusz startowy | A · Kanwa jako główny przepływ | Przylot do Tau Ceti domyślny; układ z 3D PoC zostaje presetem testowym dla przeniesionych testów. |
+| W06 | Scenariusz startowy | A · Kanwa jako główny przepływ | Przylot do Tau Ceti domyślny; układ z 3D PoC zostaje presetem testowym dla przeniesionych testów. **Zmieniona przez G-9, G-10** (`docs/DECISIONS.md`, 2026-11-11): start wyborem gwiazdy na mapie galaktyki, bez Arki-1; Tau Ceti z Arką-1 zostaje presetem testowym i demo bez serwera (P-30: a). |
 | W07 | Zakres ekonomii w mocku | B · E0–E1 grywalne, reszta jako dane | Grywalne surowce i budynki z kanwy (E0–E1 i ładownia Arki); pełny katalog wczytany jako dane. |
 | W08 | Atanor w web-game | A · Widok budynku | Edytor z budynku „Fabryka atanorowa”, 1–2 receptury T3, atomy nazwane materiałami. Wymaga planszy Atanora w stylu DS. |
 | W09 | Błędy PoC | A · Naprawiać przy przenoszeniu | Każda poprawka z testem i wpisem w sekcji 4. |
@@ -32,7 +32,7 @@ Oznaczenia: **FAKT** wynika z kodu lub dokumentów, **DECYZJA** pochodzi z planu
 
 | Założenie | Treść | Status |
 |---|---|---|
-| Z1 | Cel gry w układzie: gwiazdolot i wybór kolejnej gwiazdy na mapie galaktyki. | potwierdzone |
+| Z1 | Cel gry w układzie: gwiazdolot i wybór kolejnej gwiazdy na mapie galaktyki. | potwierdzone; po zmianie startu Z1 zostaje, a gwiazdolot to najwyższa klasa okrętu kolonizacyjnego (P-52: a w `docs/DECISIONS.md`, 2026-11-11; potwierdzić przed E8) |
 | Z2 | Materiały T3 i T4 powstają wyłącznie w Fabryce atanorowej; T1 i T2 w zwykłych fabrykach. | potwierdzone |
 | Z3 | Magazyny są lokalne (na ciele), a materiały przemieszczają się fizycznie: taśmami, rurami i pojazdami. | potwierdzone |
 | Z4 | Energia ogranicza produkcję w czasie: pobór jest ciągły, a deficyt obniża wydajność. | potwierdzone |
@@ -275,8 +275,8 @@ Na prośbę „decyzje wg rekomendacji” rozstrzygam pytania P1–P6 i kwestie 
 | D5 | Potrzeby załogi, przyrost (4.5) | Jeszcze nie; załoga działa jako pojemność. |
 | D6 | Bufory budynków (2 / 5 partii) | Jeszcze nie; partia rusza tylko, jeśli wyjście się zmieści. |
 | D7 | Sonda („Wyślij sondę”) | Jeszcze nie: jest na pokładzie, rozkazu brak. |
-| D8 | Przylot | Arka startuje na orbicie postojowej przy gwieździe (przylot = stan początkowy). |
-| D9 | Ładownia Arki | 9 pozycji = 2000 j.: 7 z paska kanwy oraz Pręty paliwowe 20 i Silniki 40 z listy „na pokładzie”. Zgadza się z „2000 / 2000 j.” z kanwy. |
+| D8 | Przylot | Arka startuje na orbicie postojowej przy gwieździe (przylot = stan początkowy). Dotyczy presetu Tau Ceti; nowy start: G-10, G-17 (`docs/DECISIONS.md`). |
+| D9 | Ładownia Arki | 9 pozycji = 2000 j.: 7 z paska kanwy oraz Pręty paliwowe 20 i Silniki 40 z listy „na pokładzie”. Zgadza się z „2000 / 2000 j.” z kanwy. Dotyczy presetu Tau Ceti; nowy start: G-10, G-17 (`docs/DECISIONS.md`). |
 | D10 | Orbity Tau Ceti | Promienie z nasłonecznienia z kanwy (r = 900·√(0,52 / ins)), okresy ∝ r^1,5 jak u planety PoC. |
 | D11 | Rezerwacja | Planowane źródła i odbiorcy liczą się przy sprawdzaniu mocy i załogi rozkazu; wydajność liczą tylko działające budynki. |
 | A1 | Atanor: bufory wejścia | Jeden na materiał (jak zbudowano). |
@@ -328,7 +328,7 @@ Na prośbę „decyzje wg rekomendacji” rozstrzygam pytania P1–P6 i kwestie 
 | D29 | Zwrot E0 | Nie jest parametrem w panelu: k ery E0 = 1 z definicji modelu. |
 | D30 | Gwiazda jako cel lotu | Na prośbę użytkownika: nie da się na niej wylądować ani do niej polecieć. Domena odrzuca `MOVE_SHIP` do gwiazdy kodem `NOT_LANDABLE` („Na gwieździe nie można wylądować”). Arka startuje przy gwieździe i może z niej odlecieć. |
 | D31 | Wybór planety w widoku Układ | Na prośbę użytkownika: kliknięcie planety lub księżyca z siatką zaznacza ciało i przełącza na widok Planeta ze zbliżeniem. Gwiazda i pas zostają zaznaczone w przeglądzie. Mapa w doku i lista skanu zaznaczają bez zmiany widoku. Widok Planeta jest dostępny, gdy jest ciało w fokusie (zaznaczone albo kolonia). |
-| D33 | Statek-matka a lądowisko | Arka nie ląduje na lądowisku: dokuje na orbicie postojowej (1,25 R), jak na kanwie, i rozładowuje się promem. Statki transportowe (`SHIP`) dokują na lądowisku jak w 3D PoC. Zmienia S4 tylko dla statku-matki: start, punkt przechwycenia i paliwo Arki liczone z orbity (`OrbitSolver.stationPosition`). |
+| D33 | Statek-matka a lądowisko | Arka nie ląduje na lądowisku: dokuje na orbicie postojowej (1,25 R), jak na kanwie, i rozładowuje się promem. Statki transportowe (`SHIP`) dokują na lądowisku jak w 3D PoC. Zmienia S4 tylko dla statku-matki: start, punkt przechwycenia i paliwo Arki liczone z orbity (`OrbitSolver.stationPosition`). Dotyczy presetu Tau Ceti; nowy start: G-10, G-17 (`docs/DECISIONS.md`). |
 | D34 | Pole na planecie (3D PoC `tile-panel` + pasek budowy) | Zaznaczone pole ma własny panel: numer, sześciokąt lub pięciokąt, złoże z pozostałą ilością, budowla stojąca na polu, lista „Tu można postawić” ze sprawdzenia serwera (nowe zapytanie `GameApi.tileInfo`). Karta pola: „Postaw: [wydobywarka złoża]” (Enter), „Lądowisko tutaj” (D), oba od razu; „Buduj tutaj…” (B) otwiera katalog wycelowany w pole (duch startuje na polu, Enter stawia); „Wyślij łazik” (J). |
 | D35 | Łazik | „Jedź do” (J), potem pole; albo prawy przycisk na polu przy zaznaczonym łaziku (jak w PoC). „Wróć do portu” (H). Panel pokazuje długość trasy. |
 | D36 | Rozkazy statku | Rozkaz lotu (prawy przycisk, „Leć do…”, mapa) idzie do zaznaczonego statku, a bez zaznaczenia do Arki. Statek transportowy ma własną kartę: „Leć do…” (E), „Wróć do bazy” (H). Panel statku w locie pokazuje cel i czas do przylotu. Zamyka K5. |

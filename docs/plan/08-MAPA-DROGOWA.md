@@ -726,7 +726,8 @@ Ocena łączna (PROPOZYCJA): ryzyko pilotażu jest **niskie dla repozytorium** (
 | PoC wydobycia z pasa asteroid | C-12: zapisany na później | nowy katalog w `poc/` na polecenie człowieka |
 | Audio | założenie A12, bez ustalenia | P-50 |
 | Pipeline modeli 3D (plan 03), przeglądarka assetów (plan 04 §3), GitLab i CI (plan 01), beta zamknięta | dawne etapy E0, E3, E5; nie wynikają z ustaleń z listopada | decyzja człowieka (P-14) |
-| Otwarte decyzje terenu T-15, T-22, T-23, T-7, T-8 oraz P7, P8, P9 | czekają na użytkownika od wcześniej | bez zmian |
+| Decyzje terenu T-15, T-22, T-23, T-7 (= P9), T-8 | rozstrzygnięte 2026-11-26 wg rekomendacji (polecenie człowieka), wiersze T- w `docs/DECISIONS.md` | — |
+| P7, P8 (`UNIFICATION.md`) | czekają na użytkownika od wcześniej | bez zmian |
 
 ## 8. Podsumowanie
 

@@ -107,7 +107,7 @@ Pięć decyzji, od których zależy reszta:
 
 **Rekomendacja:** **A w MVP**, B jako późniejsza opcja (tylko w strefach, do których gracz wchodzi świadomie). Ekonomia i kooperacja są rdzeniem wizji.
 
-**Decyzja:** —
+**Decyzja:** **A w MVP** — MVP bez PvP; PvP projektowane w następnym etapie, frakcje prowadzą wtedy ekspansję (S-8 w `docs/DECISIONS.md`, ustalenie użytkownika 2026-11-11).
 
 ### WIZ-7. Kim jest gracz (fantazja i ton)? · P2
 
@@ -352,7 +352,7 @@ Pięć decyzji, od których zależy reszta:
 
 **Rekomendacja:** **B**, z podstawową moderacją (zgłoszenia, filtr, wyciszanie).
 
-**Decyzja:** —
+**Decyzja:** częściowa — wiadomości prywatne: kontakt z odkrytym graczem jednostronny z blokadą, odbiorca może odpowiedzieć (S-14 w `docs/DECISIONS.md`, ustalenie użytkownika 2026-11-11; zasady wiadomości: P-48 a). Czat korporacji i hubu bez decyzji.
 
 ---
 
@@ -382,7 +382,7 @@ Pięć decyzji, od których zależy reszta:
 
 **Rekomendacja:** **C w MVP, docelowo B.**
 
-**Decyzja:** —
+**Decyzja:** wyłączność **planety**, nie układu: kolonie tylko na pustych planetach, rejestr zajętości planet w usłudze galaktyki, światy kolonii nadal instancjonowane, WIZ-1 = C bez zmian (G-14 w `docs/DECISIONS.md`, ustalenie użytkownika 2026-11-11; semantyka rejestru: P-22 a).
 
 ### MP-3. Ilu graczy na świat? · P1
 
