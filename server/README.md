@@ -319,6 +319,37 @@ Przesyłki a awaria serwera (2026-11-10): przedtem wysyłka mogła przepaść, j
   - `world::tests::trade_crosses_into_the_galaxy_and_back_once`: zgłoszenie po zapisie dziennika i świat odtworzony „po awarii” zgłasza wysyłkę ponownie.
 - Zostaje okno między zapisem pliku a `fsync`: utrata zasilania, nie awaria procesu.
 
+## Generator galaktyki (E1, 2026-11-13; domknięcie 2026-11-26)
+
+Czysta, deterministyczna funkcja w `crates/game-core/src/galaxy/generator/` (plan 08 E1, plan 07 §5; decyzje G-12, G-13, G-22). Wynik zależy tylko od argumentów: bez stanu globalnego, zegara, I/O ani kolejności wywołań; te same bajty natywnie i na `wasm32`. Nikt go jeszcze nie woła w grze: wpięcie w usługę galaktyki to etap E3, nowy start E4, olbrzymy i księżyce jako ciała świata E6.
+
+| Funkcja | Co robi |
+|---|---|
+| `stars_in_cell(p, cell)` | gwiazdy sześciennej komórki `cell_ly`: najpierw gwiazdy rejestru (41, bez zmian), potem generowane (klasa z udziałów, parametry z przedziałów klasy, nie bliżej gwiazdy rzeczywistej niż `min_real_separation_ly`) |
+| `cell_of(p, pos_ly)` | komórka zawierająca pozycję (`floor(pos / cell_ly)`) |
+| `generate_system(p, star)` | układ gwiazdy generowanej: planety skaliste (siatka, złoża, atmosfera, profil, księżyc z udziałem `rocky_moon_share`), olbrzym poza linią śniegu z księżycami, pas, cywilizacja jako dana (Q36 a); `None` dla gwiazd rejestru |
+| `habitable_zone(&p.zone, luminosity)`, `HabitableZone::label`, `SystemSpec::planet_zones` | strefa życia r = 900·√(L/S) dla granicznych nasłonecznień; tylko etykieta, bez wpływu na reguły i biomy (G-22) |
+| `system_bodies(spec)` | `CelestialBody` dla `OrbitSolver`, `insolation_of`, `build_world_grids`: gwiazda, planety skaliste, pas (olbrzymy i księżyce pominięte do E6-01). Identyfikatory `sg_<x>_<y>_<z>_<indeks>`, planeta `_p<n>` (numer liczy też olbrzymy), pas `_belt` |
+| `place_account(p, occupied, rules)` | gwiazda startowa nowego konta: generowana, wolna, z planetą do lądowania, w odległości [`min_ly`, `max_ly`] od najbliższego gracza (pierwsze konto: w `max_ly` od `origin_ly`); spośród dopuszczalnych najbliższa `origin_ly` |
+
+**Losowanie** (`rng.rs`, kontrakt w nagłówku): SplitMix64 z kluczem (ziarno galaktyki, komórka, strumień). Ziarno jest mieszane przed dołączeniem współrzędnych (`mix(seed + GAMMA)`, decyzja po pilotażu, pytanie 6 w `docs/reports/E1.md`), więc ziarna różniące się tylko niskimi bitami dają różne galaktyki. **Arytmetyka:** `+ − × ÷` i operacje dokładne IEEE 754 z metod `f64` (`sqrt`, `floor`, `ceil`, `trunc`, `abs`, `min`, `max`); każda inna funkcja (`ln`, `exp`, `pow`, `sin`, `cos`) z crate `libm` (R-10). Mapy w wynikach to `IndexMap`, liczby o stałej szerokości.
+
+**Parametry** (`params.rs`, `Default` = wartości tymczasowe oznaczone w kodzie PROPOSAL / TO BE CONFIRMED / FACT): `GalaxyParams` (ziarno, `cell_ly` 10 ly, `stars_per_cell` 3, `min_real_separation_ly` 2, klasy widmowe z udziałami i przedziałami), `SystemParams` (20 % układów bez planet, do 8 planet, orbity 300–8000, siatki n = 5–8, złoża 7 surowców, olbrzymy w klasach F/G/K z udziałem 0,4 i 1–4 księżycami, pas 0,3, cywilizacja 0,01, księżyc planety skalistej 0,15), `ZoneLimits` (1,1 i 0,36), `PlacementParams` (`min_ly` 8, `max_ly` 16). Wartości produkcyjne: P-17, P-18, P-19, P-47 przed E3-02 / E3-04 / E6-03. Parametry nie są jeszcze walidowane; zdegenerowane wartości nie powodują paniki, ale generator po cichu je koryguje (przegląd: `docs/reports/E1-review.md`, pytanie 1).
+
+**Testy i wzorce:**
+
+```bash
+cargo test -p game-core --test galaxy_gen                                   # 26 testów akceptacyjnych pilotażu (+ ziarno)
+cargo run -p conformance --release -- galaxy conformance/vectors/galaxy-gen.json         # porównanie bajt w bajt
+cargo run -p conformance --release -- galaxy-record conformance/vectors/galaxy-gen.json  # ponowne nagranie (tylko przy zmianie kontraktu)
+```
+
+Zgodność `wasm32`: `game-wasm` eksportuje `sg_galaxy` (eksport testowy poza `GameApi`, P-16 a; zostaje w module klienta, +74 kB, 23 kB gzip), a `web-game/packages/wasm-host/src/galaxy-gen.spec.ts` porównuje jego tekst z plikiem wzorcowym. Bez zbudowanego modułu (`npm run wasm:build`) test jest pomijany; bramka buduje moduł przed vitest.
+
+**Pilotaż:** dwie niezależne implementacje tego samego kontraktu (`auto/E1`: Fable 5.2, na `main`; `auto/E1-ref`: Opus 5.5, gałąź archiwalna na `origin`). Miary, przegląd i decyzje: `docs/reports/E1.md`, `docs/reports/E1-review.md`, `docs/DECISIONS.md`.
+
+**Tymczasowe / do decyzji:** wartości parametrów (wyżej); format nazw gwiazd generowanych (E3-01); kryteria „dobrego startu” poza „ma planetę do lądowania” (E4-02); koszt `place_account` rośnie z liczbą kont (zmierzyć przy 10 000 kont przed E3-04); walidacja parametrów; zachowanie, gdy ciało nie mieści się w oknie orbit (dziś ciche pominięcie).
+
 ## Czego port nie zawiera
 
 - `galaxy-sim.ts` i `MockServer` nie są częścią `game-core`; mieszkają w `game-session` (B3). Na serwerze `GalaxySim` napędza frakcje NPC usługi galaktyki (R-7), a nie pojedyncze światy.
