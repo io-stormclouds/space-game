@@ -9,11 +9,16 @@
 //!                z = (z ^ (z >> 27)) * 0x94D0_49BB_1331_11EB
 //!                z ^ (z >> 31)                                   (the SplitMix64 finaliser)
 //! absorb(h, v) = mix((h ^ v) + GAMMA)
-//! state(key)   = absorb(absorb(absorb(absorb(seed, x), y), z), stream)
+//! state(key)   = absorb(absorb(absorb(absorb(mix(seed + GAMMA), x), y), z), stream)
 //!                x, y, z: the cell coordinates as u32 (two's complement), widened to u64
 //! next_u64     : state = state + GAMMA; the result is mix(state)  (SplitMix64)
 //! next_f64     : (next_u64() >> 11) / 2^53                        (uniform in [0, 1))
 //! ```
+//!
+//! The seed is mixed before the first coordinate is absorbed: with `seed ^ x` as the first step,
+//! cell (x, y, z) of the seed s drew what cell (x ^ d, y, z) of the seed s ^ d draws, so seeds that
+//! differ in the low 32 bits gave one galaxy with its cells swapped along x (pilot E1, question 6,
+//! decision 2026-11-26).
 //!
 //! All arithmetic is on `u64` and wraps. There is no other state: no globals, no caches, no clock.
 
@@ -51,7 +56,7 @@ pub struct Rng {
 impl Rng {
     /// The stream `stream` of `cell` in the galaxy `seed`.
     pub fn for_cell(seed: u64, cell: CellCoord, stream: u64) -> Rng {
-        let h = absorb(seed, coord(cell.x));
+        let h = absorb(mix(seed.wrapping_add(GAMMA)), coord(cell.x));
         let h = absorb(h, coord(cell.y));
         let h = absorb(h, coord(cell.z));
         Rng { state: absorb(h, stream) }
