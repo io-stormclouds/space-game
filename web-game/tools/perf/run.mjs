@@ -152,11 +152,16 @@ const overlay = (page) =>
 /** "31 216" → 31216, "0,2 ms" → 0.2, "13 / 0" → 13 (first number). */
 const num = (s) => parseFloat(String(s ?? '0').split('/')[0].replace(/\s/g, '').replace(',', '.')) || 0;
 
+/** Remediation tasks done since the report started listing them (kept in the list, ticked). */
+const DONE = [
+  '- [x] **L · planet · trójkąty** (UWAGA: 267 949 na czystym HEAD 2026-11-26, uwaga od 200 000) → pośredni LOD budowli na ciele w fokusie (LOD-mid, `docs/reports/tasks/LOD-mid-structures.md`)',
+];
+
 /** What to do when a metric is over its budget, by view (proposals for the backlog; T4 culling, decor LOD and T4b proxies are in). */
 const REMEDY = {
   triangles: {
     planet:
-      'zostają pełne modele na ciele w fokusie (budowle w widocznej czaszy, statki zadokowane przy nim, łaziki na nim): pośredni LOD budowli w fokusie albo lżejsze modele (medieval 1,6–2,3 tys. trójkątów na część, łazik 1118, statek 914); odcinanie półkuli, LOD dekoru i bryły zastępcze daleko już są (T4, T4b)',
+      'zostają pełne modele na ciele w fokusie w środku tarczy (budowle bliżej niż 50° od punktu pod kamerą, statki zadokowane przy nim, łaziki na nim): lżejsze modele (medieval 1,6–2,3 tys. trójkątów na część, łazik 1118, statek 914) albo szersze pasmo LOD-mid; odcinanie półkuli, LOD dekoru, bryły zastępcze daleko i pośredni LOD budowli przy krawędzi tarczy już są (T4, T4b, LOD-mid)',
     system: 'jednostki są już bryłami zastępczymi (T4b), budowle się nie rysują: reszta to sfery i orbity',
     galaxy: 'zmniejszyć liczbę punktów albo rozmiar sprite’ów',
   },
@@ -366,9 +371,10 @@ function t4Notes(d, before) {
     '',
     `- **Odcinanie półkuli** (\`HemisphereCuller\`, \`CulledInstances\`): budowle, skały złóż i dekor rysują tylko instancje, które mogą wystawać nad horyzont (test zachowawczy: wierzchołki pudełka modelu, \`acos(R/d) + acos(R/r_szczytu)\` i zapas 3° na ruch kamery między przeliczeniami co 2° obrotu lub 1° zoomu). Wysokie modele na małych ciałach z dużymi kafelkami widać daleko za horyzontem (dom medieval na Tau Ceti c ma ok. 10 % R wysokości, więc wystaje zza horyzontu jeszcze ok. 25° dalej), dlatego w widokach planety ubywa ${drop('decorTriangles')} trójkątów dekoru (tylko T4), nie połowa.`,
     '- **LOD dekoru** w paśmie 80–200 px promienia (wejście < 200 px, wyjście > 220 px): wszystkie drzewa jako `detail_treeA`, połowa według `hash3`, jedna instancja zamiast trzech modeli; ruiny, skały i góry bez zmian (rysowane tylko z widocznej czaszy). Na Tau Ceti c dekor to głównie ruiny, więc pasmo ujmuje niewiele ponad samo odcinanie (`planet-far`).',
-    `- **Bryły zastępcze budowli (T4b)**: ciało poniżej 80 px promienia (powrót powyżej 88 px; tam teren przechodzi w siatkę wachlarzy) rysuje każdą część budowli i skałę złoża jako pudełko 12 trójkątów (\`kit.proxyBox\` pod macierzą części razy \`boxMatrix(kit.box(model))\`, to samo pudełko co picking; wzrost budowy skaluje je w Y), w średnim kolorze wierzchołków modelu (\`kit.tone\`), wszystko w jednej InstancedMesh na ciało z odcinaniem półkuli. W widokach planety trójkątów budowli ubywa razem ${drop('structureTriangles')} (T4 + T4b), draw calli ${dropOf(planet, 'drawCalls')}.`,
+    `- **Bryły zastępcze budowli (T4b)**: ciało poniżej 80 px promienia (powrót powyżej 88 px; tam teren przechodzi w siatkę wachlarzy) rysuje każdą część budowli i skałę złoża jako pudełko 12 trójkątów (\`kit.proxyBox\` pod macierzą części razy \`boxMatrix(kit.box(model))\`, to samo pudełko co picking; wzrost budowy skaluje je w Y), w średnim kolorze wierzchołków modelu (\`kit.tone\`), wszystko w jednej InstancedMesh na ciało z odcinaniem półkuli. W widokach planety trójkątów budowli ubywa razem ${drop('structureTriangles')} (T4 + T4b + LOD-mid niżej), draw calli ${dropOf(planet, 'drawCalls')}.`,
+    '- **Pośredni LOD budowli (LOD-mid)**: na ciele bliskim (nie dalekim w sensie T4b) budowla dalej niż 50° wokół ciała od punktu pod kamerą (powrót poniżej 46°) i węższa na ekranie niż 64 px (powrót powyżej 72 px) jest rysowana tymi samymi pudełkami co T4b, w osobnej partii `<ciało>_MidProxies` (+1 draw call na ciało, gdy pasmo nie jest puste); partie modeli pomijają ją filtrem. W domyślnym widoku planety (3,4 R) pasmo zaczyna się w ostatniej dziesiątej promienia tarczy (krawędź i to, co wystaje zza horyzontu), w zbliżeniu poniżej 1,56 R horyzont jest bliżej niż 50°, więc środek widoku zostaje bez zmian. Pomiar przed i po oraz zrzuty: `docs/reports/tasks/LOD-mid-structures.md`.',
     `- **Bryły zastępcze jednostek (T4b)**: statek krótszy niż 8 px na ekranie (powrót od 10 px) albo zadokowany przy dalekim ciele to grot 8 trójkątów, łazik krótszy niż 8 px albo na dalekim ciele to pudełko 12 trójkątów (oba w pudełku modelu i jego średnim kolorze); jednostka poza kadrem (sfera o promieniu jej długości poza ostrosłupem widzenia) i łazik za horyzontem swojego ciała nie są rysowane. Picking jednostek bez zmian (po pozycji na ekranie). Trójkątów jednostek ubywa ${dropOf(planet, 'unitTriangles')} w widokach planety i ${dropOf(system, 'unitTriangles')} w widoku układu.`,
-    '- **Przełącznik A/B**: `?detail=full` (`cullDetail: false`, `PERF_DETAIL=full`) wyłącza T4 i T4b razem; to kolumna „przed”.',
+    '- **Przełącznik A/B**: `?detail=full` (`cullDetail: false`, `PERF_DETAIL=full`) wyłącza T4, T4b i LOD-mid razem; to kolumna „przed”.',
     `- **BatchedMesh budowli**: niepotrzebny do limitu, największa liczba draw calli w widoku planety to ${calls.drawCalls} (${calls.scenario} · ${calls.view}), limit ${fail}${calls.drawCalls > fail ? ' — **PRZEKROCZONY, do zrobienia**' : '; przy uwadze (> 100) zostaje w zadaniach'}.`,
     `- **Siatka terenu**: tylko pomiar, najwięcej ${int(terrain.terrainTriangles ?? 0)} trójkątów (${terrain.scenario} · ${terrain.view}) w 1 draw callu na ciało; podział na kawałki z odcinaniem nie jest potrzebny.`,
     over.length
@@ -449,6 +455,7 @@ function report(d, baseline = null) {
     '## Zadania naprawcze',
     '',
     ...(tasks.length ? tasks : ['Brak: żaden budżet nie został przekroczony.']),
+    ...DONE,
     '',
     d.errors.length ? `Błędy konsoli w przebiegu: ${d.errors.length} (zob. latest.json).` : 'Błędy konsoli w przebiegu: brak.',
     '',

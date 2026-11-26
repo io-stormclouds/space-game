@@ -597,5 +597,5 @@ Pomiar na innym komputerze niż raport z 2026-11-07 (Ryzen 7 8840HS, Radeon 780M
 | T-23 | siła przygaszenia ruin (×0,8, 30 % do szarości) | wdrożone wg rekomendacji |
 | T-7 | grupa `terrain` w tokenach DS | dodana jako propozycja, po akceptacji zrzutów biomów |
 | T-8 | licencja KayKit Medieval (CC0 do potwierdzenia na stronie autora) | akcja użytkownika |
-| T-13 | budżet planety w fokusie 200 tys. | trzymany we wszystkich scenariuszach poza L planet |
-| — | pośredni LOD budowli na ciele w fokusie (L planet) | propozycja w `web-game/docs/PERF-REPORT.md` |
+| T-13 | budżet planety w fokusie 200 tys. | trzymany we wszystkich scenariuszach (L planet od LOD-mid, 2026-11-26: 176 987) |
+| — | pośredni LOD budowli na ciele w fokusie (L planet) | wykonany 2026-11-26 (LOD-mid, `docs/reports/tasks/LOD-mid-structures.md`); do oceny zrzuty `docs/img/lod-mid/` (pudełka przy krawędzi tarczy) |
