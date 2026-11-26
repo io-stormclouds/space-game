@@ -205,7 +205,6 @@ fn check_surface(surface: &SurfaceSpec, deposits: &[DepositParams], what: &str) 
 // E1-03: keyed random numbers
 
 #[test]
-#[ignore = "E1-03"]
 fn rng_is_a_pure_function_of_its_key() {
     let draw = |seed: u64, cell: CellCoord, stream: u64| -> Vec<u64> {
         let mut rng = Rng::for_cell(seed, cell, stream);
@@ -250,7 +249,6 @@ fn rng_is_a_pure_function_of_its_key() {
 }
 
 #[test]
-#[ignore = "E1-03"]
 fn rng_matches_recorded_values() {
     // Computed from the description in `generator/rng.rs` by an independent program (BigInt
     // arithmetic), whose SplitMix64 step was checked against the published sequence for 1234567.
@@ -284,7 +282,6 @@ fn rng_matches_recorded_values() {
 }
 
 #[test]
-#[ignore = "E1-03"]
 fn neighbouring_cells_are_uncorrelated() {
     let first = |seed: u64, cell: CellCoord, stream: u64| Rng::for_cell(seed, cell, stream).next_f64();
     type Line = fn(i32) -> CellCoord;
@@ -317,7 +314,6 @@ fn neighbouring_cells_are_uncorrelated() {
 // E1-04: stars of a cell and the register of 41 stars
 
 #[test]
-#[ignore = "E1-04"]
 fn same_cell_same_stars_bytes() {
     let p = params();
     let cells =
@@ -338,7 +334,6 @@ fn same_cell_same_stars_bytes() {
 }
 
 #[test]
-#[ignore = "E1-04"]
 fn order_of_cells_does_not_matter() {
     let p = params();
     // a far cell, its neighbour, and the cell of Sol with register stars in it
@@ -395,7 +390,6 @@ fn check_separation(p: &GalaxyParams) -> usize {
 }
 
 #[test]
-#[ignore = "E1-04"]
 fn real_stars_are_kept() {
     let p = params();
 
@@ -461,7 +455,6 @@ fn real_stars_are_kept() {
 }
 
 #[test]
-#[ignore = "E1-04"]
 fn star_parameters_are_positive() {
     let p = round_params();
     let stars: Vec<StarSpec> = far_stars(&p, 4_000).into_iter().take(10_000).collect();
@@ -493,7 +486,6 @@ fn star_parameters_are_positive() {
 }
 
 #[test]
-#[ignore = "E1-04"]
 fn spectral_distribution_within_bounds() {
     for (name, p) in [("defaults", params()), ("round shares", round_params())] {
         let stars = far_stars(&p, 10_000);
@@ -511,7 +503,6 @@ fn spectral_distribution_within_bounds() {
 }
 
 #[test]
-#[ignore = "E1-04"]
 fn density_matches_the_parameter() {
     for mean in [3.0, 6.0] {
         let p = GalaxyParams { stars_per_cell: mean, ..params() };
@@ -537,7 +528,6 @@ fn density_matches_the_parameter() {
 // E1-05: the planetary system of a star
 
 #[test]
-#[ignore = "E1-05"]
 fn same_star_same_system_bytes() {
     let p = params();
     let mut keys: Vec<StarKey> = far_stars(&p, 30).iter().map(|s| s.key).collect();
@@ -587,7 +577,6 @@ fn same_star_same_system_bytes() {
 }
 
 #[test]
-#[ignore = "E1-05"]
 fn systems_do_not_depend_on_generation_order() {
     let mut p = params();
     // moons of rocky planets take part: half of the planets have one here, whatever the default is
@@ -620,7 +609,6 @@ fn systems_do_not_depend_on_generation_order() {
 }
 
 #[test]
-#[ignore = "E1-05"]
 fn orbits_strictly_increase() {
     let p = round_params();
     let rules = &p.system;
@@ -657,7 +645,6 @@ fn orbits_strictly_increase() {
 }
 
 #[test]
-#[ignore = "E1-05"]
 fn insolation_follows_luminosity() {
     let expected = |luminosity: f64, orbit: f64| luminosity * (900.0 / orbit) * (900.0 / orbit);
     let mut checked = 0;
@@ -683,7 +670,6 @@ fn insolation_follows_luminosity() {
 }
 
 #[test]
-#[ignore = "E1-05"]
 fn no_zero_or_negative_parameters() {
     let p = round_params();
     let rules = &p.system;
@@ -750,7 +736,6 @@ fn no_zero_or_negative_parameters() {
 }
 
 #[test]
-#[ignore = "E1-05"]
 fn system_type_distribution_within_bounds() {
     let p = round_params();
     let rules = &p.system;
@@ -819,7 +804,6 @@ fn system_type_distribution_within_bounds() {
 }
 
 #[test]
-#[ignore = "E1-05"]
 fn rocky_moon_share_within_bounds() {
     // The defaults record the human's rule (E1-01 question 3 = b): a moon for 15 % of the rocky planets,
     // exactly one. Unlike the proposals among the defaults they are pinned: whoever changes the rule
@@ -923,7 +907,6 @@ fn rocky_moon_share_within_bounds() {
 }
 
 #[test]
-#[ignore = "E1-05"]
 fn deposit_weights_use_catalog_materials() {
     let raw = raw_materials();
     assert!(raw.contains("FER") && raw.contains("PLA") && !raw.contains("STA"), "raw materials are the T0 tiers of the catalog");
@@ -992,7 +975,6 @@ fn deposit_weights_use_catalog_materials() {
 // E1-06: the habitable zone as a calculation
 
 #[test]
-#[ignore = "E1-06"]
 fn habitable_zone_scales_with_sqrt_luminosity() {
     // insolation 1 at 900 around 1 L☉; a quarter of it twice as far
     let limits = ZoneLimits { inner_insolation: 1.0, outer_insolation: 0.25 };
@@ -1023,7 +1005,6 @@ fn habitable_zone_scales_with_sqrt_luminosity() {
 }
 
 #[test]
-#[ignore = "E1-06"]
 fn zone_labels_match_orbits() {
     let mut seen: HashSet<ZoneLabel> = HashSet::new();
     for limits in [ZoneLimits::default(), ZoneLimits { inner_insolation: 2.0, outer_insolation: 0.5 }] {
@@ -1121,7 +1102,6 @@ fn checked_bodies(spec: &SystemSpec) -> Vec<CelestialBody> {
 }
 
 #[test]
-#[ignore = "E1-07"]
 fn generated_bodies_feed_the_orbit_solver() {
     let mut with_giant = 0;
     let mut with_rocky_moon = 0;
@@ -1150,7 +1130,6 @@ fn generated_bodies_feed_the_orbit_solver() {
 }
 
 #[test]
-#[ignore = "E1-07"]
 fn default_insolation_equals_the_spec() {
     let mut checked = 0;
     for spec in SYSTEMS.iter().take(1_000) {
@@ -1175,7 +1154,6 @@ fn default_insolation_equals_the_spec() {
 }
 
 #[test]
-#[ignore = "E1-07"]
 fn grids_build_for_every_landable_body() {
     let mut built = 0;
     for spec in SYSTEMS.iter().filter(|s| rocky(s).next().is_some()).take(60) {
@@ -1210,7 +1188,6 @@ fn grids_build_for_every_landable_body() {
 // E1-08: placement of new accounts
 
 #[test]
-#[ignore = "E1-08"]
 fn placement_is_deterministic() {
     let p = params();
     let first = place_many(&p, &RULES, 40);
@@ -1244,7 +1221,6 @@ fn placement_is_deterministic() {
 }
 
 #[test]
-#[ignore = "E1-08"]
 fn placement_never_returns_an_occupied_system() {
     let p = params();
     let placed = &*PLACED;
@@ -1262,7 +1238,6 @@ fn placement_never_returns_an_occupied_system() {
 }
 
 #[test]
-#[ignore = "E1-08"]
 fn nearest_neighbour_distance_within_bounds() {
     let check = |p: &GalaxyParams, rules: &PlacementParams, placed: &[StarKey]| {
         let positions: Vec<[f64; 3]> = placed.iter().map(|k| star_at(p, *k).pos_ly).collect();
@@ -1291,7 +1266,6 @@ fn nearest_neighbour_distance_within_bounds() {
 }
 
 #[test]
-#[ignore = "E1-08"]
 fn placement_only_offers_systems_with_a_landable_planet() {
     let p = params();
     for key in PLACED.iter() {

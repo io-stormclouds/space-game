@@ -26,8 +26,12 @@
 //!
 //! [`LY_PER_PARSEC`]: crate::galaxy::stars::LY_PER_PARSEC
 
+mod bodies;
+mod cell_stars;
 pub mod params;
+mod placement;
 pub mod rng;
+mod system;
 
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
@@ -239,9 +243,10 @@ pub enum ZoneLabel {
 }
 
 /// The cell that holds a position: `floor(pos / cell_ly)` on each axis (task E1-04).
-#[expect(unused_variables, reason = "skeleton: E1-04 implements it")]
 pub fn cell_of(p: &GalaxyParams, pos_ly: [f64; 3]) -> CellCoord {
-    unimplemented!("E1-04")
+    // the cast saturates: a position beyond the range of `i32` cells lands in the outermost cell
+    let axis = |at: f64| libm::floor(at / p.cell_ly) as i32;
+    CellCoord { x: axis(pos_ly[0]), y: axis(pos_ly[1]), z: axis(pos_ly[2]) }
 }
 
 /// Every star of a cell (task E1-04).
@@ -253,9 +258,8 @@ pub fn cell_of(p: &GalaxyParams, pos_ly: [f64; 3]) -> CellCoord {
 /// register star is near, and each of them takes its class with probability share / Σ shares. A
 /// generated star never lies closer than `min_real_separation_ly` to a register star: such a
 /// candidate is left out, so cells near register stars hold fewer.
-#[expect(unused_variables, reason = "skeleton: E1-04 implements it")]
 pub fn stars_in_cell(p: &GalaxyParams, cell: CellCoord) -> Vec<StarSpec> {
-    unimplemented!("E1-04")
+    cell_stars::stars_in_cell(p, cell)
 }
 
 /// The planetary system of a generated star (task E1-05; plan 07 §5: `generate_system(seed, coords)`).
@@ -264,32 +268,37 @@ pub fn stars_in_cell(p: &GalaxyParams, cell: CellCoord) -> Vec<StarSpec> {
 /// authored content (Tau Ceti) or do not exist yet (P-17 a keeps the 41 stars as they are).
 ///
 /// The result does not depend on which other stars, cells or systems were generated before.
-#[expect(unused_variables, reason = "skeleton: E1-05 implements it")]
 pub fn generate_system(p: &GalaxyParams, star: StarKey) -> Option<SystemSpec> {
-    unimplemented!("E1-05")
+    system::generate_system(p, star)
 }
 
 /// The habitable zone of a star (task E1-06, G-22): `inner` = 900 × √(L / `inner_insolation`),
 /// `outer` = 900 × √(L / `outer_insolation`). A calculation only: no rule and no biome reads it.
-#[expect(unused_variables, reason = "skeleton: E1-06 implements it")]
 pub fn habitable_zone(limits: &ZoneLimits, luminosity: f64) -> HabitableZone {
-    unimplemented!("E1-06")
+    // the orbit where the insolation, luminosity × (900 / orbit)², equals `insolation`
+    let edge = |insolation: f64| system::REFERENCE_ORBIT * (luminosity / insolation).sqrt();
+    HabitableZone { inner: edge(limits.inner_insolation), outer: edge(limits.outer_insolation) }
 }
 
 impl HabitableZone {
     /// Where an orbit lies: `Hot` below `inner`, `Cold` above `outer`, `Habitable` between, edges included (task E1-06).
-    #[expect(unused_variables, reason = "skeleton: E1-06 implements it")]
     pub fn label(&self, orbit_radius: f64) -> ZoneLabel {
-        unimplemented!("E1-06")
+        if orbit_radius < self.inner {
+            ZoneLabel::Hot
+        } else if orbit_radius > self.outer {
+            ZoneLabel::Cold
+        } else {
+            ZoneLabel::Habitable
+        }
     }
 }
 
 impl SystemSpec {
     /// The zone label of every planet, in the order of `planets` (task E1-06). Computed on demand, so
     /// a stored system follows a later change of the limits.
-    #[expect(unused_variables, reason = "skeleton: E1-06 implements it")]
     pub fn planet_zones(&self, limits: &ZoneLimits) -> Vec<ZoneLabel> {
-        unimplemented!("E1-06")
+        let zone = habitable_zone(limits, self.star.luminosity);
+        self.planets.iter().map(|planet| zone.label(planet.orbit_radius)).collect()
     }
 }
 
@@ -308,9 +317,8 @@ impl SystemSpec {
 /// - `insolation` may stay `None` (the default rule gives the spec's value) or repeat the spec's value;
 /// - `revealed` and `unknown_name` stay `None` (what the start scan hides is decided in E4), and so
 ///   do `is_home_base` (false), `resources` and `shape`.
-#[expect(unused_variables, reason = "skeleton: E1-07 implements it")]
 pub fn system_bodies(spec: &SystemSpec) -> Vec<CelestialBody> {
-    unimplemented!("E1-07")
+    bodies::system_bodies(spec)
 }
 
 /// The start star of a new account (task E1-08, P-18 a).
@@ -322,7 +330,6 @@ pub fn system_bodies(spec: &SystemSpec) -> Vec<CelestialBody> {
 ///
 /// The result depends on the set of occupied stars, not on their order. Keys in `occupied` that
 /// name no star are ignored.
-#[expect(unused_variables, reason = "skeleton: E1-08 implements it")]
 pub fn place_account(p: &GalaxyParams, occupied: &[StarKey], rules: &PlacementParams) -> Option<StarKey> {
-    unimplemented!("E1-08")
+    placement::place_account(p, occupied, rules)
 }
