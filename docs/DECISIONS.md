@@ -155,6 +155,7 @@ Ustalenia człowieka z 2026-11-13 (`docs/analysis/odpowiedzi-e1-prep.md`; treś�
 | W-13 | 2026-11-13 | Scalenie `auto/E1-prep` do `main` | — | **a**: po skończeniu E1-02b i poprawki księżyców | `odpowiedzi-e1-prep.md` | obowiązuje |
 | W-14 | 2026-11-13 | Wypchnięcie `main` na origin | — | **a**: po scaleniu (zob. W-6) | `odpowiedzi-e1-prep.md` | obowiązuje |
 | W-15 | 2026-11-26 | Kto przygotowuje drzewo zadania przed uruchomieniem wykonawcy (E1 §4 pkt 2) | — | koordynator przygotowuje drzewo zadania i wykonuje `npm ci` w `web-game/` przed uruchomieniem wykonawcy | `docs/reports/E1.md` §4 pkt 2, §6 | wg rekomendacji (polecenie 2026-11-26) |
+| W-16 | 2026-11-26 | Decyzja po pilotażu E1 (07 §5): czy koszt i czas zespołu Fable 5.2 są akceptowalne i kto pracuje od E2 | a autonomia etapowa z Fable 5.2 od E2 / b wykonawcą Opus 5.5, Fable 5.2 jako koordynator i weryfikator / c zawęzić rolę modelu | **a**: autonomia etapowa (W-5) od E2 z Fable 5.2 jako koordynatorem, wykonawcą i weryfikatorem; Opus 5.5 zostaje modelem odniesienia do niezależnych przeglądów | `docs/reports/E1.md` §2.4, §7; decyzja użytkownika „E2 wariant a, startujemy z Fable” | obowiązuje |
 
 ## Teren
 
