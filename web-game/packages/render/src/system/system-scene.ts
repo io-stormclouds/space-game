@@ -976,10 +976,13 @@ export class SystemScene {
    * Tile edges and buildings only where they can be seen: saves draw calls and noise in the overview. With
    * culling (T4) structures and decor draw only their instances in the camera's visible cap, decor in the
    * LOD band draws the trees cheaper, and a far body (below STRUCTURE_LOD_PX) draws its structures as proxy boxes,
-   * and the units docked at it or driving on it as proxies (T4b).
+   * and the units docked at it or driving on it as proxies (T4b). On a near body the structures far round it from the
+   * camera and small on screen are boxes too (LOD-mid, `StructureLayer.updateBand`).
    */
   private updateDetail(): void {
     const cam = this.rig.camera.position;
+    /** Screen size of one unit at distance one [px] (`pixelRadius` without the radius and depth). */
+    const pxPerUnit = this.height / 2 / Math.tan((this.rig.camera.fov * Math.PI) / 360);
     for (const bv of this.order) {
       const pr = this.apparentRadius(bv);
       if (this.cullDetail) bv.far = bv.far ? pr < STRUCTURE_FULL_PX : pr < STRUCTURE_LOD_PX;
@@ -998,7 +1001,10 @@ export class SystemScene {
       const decor = terrain ? bv.terrainDecor : null;
       if (!bv.structures?.group.visible && !decor) continue; // re-culled once they show (the version moved on)
       bv.culler.update(bv.group.worldToLocal(this.tmp.copy(cam)));
-      if (bv.structures?.group.visible) bv.structures.recull();
+      if (bv.structures?.group.visible) {
+        bv.structures.updateBand(this.tmp, pxPerUnit); // LOD-mid: the structures towards the limb as boxes
+        bv.structures.recull();
+      }
       if (decor) {
         decor.setLod(bv.decorLod);
         decor.recull();

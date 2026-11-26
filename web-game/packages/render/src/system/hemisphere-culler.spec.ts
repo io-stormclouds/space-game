@@ -335,6 +335,58 @@ describe('InstancedBatch with a culler', () => {
     p.dispose();
   });
 
+  it('filter (LOD-mid): leaves out the source instances it rejects, on top of the culling; refilter after its answers change; same mesh throughout', () => {
+    const c = new HemisphereCuller(R);
+    const b = new InstancedBatch(new THREE.Group(), standingBox(), new THREE.MeshBasicMaterial(), 'Filtered', 4, c);
+    const dirs = [new THREE.Vector3(0, 0, 1), new THREE.Vector3(0.3, 0, 1).normalize(), new THREE.Vector3(-0.3, 0, 1).normalize(), new THREE.Vector3(0, 0, -1)];
+    dirs.forEach((n, i) => b.setMatrixAt(i, standing(n, R, 1)));
+    const reject = new Set<number>([1]);
+    b.setFilter((i) => !reject.has(i));
+    c.update(new THREE.Vector3(0, 0, 3 * R));
+    b.commit(4);
+    const mesh = b.mesh;
+    expect(b.drawn).toBe(2); // 3 is behind, 1 filtered out
+    expect([0, 1, 2, 3].map((i) => b.slotOf(i))).toEqual([0, -1, 1, -1]);
+    // the answers change: nothing happens until refilter, then the next recull compacts again
+    reject.clear();
+    reject.add(0);
+    b.recull();
+    expect([0, 1, 2, 3].map((i) => b.slotOf(i))).toEqual([0, -1, 1, -1]);
+    b.refilter();
+    b.recull();
+    expect([0, 1, 2, 3].map((i) => b.slotOf(i))).toEqual([-1, 0, 1, -1]);
+    expect(b.mesh.getMatrixAt(0, new THREE.Matrix4()).elements[12]).toBeCloseTo(standing(dirs[1]!, R, 1).elements[12]!, 4);
+    // a still camera and the same answers: the buffer is not touched
+    const version = b.mesh.instanceMatrix.version;
+    b.recull();
+    expect(b.mesh.instanceMatrix.version).toBe(version);
+    // parked: nothing drawn, the filter applies again on unparking
+    b.park(true);
+    b.refilter();
+    expect(b.drawn).toBe(0);
+    b.park(false);
+    expect(b.drawn).toBe(2);
+    // everything rejected: no draw call; null draws all again
+    reject.add(1).add(2);
+    b.refilter();
+    b.recull();
+    expect(b.drawn).toBe(0);
+    expect(b.mesh.visible).toBe(false);
+    b.setFilter(null);
+    b.recull();
+    expect(b.drawn).toBe(3);
+    expect(b.mesh).toBe(mesh); // no new mesh at any switch
+    b.dispose();
+
+    // without a culler the filter is ignored
+    const p = new InstancedBatch(new THREE.Group(), standingBox(), new THREE.MeshBasicMaterial(), 'Plain', 2);
+    p.setFilter(() => false);
+    p.setMatrixAt(0, standing(new THREE.Vector3(0, 0, -1), R, 1));
+    p.commit(1);
+    expect(p.drawn).toBe(1);
+    p.dispose();
+  });
+
   it('without a culler behaves as before: indices are slots, every instance drawn', () => {
     const b = new InstancedBatch(new THREE.Group(), standingBox(), new THREE.MeshBasicMaterial(), 'Plain', 2);
     b.setMatrixAt(0, standing(new THREE.Vector3(0, 0, -1), R, 1));
